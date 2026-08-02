@@ -1,0 +1,2 @@
+import Phaser from 'phaser';
+export class BootScene extends Phaser.Scene{constructor(){super('BootScene')}create(){const g=this.make.graphics({x:0,y:0},false);g.fillStyle(0x17101f).fillRoundedRect(0,0,80,98,18);g.fillStyle(0xff713c).fillCircle(40,26,21);g.fillStyle(0x21182d).fillCircle(40,26,12);g.fillStyle(0x15121d).fillRect(23,45,34,40);g.fillStyle(0xffc74e).fillRect(13,50,12,32);g.generateTexture('dj',80,98);g.destroy();this.scene.start('BerlinScene');}}

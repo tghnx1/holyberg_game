@@ -1,0 +1,2 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&display=swap');
+:root{font-family:'Space Mono',monospace;background:#090611;color:#fff}*{box-sizing:border-box}html,body,#game{margin:0;width:100%;height:100%;overflow:hidden}body{touch-action:none;background:radial-gradient(circle at 50% 20%,#492563,#10091d 60%)}canvas{display:block!important;outline:none} 
