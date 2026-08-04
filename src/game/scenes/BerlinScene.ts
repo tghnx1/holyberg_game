@@ -38,6 +38,7 @@ export class BerlinScene extends Phaser.Scene {
   private readonly sections = new SectionTracker();
   private layerDebug?: LayerDebugSystem;
   private debugOverlay?: Phaser.GameObjects.Container;
+  private debugGraphics?: Phaser.GameObjects.Graphics;
 
   constructor() {
     super('BerlinScene');
@@ -55,8 +56,13 @@ export class BerlinScene extends Phaser.Scene {
     this.layers.gameplay.add(this.player);
     this.physics.add.collider(this.player, ground);
     this.level = new LevelBuilder(this, this.layers.gameplay).build();
-    this.physics.add.overlap(this.player, this.level.obstacles, (_player, zone) =>
-      this.hitObstacle(zone as Phaser.GameObjects.Zone),
+    this.level.entities
+      .filter(({ config }) => config.type === 'obstacle')
+      .forEach(({ zone }) => {
+        this.physics.add.overlap(this.player, zone, () => this.hitObstacle(zone));
+      });
+    this.physics.add.overlap(this.player, this.level.platforms, (_player, platform) =>
+      this.landOnPlatform(platform as Phaser.GameObjects.Zone),
     );
     this.physics.add.overlap(this.player, this.level.collectibles, (_player, zone) =>
       this.collect(zone as Phaser.GameObjects.Zone),
@@ -112,6 +118,7 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private action(): void {
+    if (this.progress.state === 'running' && !this.player.canAcceptHitInput(this.time.now)) return;
     if (this.progress.state === 'intro') {
       this.progress.state = 'running';
       this.intro.destroy();
@@ -121,12 +128,18 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private setDuck(pressed: boolean): void {
-    if (this.progress.state === 'running') this.player.setCrouched(pressed);
+    if (this.progress.state === 'running' && this.player.canAcceptHitInput(this.time.now))
+      this.player.setCrouched(pressed);
   }
 
   private hitObstacle(zone: Phaser.GameObjects.Zone): void {
     if (this.invulnerable || this.progress.state !== 'running') return;
     const config = zone.getData('config') as BerlinEntity;
+    if (zone.getData('alreadyHit')) return;
+    zone.setData('alreadyHit', true);
+    if (import.meta.env.DEV) console.debug('OBSTACLE HIT', config.id);
+    const body = zone.body as Phaser.Physics.Arcade.Body | undefined;
+    if (body) body.enable = false;
     this.invulnerable = true;
     this.sections.markDamage();
     this.scoreSystem.hitObstacle();
@@ -134,6 +147,7 @@ export class BerlinScene extends Phaser.Scene {
     this.syncScore();
     this.hud.flash(`HIT ${config.id.toUpperCase()}\n-${HIT_TIME} SEC  -100`);
     this.player.hurt();
+    this.player.startHitReaction(this.time.now);
     this.player.setTintFill(0xff3d66);
     this.cameras.main.flash(100, 255, 58, 92).shake(160, 0.008);
     this.time.delayedCall(1000, () => {
@@ -207,21 +221,13 @@ export class BerlinScene extends Phaser.Scene {
   private createDevelopmentTools(): void {
     this.layerDebug = new LayerDebugSystem(this, this.layers);
     this.debugKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);
-    const graphics = this.add
+    this.debugGraphics = this.add
       .graphics()
       .setDepth(Depth.UI - 1)
       .setScrollFactor(1);
-    graphics.lineStyle(2, 0x53ffe0, 0.85);
+    this.debugGraphics.lineStyle(2, 0x53ffe0, 0.85);
     BERLIN_SECTIONS.forEach((section) =>
-      graphics.lineBetween(section.startX, 0, section.startX, DESIGN_HEIGHT),
-    );
-    this.level.entities.forEach(({ zone }) =>
-      graphics.strokeRect(
-        zone.x - zone.width / 2,
-        zone.y - zone.height / 2,
-        zone.width,
-        zone.height,
-      ),
+      this.debugGraphics?.lineBetween(section.startX, 0, section.startX, DESIGN_HEIGHT),
     );
     const status = this.add
       .text(18, 130, '', {
@@ -233,7 +239,28 @@ export class BerlinScene extends Phaser.Scene {
       })
       .setScrollFactor(0)
       .setDepth(Depth.UI);
-    this.debugOverlay = this.add.container(0, 0, [graphics, status]).setVisible(false);
+    this.debugOverlay = this.add.container(0, 0, [this.debugGraphics, status]).setVisible(false);
+    this.add.text(6900, 395, 'PLATFORM ROUTE', {
+      fontFamily: 'Archivo Black',
+      fontSize: '18px',
+      color: '#ffe36d',
+      backgroundColor: '#1b1020cc',
+      padding: { x: 8, y: 4 },
+    }).setDepth(Depth.UI - 2);
+    this.add.text(7600, 325, 'DOUBLE JUMP', {
+      fontFamily: 'Archivo Black',
+      fontSize: '18px',
+      color: '#7ef0ff',
+      backgroundColor: '#1b1020cc',
+      padding: { x: 8, y: 4 },
+    }).setDepth(Depth.UI - 2);
+    this.add.text(8200, 350, 'BONUS ABOVE', {
+      fontFamily: 'Archivo Black',
+      fontSize: '18px',
+      color: '#ff7ac1',
+      backgroundColor: '#1b1020cc',
+      padding: { x: 8, y: 4 },
+    }).setDepth(Depth.UI - 2);
     [1, 2, 3, 4, 5].forEach((_number, index) => {
       const key = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE + index);
       key.on('down', (event: KeyboardEvent) => {
@@ -244,6 +271,24 @@ export class BerlinScene extends Phaser.Scene {
 
   private updateDebug(): void {
     if (!this.debugOverlay?.visible) return;
+    const graphics = this.debugGraphics;
+    if (graphics) {
+      graphics.clear();
+      graphics.lineStyle(2, 0x53ffe0, 0.85);
+      BERLIN_SECTIONS.forEach((section) =>
+        graphics.lineBetween(section.startX, 0, section.startX, DESIGN_HEIGHT),
+      );
+      const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+      graphics.lineStyle(2, 0xff5e3c, 1);
+      graphics.strokeRect(playerBody.x, playerBody.y, playerBody.width, playerBody.height);
+      graphics.lineStyle(2, 0x53ffe0, 0.85);
+      this.level.entities
+        .filter(({ config }) => config.type === 'obstacle')
+        .forEach(({ zone }) => {
+          const body = zone.body as Phaser.Physics.Arcade.Body;
+          graphics.strokeRect(body.x, body.y, body.width, body.height);
+        });
+    }
     const status = this.debugOverlay.list.find(
       (item) => item instanceof Phaser.GameObjects.Text,
     ) as Phaser.GameObjects.Text | undefined;
@@ -255,6 +300,17 @@ export class BerlinScene extends Phaser.Scene {
   private syncScore(): void {
     this.progress.score = this.scoreSystem.score;
     this.hud.update(this.progress);
+  }
+
+  private landOnPlatform(platform: Phaser.GameObjects.Zone): void {
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+    const platformBody = platform.body as Phaser.Physics.Arcade.Body;
+    if (playerBody.velocity.y < 0) return;
+    if (playerBody.bottom > platformBody.top + 18) {
+      this.player.setY(platform.y - platform.height / 2);
+      playerBody.setVelocityY(0);
+      this.player.setData('landedOnPlatform', platform.getData('id'));
+    }
   }
 
   update(_time: number, delta: number): void {
