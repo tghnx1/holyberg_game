@@ -11,7 +11,7 @@ npm run dev
 
 ## Controls
 
-Berlin: Space, Arrow Up, or touch starts the run and jumps.
+Berlin: Space/Arrow Up jumps; S/Arrow Down ducks. On touch devices, use the large JUMP and DUCK buttons. The run starts with 40 seconds; bring the USB to backstage.
 
 Rhythm set:
 
@@ -29,6 +29,8 @@ The current demo generates an original 124 BPM electronic kick/hat beat with Web
 To replace the procedural beat, implement the same `currentTimeMs` clock-source interface around a Phaser-loaded MP3, OGG, or WAV and start it at the countdown's `DROP`. Gameplay and rendering do not need to change.
 
 See [rhythm chart authoring](docs/rhythm-chart-authoring.md) and [architecture](docs/architecture.md).
+
+Berlin level content is driven by `src/game/level/berlin/berlinLevelConfig.ts`. See [Berlin level design](docs/berlin-level-design.md) and [art integration](docs/art-integration.md) for layout, scoring, debug shortcuts, and stable replacement slots.
 
 ## Current limitations
 
