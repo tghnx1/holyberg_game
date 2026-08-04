@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { GROUND_Y } from '../../constants';
+import { DESIGN_HEIGHT, GROUND_Y, WORLD_WIDTH } from '../../constants';
 import { CROUCHING_BODY, STANDING_BODY } from './playerPhysics';
-import { BERLIN_ENTITIES } from './berlinLevelConfig';
+import { BERLIN_ENTITIES, CLUB_ENTRANCE_X } from './berlinLevelConfig';
 import { PlaceholderFactory } from './PlaceholderFactory';
 import type { BerlinEntity, CollectibleConfig, ObstacleConfig, PlatformConfig } from './types';
 
@@ -55,11 +55,12 @@ export class LevelBuilder {
     config: BerlinEntity,
     hitbox?: { offsetX: number; offsetY: number; width: number; height: number },
   ): Phaser.GameObjects.Zone {
+    const isFinish = config.type === 'finish';
     const zone = this.scene.add.zone(
-      hitbox ? config.x + hitbox.offsetX : config.x,
-      hitbox ? config.y + hitbox.offsetY : config.y,
-      hitbox ? hitbox.width : config.width * 0.78,
-      hitbox ? hitbox.height : config.height * 0.82,
+      isFinish ? (CLUB_ENTRANCE_X + WORLD_WIDTH) / 2 : hitbox ? config.x + hitbox.offsetX : config.x,
+      isFinish ? DESIGN_HEIGHT / 2 : hitbox ? config.y + hitbox.offsetY : config.y,
+      isFinish ? WORLD_WIDTH - CLUB_ENTRANCE_X : hitbox ? hitbox.width : config.width * 0.78,
+      isFinish ? DESIGN_HEIGHT : hitbox ? hitbox.height : config.height * 0.82,
     );
     const isStatic = config.type === 'collectible' || config.type === 'finish' || config.type === 'platform';
     this.scene.physics.add.existing(zone, isStatic);

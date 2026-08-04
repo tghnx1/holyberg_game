@@ -16,6 +16,8 @@ export const BERLIN_SECTIONS: readonly BerlinSection[] = [
   },
 ] as const;
 
+export const CLUB_ENTRANCE_X = 9500;
+
 const platform = (id: string, x: number, width: number, topY: number): BerlinEntity => ({
   id,
   type: 'platform',

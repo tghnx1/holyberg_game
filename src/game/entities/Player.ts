@@ -28,8 +28,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setOrigin(0.5, 1);
     this.setDepth(Depth.PLAYER).setCollideWorldBounds(true);
-    this.applyBody(false);
-    this.syncVisualToBody(false);
+    this.applyBody(false, false);
+    this.setScale(1);
   }
 
   run(now: number): void {
@@ -67,10 +67,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   setCrouched(value: boolean): void {
     if (value === this.crouched) return;
     const body = this.body as Phaser.Physics.Arcade.Body;
-    if (value && !body.blocked.down) return;
+    if (!body.blocked.down && !body.touching.down) return;
     this.crouched = value;
     this.applyBody(value);
-    this.syncVisualToBody(value);
+    this.setScale(1, value ? 0.64 : 1);
   }
   hurt(): void {
     this.animationState = 'hurt';
@@ -97,14 +97,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return now >= this.hitInputsLockedUntil;
   }
 
-  private applyBody(crouched: boolean): void {
+  private applyBody(crouched: boolean, preserveBottom = true): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
+    const previousBottom = body.bottom;
     const spec = playerBodyFor(crouched);
     body.setSize(spec.width, spec.height).setOffset(spec.offsetX, spec.offsetY);
-  }
-
-  private syncVisualToBody(crouched: boolean): void {
-    this.setY(GROUND_Y);
-    this.setScale(1, crouched ? 0.64 : 1);
+    if (!preserveBottom) return;
+    const bottomDelta = previousBottom - body.bottom;
+    if (bottomDelta !== 0) {
+      this.y += bottomDelta;
+      body.y += bottomDelta;
+    }
   }
 }

@@ -9,7 +9,7 @@ import {
   WORLD_WIDTH,
 } from '../constants';
 import { Player } from '../entities/Player';
-import { BERLIN_SECTIONS } from '../level/berlin/berlinLevelConfig';
+import { BERLIN_SECTIONS, CLUB_ENTRANCE_X } from '../level/berlin/berlinLevelConfig';
 import { applyCollectibleReward, canFinishBerlin } from '../level/berlin/berlinRules';
 import { isCollectible, LevelBuilder, type BuiltBerlinLevel } from '../level/berlin/LevelBuilder';
 import type { BerlinEntity, CollectibleConfig } from '../level/berlin/types';
@@ -32,6 +32,7 @@ export class BerlinScene extends Phaser.Scene {
   private duckKey!: Phaser.Input.Keyboard.Key;
   private debugKey?: Phaser.Input.Keyboard.Key;
   private invulnerable = false;
+  private finishTriggered = false;
   private layers!: SceneLayers;
   private level!: BuiltBerlinLevel;
   private readonly scoreSystem = new BerlinScoreSystem();
@@ -46,6 +47,7 @@ export class BerlinScene extends Phaser.Scene {
 
   create(): void {
     this.progress = { state: 'intro', seconds: START_TIME, score: 0, hasUsb: false };
+    this.finishTriggered = false;
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT).setBackgroundColor('#2a1742');
     this.layers = createSceneLayers(this);
@@ -69,11 +71,15 @@ export class BerlinScene extends Phaser.Scene {
         this.physics.add.overlap(this.player, zone, () => this.hitObstacle(zone));
       });
     if (import.meta.env.DEV) console.debug('[BerlinScene] after obstacle overlaps');
-    if (import.meta.env.DEV) console.debug('[BerlinScene] before platform overlaps');
-    this.physics.add.overlap(this.player, this.level.platforms, (_player, platform) =>
-      this.landOnPlatform(platform as Phaser.GameObjects.Zone),
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before platform colliders');
+    this.physics.add.collider(
+      this.player,
+      this.level.platforms,
+      undefined,
+      (_player, platform) => this.canLandOnPlatform(platform as Phaser.GameObjects.Zone),
+      this,
     );
-    if (import.meta.env.DEV) console.debug('[BerlinScene] after platform overlaps');
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after platform colliders');
     this.physics.add.overlap(this.player, this.level.collectibles, (_player, zone) =>
       this.collect(zone as Phaser.GameObjects.Zone),
     );
@@ -189,11 +195,12 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private finish(): void {
-    if (this.progress.state !== 'running') return;
+    if (this.finishTriggered || this.progress.state !== 'running') return;
     if (!canFinishBerlin(this.progress.hasUsb)) {
       this.hud.flash('YOU FORGOT THE USB', 1800);
       return;
     }
+    this.finishTriggered = true;
     this.progress.state = 'won';
     this.progress.score = this.scoreSystem.finish(this.progress.seconds);
     this.player.halt();
@@ -314,15 +321,11 @@ export class BerlinScene extends Phaser.Scene {
     this.hud.update(this.progress);
   }
 
-  private landOnPlatform(platform: Phaser.GameObjects.Zone): void {
+  private canLandOnPlatform(platform: Phaser.GameObjects.Zone): boolean {
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
-    const platformBody = platform.body as Phaser.Physics.Arcade.Body;
-    if (playerBody.velocity.y < 0) return;
-    if (playerBody.bottom > platformBody.top + 18) {
-      this.player.setY(platform.y - platform.height / 2);
-      playerBody.setVelocityY(0);
-      this.player.setData('landedOnPlatform', platform.getData('id'));
-    }
+    const platformBody = platform.body as Phaser.Physics.Arcade.StaticBody;
+    const previousBottom = playerBody.prev.y + playerBody.height;
+    return playerBody.velocity.y >= 0 && previousBottom <= platformBody.top;
   }
 
   update(_time: number, delta: number): void {
@@ -335,6 +338,16 @@ export class BerlinScene extends Phaser.Scene {
     if (this.progress.state !== 'running') return;
     this.setDuck(this.duckKey.isDown || this.keys.down.isDown);
     this.player.run(this.time.now);
+    if (import.meta.env.DEV) {
+      const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+      if (playerBody.bottom > DESIGN_HEIGHT) {
+        console.error('[BerlinScene] player body bottom exceeded DESIGN_HEIGHT', {
+          bottom: playerBody.bottom,
+          designHeight: DESIGN_HEIGHT,
+        });
+      }
+    }
+    if (!this.finishTriggered && this.player.x >= CLUB_ENTRANCE_X) this.finish();
     this.progress.seconds = Math.max(0, this.progress.seconds - delta / 1000);
     const transition = this.sections.update(this.player.x);
     if (transition.changed) {
