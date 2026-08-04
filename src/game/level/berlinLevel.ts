@@ -34,7 +34,11 @@ interface RectangleOptions extends ShapeOptions {
   height: number;
 }
 
-function configure<T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Depth & Phaser.GameObjects.Components.ScrollFactor>(
+function configure<
+  T extends Phaser.GameObjects.GameObject &
+    Phaser.GameObjects.Components.Depth &
+    Phaser.GameObjects.Components.ScrollFactor,
+>(
   object: T,
   layer: Phaser.GameObjects.Layer,
   depth: number,
@@ -47,8 +51,7 @@ function configure<T extends Phaser.GameObjects.GameObject & Phaser.GameObjects.
 }
 
 function addRectangle(options: RectangleOptions): Phaser.GameObjects.Rectangle {
-  const { scene, layer, x, y, width, height, color, depth, scrollFactorX, scrollFactorY } =
-    options;
+  const { scene, layer, x, y, width, height, color, depth, scrollFactorX, scrollFactorY } = options;
   return configure(
     scene.add.rectangle(x, y, width, height, color),
     layer,
@@ -72,8 +75,7 @@ function addCircle(options: ShapeOptions & { radius: number }): Phaser.GameObjec
 function addEllipse(
   options: ShapeOptions & { width: number; height: number },
 ): Phaser.GameObjects.Ellipse {
-  const { scene, layer, x, y, width, height, color, depth, scrollFactorX, scrollFactorY } =
-    options;
+  const { scene, layer, x, y, width, height, color, depth, scrollFactorX, scrollFactorY } = options;
   return configure(
     scene.add.ellipse(x, y, width, height, color),
     layer,
@@ -103,13 +105,7 @@ function addText(
   },
 ): Phaser.GameObjects.Text {
   const { scene, layer, x, y, text, style, depth, scrollFactorX, scrollFactorY } = options;
-  return configure(
-    scene.add.text(x, y, text, style),
-    layer,
-    depth,
-    scrollFactorX,
-    scrollFactorY,
-  );
+  return configure(scene.add.text(x, y, text, style), layer, depth, scrollFactorX, scrollFactorY);
 }
 
 export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void {
@@ -125,7 +121,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   ) => addRectangle({ scene, layer, x, y, width, height, color, depth, scrollFactorX });
 
   // A fixed sky canvas lets each district tint sit behind all parallax scenery.
-  rectangle(layers.sky, 3000, 300, 6000, 620, 0x2a1742, Depth.SKY, 0);
+  rectangle(layers.sky, WORLD_WIDTH / 2, 300, WORLD_WIDTH, 620, 0x2a1742, Depth.SKY, 0);
   rectangle(layers.sky, 3350, 300, 1900, 620, 0x502159, Depth.SKY, 0);
   rectangle(layers.sky, 5150, 300, 1700, 620, 0x121021, Depth.SKY, 0);
   addCircle({
@@ -235,13 +231,42 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // The bridge section uses distinct factors from skyline to foreground railing.
   rectangle(layers.midBackground, 3350, 540, 1900, 140, 0x34235d, Depth.MID_BACKGROUND, 0.35);
   for (let x = 2520; x < 4250; x += 230) {
-    addEllipse({ scene, layer: layers.midBackground, x, y: 505, width: 210, height: 150, color: 0x8f3f59, depth: Depth.MID_BACKGROUND, scrollFactorX: 0.55 });
-    addEllipse({ scene, layer: layers.midBackground, x, y: 520, width: 160, height: 120, color: 0x34235d, depth: Depth.MID_BACKGROUND, scrollFactorX: 0.55 });
+    addEllipse({
+      scene,
+      layer: layers.midBackground,
+      x,
+      y: 505,
+      width: 210,
+      height: 150,
+      color: 0x8f3f59,
+      depth: Depth.MID_BACKGROUND,
+      scrollFactorX: 0.55,
+    });
+    addEllipse({
+      scene,
+      layer: layers.midBackground,
+      x,
+      y: 520,
+      width: 160,
+      height: 120,
+      color: 0x34235d,
+      depth: Depth.MID_BACKGROUND,
+      scrollFactorX: 0.55,
+    });
     rectangle(layers.midBackground, x, 510, 18, 150, 0x73314b, Depth.MID_BACKGROUND, 0.55);
   }
   for (const x of [2640, 4070]) {
     rectangle(layers.environment, x, 365, 115, 290, 0x7d3e52, Depth.ENVIRONMENT, 0.72);
-    addTriangle({ scene, layer: layers.environment, x, y: 175, points: [0, 110, 58, 0, 116, 110], color: 0xa54954, depth: Depth.ENVIRONMENT, scrollFactorX: 0.72 });
+    addTriangle({
+      scene,
+      layer: layers.environment,
+      x,
+      y: 175,
+      points: [0, 110, 58, 0, 116, 110],
+      color: 0xa54954,
+      depth: Depth.ENVIRONMENT,
+      scrollFactorX: 0.72,
+    });
   }
   rectangle(layers.environment, 3360, 410, 1100, 35, 0xf0bd38, Depth.ENVIRONMENT, 0.78);
   addText({
@@ -256,14 +281,56 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   }).setOrigin(0.5);
 
   // Club exterior and nearby buildings.
-  for (let x = 4380; x < 6000; x += 260) {
-    rectangle(layers.midBackground, x, 390, 230, 440, x % 520 ? 0x19172a : 0x24132e, Depth.MID_BACKGROUND, 0.5);
-    rectangle(layers.environment, x, 350, 150, 8, x % 520 ? 0xe94373 : 0x8a41ff, Depth.ENVIRONMENT, 0.75);
+  for (let x = 4380; x < WORLD_WIDTH; x += 260) {
+    rectangle(
+      layers.midBackground,
+      x,
+      390,
+      230,
+      440,
+      x % 520 ? 0x19172a : 0x24132e,
+      Depth.MID_BACKGROUND,
+      0.5,
+    );
+    rectangle(
+      layers.environment,
+      x,
+      350,
+      150,
+      8,
+      x % 520 ? 0xe94373 : 0x8a41ff,
+      Depth.ENVIRONMENT,
+      0.75,
+    );
   }
-  addText({ scene, layer: layers.environment, x: 4950, y: 360, text: 'HOLYBERG', style: { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ff3e68', stroke: '#7128b8', strokeThickness: 5 }, depth: Depth.ENVIRONMENT, scrollFactorX: 0.75 }).setOrigin(0.5);
-  rectangle(layers.environment, 5740, 485, 170, 250, 0x08070c, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 5740, 370, 210, 35, 0xec315f, Depth.ENVIRONMENT, 0.75);
-  addText({ scene, layer: layers.environment, x: 5740, y: 370, text: 'BACKSTAGE', style: { fontFamily: 'Archivo Black', fontSize: '21px', color: '#fff' }, depth: Depth.ENVIRONMENT, scrollFactorX: 0.75 }).setOrigin(0.5);
+  addText({
+    scene,
+    layer: layers.environment,
+    x: 4950,
+    y: 360,
+    text: 'HOLYBERG',
+    style: {
+      fontFamily: 'Archivo Black',
+      fontSize: '58px',
+      color: '#ff3e68',
+      stroke: '#7128b8',
+      strokeThickness: 5,
+    },
+    depth: Depth.ENVIRONMENT,
+    scrollFactorX: 0.75,
+  }).setOrigin(0.5);
+  rectangle(layers.environment, 6800, 485, 170, 250, 0x08070c, Depth.ENVIRONMENT, 0.75);
+  rectangle(layers.environment, 6800, 370, 210, 35, 0xec315f, Depth.ENVIRONMENT, 0.75);
+  addText({
+    scene,
+    layer: layers.environment,
+    x: 6800,
+    y: 370,
+    text: 'BACKSTAGE',
+    style: { fontFamily: 'Archivo Black', fontSize: '21px', color: '#fff' },
+    depth: Depth.ENVIRONMENT,
+    scrollFactorX: 0.75,
+  }).setOrigin(0.5);
 
   // Decorative near-camera elements never receive physics bodies.
   for (let x = 2460; x < 4320; x += 180) {
@@ -272,8 +339,26 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   }
   for (const x of [980, 2250, 4450, 5480]) {
     rectangle(layers.foreground, x, 410, 12, 400, 0x14101d, Depth.FOREGROUND, 1.08);
-    addCircle({ scene, layer: layers.foreground, x, y: 205, radius: 24, color: 0xffa65c, depth: Depth.FOREGROUND, scrollFactorX: 1.08 }).setAlpha(0.8);
+    addCircle({
+      scene,
+      layer: layers.foreground,
+      x,
+      y: 205,
+      radius: 24,
+      color: 0xffa65c,
+      depth: Depth.FOREGROUND,
+      scrollFactorX: 1.08,
+    }).setAlpha(0.8);
   }
 
-  rectangle(layers.gameplay, WORLD_WIDTH / 2, GROUND_Y + 55, WORLD_WIDTH, 110, 0x100c1b, Depth.GAMEPLAY, 1);
+  rectangle(
+    layers.gameplay,
+    WORLD_WIDTH / 2,
+    GROUND_Y + 55,
+    WORLD_WIDTH,
+    110,
+    0x100c1b,
+    Depth.GAMEPLAY,
+    1,
+  );
 }

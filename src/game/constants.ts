@@ -1,12 +1,12 @@
 export const DESIGN_WIDTH = 1280;
 export const DESIGN_HEIGHT = 720;
-export const WORLD_WIDTH = 6000;
+export const WORLD_WIDTH = 7000;
 export const GROUND_Y = 610;
 
 export const RUN_SPEED = 300;
 export const JUMP_VELOCITY = -650;
-export const START_TIME = 25;
-export const HIT_TIME = 5;
+export const START_TIME = 40;
+export const HIT_TIME = 3;
 export const HIT_SCORE = 100;
 export const USB_SCORE = 500;
 

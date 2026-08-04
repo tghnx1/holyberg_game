@@ -4,24 +4,22 @@ import {
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
   GROUND_Y,
+  HIT_TIME,
   START_TIME,
   WORLD_WIDTH,
 } from '../constants';
 import { Player } from '../entities/Player';
+import { BERLIN_SECTIONS } from '../level/berlin/berlinLevelConfig';
+import { applyCollectibleReward, canFinishBerlin } from '../level/berlin/berlinRules';
+import { isCollectible, LevelBuilder, type BuiltBerlinLevel } from '../level/berlin/LevelBuilder';
+import type { BerlinEntity, CollectibleConfig } from '../level/berlin/types';
 import { buildBerlinWorld } from '../level/berlinLevel';
 import { createSceneLayers, type SceneLayers } from '../level/sceneLayers';
 import { addFullscreenButton, OrientationController } from '../responsive/OrientationController';
+import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
 import { HudSystem } from '../systems/HudSystem';
 import { LayerDebugSystem } from '../systems/LayerDebugSystem';
-import { ObstacleSystem } from '../systems/ObstacleSystem';
-import {
-  applyObstacle,
-  collectUsb,
-  initialProgress,
-  startRun,
-  tickTimer,
-  tryFinish,
-} from '../systems/gameRules';
+import { SectionTracker } from '../systems/SectionTracker';
 import type { BerlinProgress } from '../types/game';
 
 export class BerlinScene extends Phaser.Scene {
@@ -31,40 +29,45 @@ export class BerlinScene extends Phaser.Scene {
   private intro!: Phaser.GameObjects.Container;
   private keys!: Phaser.Types.Input.Keyboard.CursorKeys;
   private space!: Phaser.Input.Keyboard.Key;
+  private duckKey!: Phaser.Input.Keyboard.Key;
+  private debugKey?: Phaser.Input.Keyboard.Key;
   private invulnerable = false;
-  private usb!: Phaser.GameObjects.Container;
-  private usbZone!: Phaser.GameObjects.Zone;
-  private finishZone!: Phaser.GameObjects.Zone;
   private layers!: SceneLayers;
+  private level!: BuiltBerlinLevel;
+  private readonly scoreSystem = new BerlinScoreSystem();
+  private readonly sections = new SectionTracker();
   private layerDebug?: LayerDebugSystem;
+  private debugOverlay?: Phaser.GameObjects.Container;
 
   constructor() {
     super('BerlinScene');
   }
 
   create(): void {
-    this.progress = { ...initialProgress(), seconds: START_TIME };
+    this.progress = { state: 'intro', seconds: START_TIME, score: 0, hasUsb: false };
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT);
-    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT);
-    this.cameras.main.setBackgroundColor('#2a1742');
-
+    this.cameras.main.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT).setBackgroundColor('#2a1742');
     this.layers = createSceneLayers(this);
     buildBerlinWorld(this, this.layers);
-
     const ground = this.add.zone(WORLD_WIDTH / 2, GROUND_Y + 10, WORLD_WIDTH, 20);
     this.physics.add.existing(ground, true);
-
     this.player = new Player(this, 230);
-    this.player.setScrollFactor(1);
     this.layers.gameplay.add(this.player);
     this.physics.add.collider(this.player, ground);
-
-    const obstacles = new ObstacleSystem(this, this.layers.gameplay);
-    this.physics.add.overlap(this.player, obstacles.zones, () => this.hitObstacle());
-    this.createUsb();
-    this.createFinish();
-
-    this.hud = new HudSystem(this, () => this.action(), this.layers.ui);
+    this.level = new LevelBuilder(this, this.layers.gameplay).build();
+    this.physics.add.overlap(this.player, this.level.obstacles, (_player, zone) =>
+      this.hitObstacle(zone as Phaser.GameObjects.Zone),
+    );
+    this.physics.add.overlap(this.player, this.level.collectibles, (_player, zone) =>
+      this.collect(zone as Phaser.GameObjects.Zone),
+    );
+    this.physics.add.overlap(this.player, this.level.finish, () => this.finish());
+    this.hud = new HudSystem(
+      this,
+      () => this.action(),
+      (pressed) => this.setDuck(pressed),
+      this.layers.ui,
+    );
     this.hud.update(this.progress);
     this.createIntro();
     new OrientationController(this, {
@@ -72,31 +75,23 @@ export class BerlinScene extends Phaser.Scene {
       onResume: () => this.physics.resume(),
       onLayout: (viewport) => this.hud.applyLayout(viewport),
     });
-
     this.keys = this.input.keyboard!.createCursorKeys();
     this.space = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.x < DESIGN_WIDTH - 180 || pointer.y < 520) this.action();
-    });
-
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1, -260, 0);
-    this.cameras.main.setLerp(0.08, 0.08);
-
-    if (import.meta.env.DEV) this.layerDebug = new LayerDebugSystem(this, this.layers);
+    this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1, -260, 0).setLerp(0.08, 0.08);
+    if (import.meta.env.DEV) this.createDevelopmentTools();
   }
 
   private createIntro(): void {
-    const panel = this.add
-      .rectangle(0, 0, 620, 310, 0x0d0916, 0.94)
-      .setStrokeStyle(5, 0xff5e3c);
+    const panel = this.add.rectangle(0, 0, 650, 340, 0x0d0916, 0.94).setStrokeStyle(5, 0xff5e3c);
     const text = this.add
       .text(
         0,
         0,
-        'INCOMING CALL\n\nDUDE, WHERE ARE YOU?\nYOU’RE PLAYING NEXT.\n\nPRESS SPACE OR TAP TO START',
+        'INCOMING CALL\n\nDUDE, WHERE ARE YOU?\nYOU’RE PLAYING NEXT.\n\nSPACE / ↑  JUMP     S / ↓  DUCK\nPRESS SPACE OR TAP JUMP TO START',
         {
           fontFamily: 'Space Mono',
-          fontSize: '25px',
+          fontSize: '23px',
           fontStyle: 'bold',
           color: '#fff',
           align: 'center',
@@ -110,98 +105,86 @@ export class BerlinScene extends Phaser.Scene {
       .setDepth(Depth.UI);
     this.layers.ui.add(this.intro);
     const fullscreen = addFullscreenButton(this);
-    if (fullscreen) { fullscreen.setPosition(0, 126); this.intro.add(fullscreen); }
-  }
-
-  private createUsb(): void {
-    const body = this.add
-      .rectangle(0, 0, 62, 26, 0xededed)
-      .setStrokeStyle(3, 0x18111e);
-    const plug = this.add.rectangle(39, 0, 20, 18, 0xaaa8b0);
-    const label = this.add
-      .text(-12, 0, 'USB', {
-        fontFamily: 'Space Mono',
-        fontSize: '12px',
-        color: '#17111e',
-      })
-      .setOrigin(0.5);
-    this.usb = this.add
-      .container(520, GROUND_Y - 65, [body, plug, label])
-      .setDepth(Depth.COLLECTIBLES)
-      .setScrollFactor(1);
-    this.layers.gameplay.add(this.usb);
-
-    this.usbZone = this.add.zone(520, GROUND_Y - 65, 90, 70);
-    this.physics.add.existing(this.usbZone, true);
-    this.physics.add.overlap(this.player, this.usbZone, () => {
-      if (this.progress.hasUsb) return;
-      this.progress = collectUsb(this.progress);
-      this.usb.destroy();
-      this.usbZone.destroy();
-      this.hud.flash('USB COLLECTED\nCAREER SAVED', 1700);
-      this.hud.update(this.progress);
-    });
-    this.tweens.add({
-      targets: this.usb,
-      y: '-=10',
-      yoyo: true,
-      repeat: -1,
-      duration: 600,
-      ease: 'Sine.inOut',
-    });
-  }
-
-  private createFinish(): void {
-    this.finishZone = this.add.zone(5740, 480, 180, 260);
-    this.physics.add.existing(this.finishZone, true);
-    this.physics.add.overlap(this.player, this.finishZone, () => this.finish());
+    if (fullscreen) {
+      fullscreen.setPosition(0, 142);
+      this.intro.add(fullscreen);
+    }
   }
 
   private action(): void {
     if (this.progress.state === 'intro') {
-      this.progress = startRun(this.progress);
+      this.progress.state = 'running';
       this.intro.destroy();
-      this.hud.flash('GET TO THE CLUB', 900);
-      return;
-    }
-    if (this.progress.state === 'running') this.player.jump();
+      this.hud.flash(BERLIN_SECTIONS[0].label, 900);
+    } else if (this.progress.state === 'running') this.player.requestJump(this.time.now);
     else if (this.progress.state === 'gameOver') this.scene.restart();
   }
 
-  private hitObstacle(): void {
+  private setDuck(pressed: boolean): void {
+    if (this.progress.state === 'running') this.player.setCrouched(pressed);
+  }
+
+  private hitObstacle(zone: Phaser.GameObjects.Zone): void {
     if (this.invulnerable || this.progress.state !== 'running') return;
+    const config = zone.getData('config') as BerlinEntity;
     this.invulnerable = true;
-    this.progress = applyObstacle(this.progress);
-    this.hud.update(this.progress);
-    this.hud.flash('-5 SECONDS');
+    this.sections.markDamage();
+    this.scoreSystem.hitObstacle();
+    this.progress.seconds = Math.max(0, this.progress.seconds - HIT_TIME);
+    this.syncScore();
+    this.hud.flash(`HIT ${config.id.toUpperCase()}\n-${HIT_TIME} SEC  -100`);
+    this.player.hurt();
     this.player.setTintFill(0xff3d66);
-    this.cameras.main.shake(160, 0.008);
+    this.cameras.main.flash(100, 255, 58, 92).shake(160, 0.008);
     this.time.delayedCall(1000, () => {
       this.invulnerable = false;
       this.player.clearTint();
     });
-    if (this.progress.seconds === 0) this.gameOver();
+    if (this.progress.seconds <= 0) this.gameOver();
+  }
+
+  private collect(zone: Phaser.GameObjects.Zone): void {
+    const config = zone.getData('config') as BerlinEntity;
+    if (!isCollectible(config) || !zone.active) return;
+    const artwork = zone.getData('artwork') as Phaser.GameObjects.Container;
+    zone.destroy();
+    artwork.destroy();
+    this.applyCollectible(config);
+  }
+
+  private applyCollectible(config: CollectibleConfig): void {
+    const reward = applyCollectibleReward(this.progress.seconds, this.progress.hasUsb, config);
+    this.scoreSystem.addCollectible(reward.score);
+    this.progress.seconds = reward.seconds;
+    this.progress.hasUsb = reward.hasUsb;
+    this.syncScore();
+    const bonus = config.timeBonus ? `+${config.timeBonus} SEC` : `+${config.score}`;
+    this.hud.flash(`${config.label}  ${bonus}`, 900);
   }
 
   private finish(): void {
     if (this.progress.state !== 'running') return;
-    if (!this.progress.hasUsb) {
+    if (!canFinishBerlin(this.progress.hasUsb)) {
       this.hud.flash('YOU FORGOT THE USB', 1800);
       return;
     }
-    this.progress = tryFinish(this.progress);
+    this.progress.state = 'won';
+    this.progress.score = this.scoreSystem.finish(this.progress.seconds);
     this.player.halt();
     this.physics.pause();
-    this.hud.flash(`YOU MADE IT\nFINAL SCORE  ${this.progress.score}`, 1800);
-    this.time.delayedCall(2000, () =>
+    this.hud.update(this.progress);
+    this.hud.flash(
+      `YOU MADE IT\nTIME BONUS  ${this.scoreSystem.breakdown.timeBonus}\nFINAL SCORE  ${this.progress.score}`,
+      1800,
+    );
+    this.time.delayedCall(2200, () =>
       this.scene.start('RhythmScene', { score: this.progress.score }),
     );
   }
 
   private gameOver(): void {
-    if (this.progress.state !== 'gameOver') {
-      this.progress = { ...this.progress, state: 'gameOver' };
-    }
+    if (this.progress.state === 'gameOver') return;
+    this.progress.state = 'gameOver';
     this.player.halt();
     this.physics.pause();
     const background = this.add
@@ -212,13 +195,8 @@ export class BerlinScene extends Phaser.Scene {
       .text(
         DESIGN_WIDTH / 2,
         DESIGN_HEIGHT / 2,
-        'YOU MISSED YOUR SET\n\nPRESS SPACE OR TAP TO RESTART',
-        {
-          fontFamily: 'Archivo Black',
-          fontSize: '34px',
-          color: '#ff5b49',
-          align: 'center',
-        },
+        'YOU MISSED YOUR SET\n\nPRESS SPACE OR TAP JUMP TO RESTART',
+        { fontFamily: 'Archivo Black', fontSize: '34px', color: '#ff5b49', align: 'center' },
       )
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -226,18 +204,77 @@ export class BerlinScene extends Phaser.Scene {
     this.layers.ui.add([background, text]);
   }
 
+  private createDevelopmentTools(): void {
+    this.layerDebug = new LayerDebugSystem(this, this.layers);
+    this.debugKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);
+    const graphics = this.add
+      .graphics()
+      .setDepth(Depth.UI - 1)
+      .setScrollFactor(1);
+    graphics.lineStyle(2, 0x53ffe0, 0.85);
+    BERLIN_SECTIONS.forEach((section) =>
+      graphics.lineBetween(section.startX, 0, section.startX, DESIGN_HEIGHT),
+    );
+    this.level.entities.forEach(({ zone }) =>
+      graphics.strokeRect(
+        zone.x - zone.width / 2,
+        zone.y - zone.height / 2,
+        zone.width,
+        zone.height,
+      ),
+    );
+    const status = this.add
+      .text(18, 130, '', {
+        fontFamily: 'Space Mono',
+        fontSize: '14px',
+        color: '#53ffe0',
+        backgroundColor: '#120b1ddd',
+        padding: { x: 8, y: 6 },
+      })
+      .setScrollFactor(0)
+      .setDepth(Depth.UI);
+    this.debugOverlay = this.add.container(0, 0, [graphics, status]).setVisible(false);
+    [1, 2, 3, 4, 5].forEach((_number, index) => {
+      const key = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE + index);
+      key.on('down', (event: KeyboardEvent) => {
+        if (event.shiftKey) this.player.setX(BERLIN_SECTIONS[index].startX + 80);
+      });
+    });
+  }
+
+  private updateDebug(): void {
+    if (!this.debugOverlay?.visible) return;
+    const status = this.debugOverlay.list.find(
+      (item) => item instanceof Phaser.GameObjects.Text,
+    ) as Phaser.GameObjects.Text | undefined;
+    status?.setText(
+      `STATE ${this.player.animationState}\nSECTION ${BERLIN_SECTIONS[this.sections.index].id}\nX ${Math.round(this.player.x)}  TIME ${this.progress.seconds.toFixed(1)}\nSCORE ${this.progress.score}  USB ${this.progress.hasUsb ? 'YES' : 'NO'}`,
+    );
+  }
+
+  private syncScore(): void {
+    this.progress.score = this.scoreSystem.score;
+    this.hud.update(this.progress);
+  }
+
   update(_time: number, delta: number): void {
     this.layerDebug?.update();
-    if (
-      Phaser.Input.Keyboard.JustDown(this.space) ||
-      Phaser.Input.Keyboard.JustDown(this.keys.up)
-    ) {
+    if (this.debugKey && Phaser.Input.Keyboard.JustDown(this.debugKey))
+      this.debugOverlay?.setVisible(!this.debugOverlay.visible);
+    this.updateDebug();
+    if (Phaser.Input.Keyboard.JustDown(this.space) || Phaser.Input.Keyboard.JustDown(this.keys.up))
       this.action();
-    }
     if (this.progress.state !== 'running') return;
-    this.player.run();
-    this.progress = tickTimer(this.progress, delta / 1000);
+    this.setDuck(this.duckKey.isDown || this.keys.down.isDown);
+    this.player.run(this.time.now);
+    this.progress.seconds = Math.max(0, this.progress.seconds - delta / 1000);
+    const transition = this.sections.update(this.player.x);
+    if (transition.changed) {
+      if (transition.clean) this.scoreSystem.awardCleanSection();
+      this.syncScore();
+      this.hud.flash(`${transition.label}${transition.clean ? '\nCLEAN +250' : ''}`, 900);
+    }
     this.hud.update(this.progress);
-    if (this.progress.state === 'gameOver') this.gameOver();
+    if (this.progress.seconds <= 0) this.gameOver();
   }
 }
