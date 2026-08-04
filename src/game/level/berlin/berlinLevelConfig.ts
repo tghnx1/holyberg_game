@@ -16,6 +16,18 @@ export const BERLIN_SECTIONS: readonly BerlinSection[] = [
   },
 ] as const;
 
+const platform = (id: string, x: number, width: number, topY: number): BerlinEntity => ({
+  id,
+  type: 'platform',
+  label: id.toUpperCase(),
+  x,
+  y: topY + 12,
+  width,
+  height: 24,
+  topY,
+  artSlot: `platform.${id}`,
+});
+
 const groundObstacle = (
   id: string,
   x: number,
@@ -34,10 +46,10 @@ const groundObstacle = (
   label,
   artSlot,
   hitbox: {
-    width: Math.max(width + 12, 74),
-    height: Math.max(height + 6, 52),
+    width: Math.round(width * 0.8),
+    height: Math.round(height * 0.9),
     offsetX: 0,
-    offsetY: height / 2 - Math.max(height + 6, 52) / 2,
+    offsetY: height / 2 - Math.round(height * 0.9) / 2,
   },
 });
 
@@ -62,10 +74,10 @@ const duckObstacle = (
   label,
   artSlot,
   hitbox: {
-    width: hitboxWidth,
-    height: hitboxHeight,
+    width: Math.round(hitboxWidth * 0.8),
+    height: Math.round(hitboxHeight * 0.9),
     offsetX: 0,
-    offsetY: height / 2 - hitboxHeight / 2,
+    offsetY: height / 2 - Math.round(hitboxHeight * 0.9) / 2,
   },
 });
 
@@ -109,12 +121,12 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     width: 105,
     height: 78,
     hitbox: {
-      width: 120,
+      width: 96,
       height: 72,
       offsetX: 0,
       offsetY: 78 / 2 - 72 / 2,
     },
-    movement: { distance: 150, durationMs: 1500 },
+    movement: { distance: 90, durationMs: 2600 },
     artSlot: 'npc.cyclist',
   },
   {
@@ -153,12 +165,12 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     width: 70,
     height: 100,
     hitbox: {
-      width: 76,
+      width: 61,
       height: 94,
       offsetX: 0,
       offsetY: 100 / 2 - 94 / 2,
     },
-    movement: { distance: 120, durationMs: 1800 },
+    movement: { distance: 70, durationMs: 2800 },
     artSlot: 'npc.wanderer',
   },
   {
@@ -190,11 +202,50 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
   groundObstacle('queue-barrier', 5750, 'QUEUE BARRIER', 'obstacle.queueBarrier', 115, 68),
   duckObstacle('pipe', 6100, 'LOW PIPE', 'obstacle.pipe', 160, 30, 174, 34, 11),
   groundObstacle('final-barrier', 6450, 'BARRIER', 'obstacle.barrier', 115, 72),
+  platform('platform-1', 7000, 500, 480),
+  {
+    id: 'route-bonus-1',
+    type: 'collectible',
+    kind: 'poster',
+    label: 'BONUS ABOVE',
+    x: 7150,
+    y: 480 - 110,
+    width: 48,
+    height: 48,
+    score: 250,
+    artSlot: 'collectible.poster',
+  },
+  platform('platform-2', 7700, 420, 410),
+  {
+    id: 'route-bonus-2',
+    type: 'collectible',
+    kind: 'vinyl',
+    label: 'DOUBLE JUMP',
+    x: 7920,
+    y: 410 - 110,
+    width: 48,
+    height: 48,
+    score: 250,
+    artSlot: 'collectible.vinyl',
+  },
+  platform('platform-3', 8450, 550, 470),
+  {
+    id: 'route-bonus-3',
+    type: 'collectible',
+    kind: 'energy',
+    label: 'PLATFORM ROUTE',
+    x: 8180,
+    y: 440,
+    width: 48,
+    height: 48,
+    score: 250,
+    artSlot: 'collectible.energy',
+  },
   {
     id: 'backstage',
     type: 'finish',
     label: 'FINISH',
-    x: 6800,
+    x: 9700,
     y: GROUND_Y - 120,
     width: 150,
     height: 240,

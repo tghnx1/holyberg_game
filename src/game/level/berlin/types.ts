@@ -1,5 +1,5 @@
 export type SectionId = 'apartment' | 'street' | 'bridge' | 'night' | 'club';
-export type PlayerAnimationState = 'run' | 'jump' | 'fall' | 'crouch' | 'hurt';
+export type PlayerAnimationState = 'run' | 'jump' | 'doubleJump' | 'fall' | 'crouch' | 'hurt';
 export type ObstacleAction = 'jump' | 'duck' | 'moving';
 export type CollectibleKind = 'usb' | 'headphones' | 'poster' | 'vinyl' | 'pass' | 'energy';
 
@@ -35,6 +35,14 @@ export interface ObstacleConfig extends LevelEntityBase {
   movement?: { distance: number; durationMs: number };
 }
 
+export interface PlatformConfig extends LevelEntityBase {
+  type: 'platform';
+  label: string;
+  y: number;
+  topY: number;
+  height: number;
+}
+
 export interface CollectibleConfig extends LevelEntityBase {
   type: 'collectible';
   kind: CollectibleKind;
@@ -51,7 +59,7 @@ export interface FinishConfig extends LevelEntityBase {
   y: number;
 }
 
-export type BerlinEntity = ObstacleConfig | CollectibleConfig | FinishConfig;
+export type BerlinEntity = ObstacleConfig | CollectibleConfig | FinishConfig | PlatformConfig;
 
 export interface PlayerBodySpec {
   width: number;
