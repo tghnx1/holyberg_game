@@ -15,8 +15,8 @@ export const CROUCHING_BODY: PlayerBodySpec = {
   offsetX: 18,
   offsetY: PLAYER_FRAME_HEIGHT - 50,
 };
-export const COYOTE_TIME_MS = 100;
-export const JUMP_BUFFER_MS = 120;
+export const COYOTE_TIME_MS = 140;
+export const JUMP_BUFFER_MS = 160;
 
 export function playerBodyFor(crouched: boolean): PlayerBodySpec {
   return crouched ? CROUCHING_BODY : STANDING_BODY;
@@ -29,6 +29,10 @@ export function canConsumeJump(
   crouched: boolean,
 ): boolean {
   return !crouched && now <= lastGroundedAt + COYOTE_TIME_MS && now <= bufferedUntil;
+}
+
+export function jumpVelocityFor(jumpIndex: number): number {
+  return jumpIndex >= 2 ? -680 : -720;
 }
 
 export function standingFeetY(): number {

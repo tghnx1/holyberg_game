@@ -1,13 +1,26 @@
 import Phaser from 'phaser';
-import { Depth, GROUND_Y, JUMP_VELOCITY, RUN_SPEED } from '../constants';
-import { canConsumeJump, JUMP_BUFFER_MS, playerBodyFor } from '../level/berlin/playerPhysics';
+import {
+  Depth,
+  GROUND_Y,
+  HIT_INPUT_LOCK_MS,
+  HIT_KNOCKBACK_DURATION,
+  HIT_KNOCKBACK_SPEED,
+  HIT_SLOW_DURATION,
+  HIT_SLOW_SPEED,
+  JUMP_VELOCITY,
+  RUN_SPEED,
+} from '../constants';
+import { JUMP_BUFFER_MS, playerBodyFor } from '../level/berlin/playerPhysics';
 import type { PlayerAnimationState } from '../level/berlin/types';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   animationState: PlayerAnimationState = 'run';
   private crouched = false;
   private jumpBufferedUntil = -Infinity;
-  private lastGroundedAt = -Infinity;
+  private speed = RUN_SPEED;
+  private hitInputsLockedUntil = -Infinity;
+  private hitSlowUntil = -Infinity;
+  private jumpCount = 0;
 
   constructor(scene: Phaser.Scene, x: number) {
     super(scene, x, GROUND_Y, 'dj');
@@ -20,26 +33,35 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   run(now: number): void {
-    this.setVelocityX(RUN_SPEED);
+    if (now >= this.hitSlowUntil && this.speed !== RUN_SPEED) this.speed = RUN_SPEED;
+    this.setVelocityX(this.speed);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    if (body.blocked.down) this.lastGroundedAt = now;
-    if (canConsumeJump(now, this.lastGroundedAt, this.jumpBufferedUntil, this.crouched)) {
-      this.setVelocityY(JUMP_VELOCITY);
+    const grounded = body.blocked.down || body.touching.down;
+    if (grounded) {
+      this.jumpCount = 0;
+    }
+    let jumpedThisFrame = false;
+    if (this.jumpBufferedUntil >= now && this.jumpCount < 2 && (grounded || this.jumpCount > 0)) {
+      this.setVelocityY(this.jumpCount === 0 ? JUMP_VELOCITY : -680);
       this.jumpBufferedUntil = -Infinity;
-      this.lastGroundedAt = -Infinity;
+      this.jumpCount += 1;
+      jumpedThisFrame = true;
     }
     this.animationState = this.crouched
       ? 'crouch'
-      : body.blocked.down
+      : grounded
         ? 'run'
-        : body.velocity.y < 0
-          ? 'jump'
-          : 'fall';
+        : jumpedThisFrame && this.jumpCount >= 2
+          ? 'doubleJump'
+          : body.velocity.y < 0
+            ? 'jump'
+            : 'fall';
     this.setScale(1, this.crouched ? 0.62 : 1);
     this.rotation = this.crouched ? 0 : Math.sin(now / 80) * 0.025;
   }
 
   requestJump(now: number): void {
+    if (now < this.hitInputsLockedUntil) return;
     this.jumpBufferedUntil = now + JUMP_BUFFER_MS;
   }
   setCrouched(value: boolean): void {
@@ -53,9 +75,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   hurt(): void {
     this.animationState = 'hurt';
   }
+  startHitReaction(now: number): void {
+    this.speed = HIT_KNOCKBACK_SPEED;
+    this.hitSlowUntil = now + HIT_SLOW_DURATION;
+    this.hitInputsLockedUntil = now + HIT_INPUT_LOCK_MS;
+    this.setVelocityX(HIT_KNOCKBACK_SPEED);
+    this.scene.time.delayedCall(HIT_KNOCKBACK_DURATION, () => {
+      this.speed = HIT_SLOW_SPEED;
+      this.setVelocityX(HIT_SLOW_SPEED);
+    });
+    this.scene.time.delayedCall(HIT_SLOW_DURATION, () => {
+      this.speed = RUN_SPEED;
+    });
+  }
   halt(): void {
     this.setVelocityX(0);
     this.rotation = 0;
+  }
+
+  canAcceptHitInput(now: number): boolean {
+    return now >= this.hitInputsLockedUntil;
   }
 
   private applyBody(crouched: boolean): void {
