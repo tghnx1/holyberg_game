@@ -49,31 +49,43 @@ export class BerlinScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT).setBackgroundColor('#2a1742');
     this.layers = createSceneLayers(this);
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before buildBerlinWorld');
     buildBerlinWorld(this, this.layers);
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after buildBerlinWorld');
     const ground = this.add.zone(WORLD_WIDTH / 2, GROUND_Y + 10, WORLD_WIDTH, 20);
     this.physics.add.existing(ground, true);
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before Player creation');
     this.player = new Player(this, 230);
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after Player creation');
     this.layers.gameplay.add(this.player);
     this.physics.add.collider(this.player, ground);
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before LevelBuilder.build');
     this.level = new LevelBuilder(this, this.layers.gameplay).build();
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after LevelBuilder.build');
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before obstacle overlaps');
     this.level.entities
       .filter(({ config }) => config.type === 'obstacle')
       .forEach(({ zone }) => {
         this.physics.add.overlap(this.player, zone, () => this.hitObstacle(zone));
       });
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after obstacle overlaps');
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before platform overlaps');
     this.physics.add.overlap(this.player, this.level.platforms, (_player, platform) =>
       this.landOnPlatform(platform as Phaser.GameObjects.Zone),
     );
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after platform overlaps');
     this.physics.add.overlap(this.player, this.level.collectibles, (_player, zone) =>
       this.collect(zone as Phaser.GameObjects.Zone),
     );
     this.physics.add.overlap(this.player, this.level.finish, () => this.finish());
+    if (import.meta.env.DEV) console.debug('[BerlinScene] before HUD creation');
     this.hud = new HudSystem(
       this,
       () => this.action(),
       (pressed) => this.setDuck(pressed),
       this.layers.ui,
     );
+    if (import.meta.env.DEV) console.debug('[BerlinScene] after HUD creation');
     this.hud.update(this.progress);
     this.createIntro();
     new OrientationController(this, {

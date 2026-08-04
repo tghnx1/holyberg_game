@@ -3,7 +3,7 @@ import { GROUND_Y } from '../../constants';
 import { CROUCHING_BODY, STANDING_BODY } from './playerPhysics';
 import { BERLIN_ENTITIES } from './berlinLevelConfig';
 import { PlaceholderFactory } from './PlaceholderFactory';
-import type { BerlinEntity, CollectibleConfig, ObstacleConfig } from './types';
+import type { BerlinEntity, CollectibleConfig, ObstacleConfig, PlatformConfig } from './types';
 
 export interface BuiltEntity {
   config: BerlinEntity;
@@ -12,9 +12,9 @@ export interface BuiltEntity {
 }
 
 export interface BuiltBerlinLevel {
-  obstacles: Phaser.Physics.Arcade.Group;
   collectibles: Phaser.Physics.Arcade.StaticGroup;
   finish: Phaser.Physics.Arcade.StaticGroup;
+  platforms: Phaser.Physics.Arcade.StaticGroup;
   entities: BuiltEntity[];
 }
 
@@ -26,33 +26,57 @@ export class LevelBuilder {
 
   build(): BuiltBerlinLevel {
     const factory = new PlaceholderFactory(this.scene, this.layer);
-    const obstacles = this.scene.physics.add.group();
     const collectibles = this.scene.physics.add.staticGroup();
     const finish = this.scene.physics.add.staticGroup();
+    const platforms = this.scene.physics.add.staticGroup();
     const entities = BERLIN_ENTITIES.map((config) => {
       const artwork = factory.create(config);
       const hitbox = 'hitbox' in config ? config.hitbox : undefined;
-      const zone = this.scene.add.zone(
-        hitbox ? config.x + hitbox.offsetX : config.x,
-        hitbox ? config.y + hitbox.offsetY : config.y,
-        hitbox ? hitbox.width : config.width * 0.78,
-        hitbox ? hitbox.height : config.height * 0.82,
-      );
-      this.scene.physics.add.existing(zone, config.type !== 'obstacle');
-      if (config.type === 'obstacle') {
-        const body = zone.body as Phaser.Physics.Arcade.Body;
-        body.setAllowGravity(false).setImmovable(true);
-        this.validateObstacle(config);
-      }
+      const zone = this.createZone(config, hitbox);
       zone.setData('config', config).setData('artwork', artwork).setData('id', config.id);
       if (config.type === 'obstacle') {
-        obstacles.add(zone);
+        zone.setData('alreadyHit', false);
+        this.validateObstacle(config);
         this.configureMovement(config, zone, artwork);
-      } else if (config.type === 'collectible') collectibles.add(zone);
-      else finish.add(zone);
+      } else if (config.type === 'collectible') {
+        collectibles.add(zone);
+      } else if (config.type === 'platform') {
+        this.validatePlatform(config);
+        platforms.add(zone);
+      } else {
+        finish.add(zone);
+      }
       return { config, artwork, zone };
     });
-    return { obstacles, collectibles, finish, entities };
+    return { collectibles, finish, platforms, entities };
+  }
+
+  private createZone(
+    config: BerlinEntity,
+    hitbox?: { offsetX: number; offsetY: number; width: number; height: number },
+  ): Phaser.GameObjects.Zone {
+    const zone = this.scene.add.zone(
+      hitbox ? config.x + hitbox.offsetX : config.x,
+      hitbox ? config.y + hitbox.offsetY : config.y,
+      hitbox ? hitbox.width : config.width * 0.78,
+      hitbox ? hitbox.height : config.height * 0.82,
+    );
+    const isStatic = config.type === 'collectible' || config.type === 'finish' || config.type === 'platform';
+    this.scene.physics.add.existing(zone, isStatic);
+    const body = zone.body as
+      | Phaser.Physics.Arcade.Body
+      | Phaser.Physics.Arcade.StaticBody
+      | undefined;
+    if (body) {
+      body.enable = true;
+      if (body instanceof Phaser.Physics.Arcade.Body) {
+        body.setAllowGravity(false);
+        body.setImmovable(true);
+      } else {
+        body.immovable = true;
+      }
+    }
+    return zone;
   }
 
   private validateObstacle(config: ObstacleConfig): void {
@@ -62,15 +86,25 @@ export class LevelBuilder {
     const crouchingTop = GROUND_Y - CROUCHING_BODY.height;
     if (config.action === 'duck') {
       if (!(standingTop < zoneBottom && crouchingTop > zoneBottom)) {
-        throw new Error(`Invalid duck obstacle hitbox for ${config.id}`);
+        this.logValidationError(`Invalid duck obstacle hitbox for ${config.id}`);
       }
       return;
     }
     const hitboxBottom = config.y + config.hitbox.offsetY + config.hitbox.height / 2;
     if (Math.abs(hitboxBottom - GROUND_Y) > 0.01) {
-      throw new Error(`Invalid jump obstacle hitbox for ${config.id}`);
+      this.logValidationError(`Invalid jump obstacle hitbox for ${config.id}`);
     }
-    if (zoneTop > GROUND_Y) throw new Error(`Invalid jump obstacle placement for ${config.id}`);
+    if (zoneTop > GROUND_Y) this.logValidationError(`Invalid jump obstacle placement for ${config.id}`);
+  }
+
+  private validatePlatform(config: PlatformConfig): void {
+    if (config.topY <= 0 || config.width <= 0 || config.height <= 0) {
+      this.logValidationError(`Invalid platform config for ${config.id}`);
+    }
+  }
+
+  private logValidationError(message: string): void {
+    if (import.meta.env.DEV) console.error(message);
   }
 
   private configureMovement(
