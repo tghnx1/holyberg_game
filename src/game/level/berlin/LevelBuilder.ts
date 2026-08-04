@@ -68,9 +68,9 @@ export class LevelBuilder {
     }
     const hitboxBottom = config.y + config.hitbox.offsetY + config.hitbox.height / 2;
     if (Math.abs(hitboxBottom - GROUND_Y) > 0.01) {
-      throw new Error(`Jump obstacle ${config.id} must sit on the ground baseline`);
+      throw new Error(`Invalid jump obstacle hitbox for ${config.id}`);
     }
-    if (zoneTop > GROUND_Y) throw new Error(`Jump obstacle ${config.id} is below ground`);
+    if (zoneTop > GROUND_Y) throw new Error(`Invalid jump obstacle placement for ${config.id}`);
   }
 
   private configureMovement(
