@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
-import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH, GROUND_Y, WORLD_WIDTH } from '../constants';
+import { DESIGN_WIDTH, GROUND_Y, WORLD_WIDTH } from '../constants';
 import { GROUND_SEGMENTS, PIT_ZONES } from './berlin/berlinLevelConfig';
+import { backgroundLayout } from './berlin/backgroundLayout';
+import { attachBackgroundDebug, isBackgroundDebugEnabled, type DebugTarget } from './berlin/backgroundDebug';
 import type { SceneLayers } from './sceneLayers';
 
 export interface ObstacleSpec {
@@ -75,6 +77,19 @@ function addTriangle(
   );
 }
 
+/** Places a full-height-scaled, bottom-anchored (origin 0,1) background image. */
+function placeBackgroundImage(
+  scene: Phaser.Scene,
+  layer: Phaser.GameObjects.Layer,
+  layout: { key: string; baselineY: number; targetHeight: number; depth: number },
+): Phaser.GameObjects.Image {
+  const image = scene.add.image(0, layout.baselineY, layout.key).setOrigin(0, 1);
+  image.setScale(layout.targetHeight / image.height);
+  image.setDepth(layout.depth);
+  layer.add(image);
+  return image;
+}
+
 export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void {
   const rectangle = (
     layer: Phaser.GameObjects.Layer,
@@ -87,116 +102,113 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     scrollFactorX: number,
   ) => addRectangle({ scene, layer, x, y, width, height, color, depth, scrollFactorX });
 
+  const debugTargets: DebugTarget[] = [];
+
   // A fixed sunset image sits behind all parallax scenery and never scrolls
   // or repeats; it covers exactly the viewport, not the whole world.
-  layers.sky.add(
-    scene.add
-      .image(0, 0, 'berlin-sky')
-      .setOrigin(0, 0)
-      .setDisplaySize(DESIGN_WIDTH, DESIGN_HEIGHT)
-      .setScrollFactor(0)
-      .setDepth(Depth.SKY),
-  );
-  // City skyline sits above the sky and below every other layer, fixed to
-  // the camera (no physics, no tiling). Its bottom edge is pinned to exactly
-  // half the design height, recomputed from DESIGN_HEIGHT rather than a
-  // hardcoded pixel value; it's scaled uniformly so it covers the full
-  // design width without distorting the artwork.
-  const city = scene.add.image(0, DESIGN_HEIGHT / 2, 'berlin-city').setOrigin(0, 0.87);
-  city.setScale((DESIGN_WIDTH / city.width) * 1.5);
+  const sky = scene.add
+    .image(0, backgroundLayout.sky.baselineY, backgroundLayout.sky.key)
+    .setOrigin(0, 1)
+    .setDisplaySize(backgroundLayout.sky.targetWidth, backgroundLayout.sky.targetHeight)
+    .setScrollFactor(0)
+    .setDepth(backgroundLayout.sky.depth);
+  layers.sky.add(sky);
+  debugTargets.push({ name: 'sky', object: sky });
+
+  // City skyline, houses, and the mid-buildings texture are full-level
+  // parallax layers: their scroll factor is derived from how far the
+  // (uniformly height-scaled) texture can travel relative to how far the
+  // camera travels across the whole level.
+  const city = placeBackgroundImage(scene, layers.midBackground, backgroundLayout.city);
   const cityScrollFactor = Phaser.Math.Clamp(
     (city.displayWidth - DESIGN_WIDTH) / (WORLD_WIDTH - DESIGN_WIDTH),
     0,
     1,
   );
-  city.setScrollFactor(cityScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(city);
+  city.setScrollFactor(cityScrollFactor, 0);
+  debugTargets.push({ name: 'city', object: city });
+
+  // The first railway section (and only that section) lives inside a
+  // container positioned at FIRST_RAILWAY_START_X in world space. The
+  // container and everything inside it are world-aligned (scrollFactor 1),
+  // not parallaxed, and the railway image plus both trains use coordinates
+  // local to that container.
+  const railwaySection = scene.add
+    .container(backgroundLayout.railwaySection.startX, 0)
+    .setScrollFactor(1, 1);
+  layers.midBackground.add(railwaySection);
 
   const railway = scene.add
-    .image(0, GROUND_Y, 'berlin-railway')
-    .setOrigin(0, 0.95);
-  railway.setScale(650 / railway.height);
-  const railwayScrollFactor = Phaser.Math.Clamp(
-    Math.max(0, railway.displayWidth - DESIGN_WIDTH) / Math.max(1, WORLD_WIDTH - DESIGN_WIDTH),
-    0,
-    1,
-  );
-  railway
-    .setScrollFactor(railwayScrollFactor, 0)
-    .setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(railway);
+    .image(0, backgroundLayout.railwaySection.baselineY, backgroundLayout.railwaySection.key)
+    .setOrigin(0, 1)
+    .setDepth(backgroundLayout.railwaySection.depth);
+  railway.setScale(backgroundLayout.railwaySection.targetHeight / railway.height);
+  railwaySection.add(railway);
+  debugTargets.push({ name: 'railway', object: railway, container: railwaySection });
 
-  // Two trains that only ever traverse the first visible stretch of the
-  // railway (from the level start out to one design-width viewport). They
-  // share the railway's own scroll factor so they stay glued to it, start
-  // and end fully off that stretch's bounds, and loop; their equal speed and
-  // mirrored start points make them cross exactly at the stretch's midpoint.
-  const firstBridgeStartX = 0;
-  const firstBridgeEndX = DESIGN_WIDTH;
-  const trainDurationMs = 7000;
+  // Two trains that only ever traverse the first railway section, in local
+  // section coordinates: train-right runs from just off the section's left
+  // edge to its right edge (sectionWidth), train-left runs the mirror path.
+  // Both keep their original (cropped, unscaled) pixel size.
+  const sectionWidth = backgroundLayout.railwaySection.sectionWidth;
 
-  const trainRight = scene.add.image(0, GROUND_Y, 'berlin-train-right').setOrigin(0, 0.92);
-  trainRight.setScrollFactor(railwayScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
-  trainRight.x = firstBridgeStartX - trainRight.displayWidth;
-  layers.midBackground.add(trainRight);
+  const trainRight = scene.add
+    .image(0, backgroundLayout.trains.baselineY, backgroundLayout.trains.right.key)
+    .setOrigin(0, 1)
+    .setDepth(backgroundLayout.trains.depth);
+  trainRight.x = -trainRight.displayWidth;
+  railwaySection.add(trainRight);
+  debugTargets.push({ name: 'train-right', object: trainRight, container: railwaySection });
 
   scene.tweens.add({
     targets: trainRight,
-    x: firstBridgeEndX,
-    duration: trainDurationMs,
-    ease: 'Linear',
+    x: sectionWidth,
+    duration: backgroundLayout.trains.durationMs,
+    ease: backgroundLayout.trains.ease,
     repeat: -1,
-    repeatDelay: 1500,
+    repeatDelay: backgroundLayout.trains.repeatDelay,
   });
 
-  const trainLeft = scene.add.image(0, GROUND_Y, 'berlin-train-left').setOrigin(0, 0.92);
-  trainLeft.setScrollFactor(railwayScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
-  trainLeft.x = firstBridgeEndX;
-  layers.midBackground.add(trainLeft);
+  const trainLeft = scene.add
+    .image(0, backgroundLayout.trains.baselineY, backgroundLayout.trains.left.key)
+    .setOrigin(0, 1)
+    .setDepth(backgroundLayout.trains.depth);
+  trainLeft.x = sectionWidth;
+  railwaySection.add(trainLeft);
+  debugTargets.push({ name: 'train-left', object: trainLeft, container: railwaySection });
 
   scene.tweens.add({
     targets: trainLeft,
-    x: firstBridgeStartX - trainLeft.displayWidth,
-    duration: trainDurationMs,
-    ease: 'Linear',
+    x: -trainLeft.displayWidth,
+    duration: backgroundLayout.trains.durationMs,
+    ease: backgroundLayout.trains.ease,
     repeat: -1,
-    repeatDelay: 1500,
+    repeatDelay: backgroundLayout.trains.repeatDelay,
   });
 
   // Mid-background building row: a single non-tiled texture replacing the
   // procedural building rectangles and their nested window rectangles that
-  // used to be drawn here. Scaled to the removed block's height, with a
-  // scroll factor derived from how far the texture can travel relative to
-  // how far the camera travels across the whole level.
-  const houses = scene.add
-    .image(0, GROUND_Y, 'berlin-mid-buildings')
-    .setOrigin(0, 0.9);
-  houses.setScale(650 / houses.height);
+  // used to be drawn here.
+  const houses = placeBackgroundImage(scene, layers.midBackground, backgroundLayout.houses);
   const cameraTravel = Math.max(1, WORLD_WIDTH - DESIGN_WIDTH);
   const textureTravel = Math.max(0, houses.displayWidth - DESIGN_WIDTH);
-  const housesScrollFactor = Phaser.Math.Clamp(
-    textureTravel / cameraTravel,
-    0,
-    1,
-  );
-  houses
-    .setScrollFactor(housesScrollFactor, 0)
-    .setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(houses);
+  const housesScrollFactor = Phaser.Math.Clamp(textureTravel / cameraTravel, 0, 1);
+  houses.setScrollFactor(housesScrollFactor, 0);
+  debugTargets.push({ name: 'houses', object: houses });
 
   // Asphalt is drawn per ground segment (not the full world) so it stops exactly
   // at each pit boundary, matching the physics ground colliders in BerlinScene.
-  const asphaltColor = 0x100c1b;
-  const voidColor = 0x050308;
+  const { asphaltColor, voidColor, asphaltHeight, asphaltOffsetY, pitHeight, pitOffsetY, depth: groundDepth } =
+    backgroundLayout.ground;
   GROUND_SEGMENTS.forEach((segment) => {
     rectangle(
       layers.gameplay,
       (segment.startX + segment.endX) / 2,
-      GROUND_Y + 55,
+      GROUND_Y + asphaltOffsetY,
       segment.endX - segment.startX,
-      110,
+      asphaltHeight,
       asphaltColor,
-      Depth.GAMEPLAY,
+      groundDepth,
       1,
     );
   });
@@ -207,11 +219,11 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     rectangle(
       layers.gameplay,
       (pit.startX + pit.endX) / 2,
-      GROUND_Y + 230,
+      GROUND_Y + pitOffsetY,
       pit.endX - pit.startX,
-      440,
+      pitHeight,
       voidColor,
-      Depth.GAMEPLAY,
+      groundDepth,
       1,
     );
     [pit.startX, pit.endX].forEach((edgeX, index) => {
@@ -226,10 +238,14 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
           y: GROUND_Y,
           points: [-9 * dir, 0, 9 * dir, 0, 0, toothHeight],
           color: asphaltColor,
-          depth: Depth.GAMEPLAY,
+          depth: groundDepth,
           scrollFactorX: 1,
         });
       }
     });
   });
+
+  if (isBackgroundDebugEnabled()) {
+    attachBackgroundDebug(scene, debugTargets);
+  }
 }
