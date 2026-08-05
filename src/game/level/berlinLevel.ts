@@ -112,20 +112,6 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   city.setScrollFactor(cityScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
   layers.midBackground.add(city);
 
-  const housesPlain = scene.add
-    .image(0, GROUND_Y, 'berlin-houses-plain')
-    .setOrigin(0, 0.9);
-  housesPlain.setScale(650 / housesPlain.height);
-  const housesPlainScrollFactor = Phaser.Math.Clamp(
-    Math.max(0, housesPlain.displayWidth - DESIGN_WIDTH) / Math.max(1, WORLD_WIDTH - DESIGN_WIDTH),
-    0,
-    1,
-  );
-  housesPlain
-    .setScrollFactor(housesPlainScrollFactor, 0)
-    .setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(housesPlain);
-
   const railway = scene.add
     .image(0, GROUND_Y, 'berlin-railway')
     .setOrigin(0, 0.9);
