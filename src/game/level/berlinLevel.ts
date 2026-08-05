@@ -112,7 +112,6 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     .setDisplaySize(backgroundLayout.sky.targetWidth, backgroundLayout.sky.targetHeight)
     .setScrollFactor(0)
     .setDepth(backgroundLayout.sky.depth);
-  layers.sky.add(sky);
   debugTargets.push({ name: 'sky', object: sky });
 
   // City skyline, houses, and the mid-buildings texture are full-level
@@ -136,14 +135,12 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   const railwaySection = scene.add
     .container(backgroundLayout.railwaySection.startX, 0)
     .setScrollFactor(1, 1);
-  layers.midBackground.add(railwaySection);
 
   const railway = scene.add
     .image(0, backgroundLayout.railwaySection.baselineY, backgroundLayout.railwaySection.key)
     .setOrigin(0, 1)
     .setDepth(backgroundLayout.railwaySection.depth);
   railway.setScale(backgroundLayout.railwaySection.targetHeight / railway.height);
-  railwaySection.add(railway);
   debugTargets.push({ name: 'railway', object: railway, container: railwaySection });
 
   // Two trains that only ever traverse the first railway section, in local
@@ -157,7 +154,6 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     .setOrigin(0, 1)
     .setDepth(backgroundLayout.trains.depth);
   trainRight.x = -trainRight.displayWidth;
-  railwaySection.add(trainRight);
   debugTargets.push({ name: 'train-right', object: trainRight, container: railwaySection });
 
   scene.tweens.add({
@@ -174,9 +170,13 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     .setOrigin(0, 1)
     .setDepth(backgroundLayout.trains.depth);
   trainLeft.x = sectionWidth;
-  railwaySection.add(trainLeft);
   debugTargets.push({ name: 'train-left', object: trainLeft, container: railwaySection });
 
+  layers.sky.add(sky);
+  layers.midBackground.add(railwaySection);
+  railwaySection.add(railway);
+  railwaySection.add(trainRight);
+  railwaySection.add(trainLeft);
   scene.tweens.add({
     targets: trainLeft,
     x: -trainLeft.displayWidth,
