@@ -126,6 +126,37 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     .setDepth(Depth.MID_BACKGROUND);
   layers.midBackground.add(railway);
 
+  // Two trains that only ever traverse the first visible stretch of the
+  // railway (from the level start out to one design-width viewport). They
+  // share the railway's own scroll factor so they stay glued to it, start
+  // and end fully off that stretch's bounds, and loop; their equal speed and
+  // mirrored start points make them cross exactly at the stretch's midpoint.
+  const trainSectionStartX = 0;
+  const trainSectionEndX = DESIGN_WIDTH;
+  const trainDurationMs = 9000;
+
+  const trainRight = scene.add.image(0, GROUND_Y, 'berlin-train-right').setOrigin(0, 0.9);
+  trainRight.setScrollFactor(railwayScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
+  trainRight.x = trainSectionStartX - trainRight.width;
+  layers.midBackground.add(trainRight);
+  scene.tweens.add({
+    targets: trainRight,
+    x: trainSectionEndX,
+    duration: trainDurationMs,
+    repeat: -1,
+  });
+
+  const trainLeft = scene.add.image(0, GROUND_Y, 'berlin-train-left').setOrigin(0, 0.9);
+  trainLeft.setScrollFactor(railwayScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
+  trainLeft.x = trainSectionEndX;
+  layers.midBackground.add(trainLeft);
+  scene.tweens.add({
+    targets: trainLeft,
+    x: trainSectionStartX - trainLeft.width,
+    duration: trainDurationMs,
+    repeat: -1,
+  });
+
   // Mid-background building row: a single non-tiled texture replacing the
   // procedural building rectangles and their nested window rectangles that
   // used to be drawn here. Scaled to the removed block's height, with a

@@ -9,6 +9,8 @@ export class BootScene extends Phaser.Scene {
     this.load.image('berlin-sky', 'assets/backgrounds/sky.png');
     this.load.image('berlin-city', 'assets/backgrounds/city.jpg');
     this.load.image('berlin-railway', 'assets/backgrounds/railway.jpg');
+    this.load.image('berlin-train-right', 'assets/backgrounds/train-right.png');
+    this.load.image('berlin-train-left', 'assets/backgrounds/train-left.png');
     this.load.image('berlin-mid-buildings', 'assets/backgrounds/houses.png');
   }
 
