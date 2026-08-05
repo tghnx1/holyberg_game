@@ -9,9 +9,19 @@ import {
   WORLD_WIDTH,
 } from '../constants';
 import { Player } from '../entities/Player';
-import { BERLIN_SECTIONS, CLUB_ENTRANCE_X } from '../level/berlin/berlinLevelConfig';
-import { applyCollectibleReward, canFinishBerlin } from '../level/berlin/berlinRules';
-import { isCollectible, LevelBuilder, type BuiltBerlinLevel } from '../level/berlin/LevelBuilder';
+import {
+  BERLIN_SECTIONS,
+  CLUB_ENTRANCE_X,
+  GROUND_SEGMENTS,
+  PIT_ZONES,
+} from '../level/berlin/berlinLevelConfig';
+import { applyCollectibleReward } from '../level/berlin/berlinRules';
+import {
+  isCollectible,
+  LevelBuilder,
+  type BuiltBerlinLevel,
+  type PendingActivation,
+} from '../level/berlin/LevelBuilder';
 import type { BerlinEntity, CollectibleConfig } from '../level/berlin/types';
 import { buildBerlinWorld } from '../level/berlinLevel';
 import { createSceneLayers, type SceneLayers } from '../level/sceneLayers';
@@ -35,6 +45,7 @@ export class BerlinScene extends Phaser.Scene {
   private finishTriggered = false;
   private layers!: SceneLayers;
   private level!: BuiltBerlinLevel;
+  private pendingActivations: PendingActivation[] = [];
   private readonly scoreSystem = new BerlinScoreSystem();
   private readonly sections = new SectionTracker();
   private layerDebug?: LayerDebugSystem;
@@ -54,15 +65,33 @@ export class BerlinScene extends Phaser.Scene {
     if (import.meta.env.DEV) console.debug('[BerlinScene] before buildBerlinWorld');
     buildBerlinWorld(this, this.layers);
     if (import.meta.env.DEV) console.debug('[BerlinScene] after buildBerlinWorld');
-    const ground = this.add.zone(WORLD_WIDTH / 2, GROUND_Y + 10, WORLD_WIDTH, 20);
-    this.physics.add.existing(ground, true);
     if (import.meta.env.DEV) console.debug('[BerlinScene] before Player creation');
     this.player = new Player(this, 230);
     if (import.meta.env.DEV) console.debug('[BerlinScene] after Player creation');
     this.layers.gameplay.add(this.player);
-    this.physics.add.collider(this.player, ground);
+    GROUND_SEGMENTS.forEach((segment) => {
+      const ground = this.add.zone(
+        (segment.startX + segment.endX) / 2,
+        GROUND_Y + 10,
+        segment.endX - segment.startX,
+        20,
+      );
+      this.physics.add.existing(ground, true);
+      this.physics.add.collider(this.player, ground);
+    });
+    PIT_ZONES.forEach((pit) => {
+      const killZone = this.add.zone(
+        (pit.startX + pit.endX) / 2,
+        DESIGN_HEIGHT + 80,
+        pit.endX - pit.startX,
+        200,
+      );
+      this.physics.add.existing(killZone, true);
+      this.physics.add.overlap(this.player, killZone, () => this.gameOver());
+    });
     if (import.meta.env.DEV) console.debug('[BerlinScene] before LevelBuilder.build');
     this.level = new LevelBuilder(this, this.layers.gameplay).build();
+    this.pendingActivations = this.level.pendingActivations;
     if (import.meta.env.DEV) console.debug('[BerlinScene] after LevelBuilder.build');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before obstacle overlaps');
     this.level.entities
@@ -75,6 +104,13 @@ export class BerlinScene extends Phaser.Scene {
     this.physics.add.collider(
       this.player,
       this.level.platforms,
+      undefined,
+      (_player, platform) => this.canLandOnPlatform(platform as Phaser.GameObjects.Zone),
+      this,
+    );
+    this.physics.add.collider(
+      this.player,
+      this.level.movingPlatforms,
       undefined,
       (_player, platform) => this.canLandOnPlatform(platform as Phaser.GameObjects.Zone),
       this,
@@ -196,10 +232,6 @@ export class BerlinScene extends Phaser.Scene {
 
   private finish(): void {
     if (this.finishTriggered || this.progress.state !== 'running') return;
-    if (!canFinishBerlin(this.progress.hasUsb)) {
-      this.hud.flash('YOU FORGOT THE USB', 1800);
-      return;
-    }
     this.finishTriggered = true;
     this.progress.state = 'won';
     this.progress.score = this.scoreSystem.finish(this.progress.seconds);
@@ -323,9 +355,9 @@ export class BerlinScene extends Phaser.Scene {
 
   private canLandOnPlatform(platform: Phaser.GameObjects.Zone): boolean {
     const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
-    const platformBody = platform.body as Phaser.Physics.Arcade.StaticBody;
+    const platformBody = platform.body as Phaser.Physics.Arcade.Body | Phaser.Physics.Arcade.StaticBody;
     const previousBottom = playerBody.prev.y + playerBody.height;
-    return playerBody.velocity.y >= 0 && previousBottom <= platformBody.top;
+    return playerBody.velocity.y >= 0 && previousBottom <= platformBody.top + 6;
   }
 
   update(_time: number, delta: number): void {
@@ -346,6 +378,13 @@ export class BerlinScene extends Phaser.Scene {
           designHeight: DESIGN_HEIGHT,
         });
       }
+    }
+    if (this.pendingActivations.length) {
+      this.pendingActivations = this.pendingActivations.filter((pending) => {
+        if (this.player.x < pending.activationX) return true;
+        pending.activate();
+        return false;
+      });
     }
     if (!this.finishTriggered && this.player.x >= CLUB_ENTRANCE_X) this.finish();
     this.progress.seconds = Math.max(0, this.progress.seconds - delta / 1000);

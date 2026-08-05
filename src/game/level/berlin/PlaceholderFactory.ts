@@ -8,6 +8,7 @@ const colors = {
   duck: 0xf1b93a,
   moving: 0x9d60d5,
   platform: 0x59c1ff,
+  movingPlatform: 0x2f8fd6,
   collectible: 0x4fd5c7,
   finish: 0xff3f73,
 } as const;

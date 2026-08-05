@@ -18,6 +18,6 @@ export function applyCollectibleReward(
   };
 }
 
-export function canFinishBerlin(hasUsb: boolean): boolean {
-  return hasUsb;
+export function canFinishBerlin(_hasUsb: boolean): boolean {
+  return true;
 }

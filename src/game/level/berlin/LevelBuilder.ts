@@ -1,9 +1,15 @@
 import Phaser from 'phaser';
-import { DESIGN_HEIGHT, GROUND_Y, WORLD_WIDTH } from '../../constants';
+import { DESIGN_HEIGHT, GROUND_Y } from '../../constants';
 import { CROUCHING_BODY, STANDING_BODY } from './playerPhysics';
 import { BERLIN_ENTITIES, CLUB_ENTRANCE_X } from './berlinLevelConfig';
 import { PlaceholderFactory } from './PlaceholderFactory';
-import type { BerlinEntity, CollectibleConfig, ObstacleConfig, PlatformConfig } from './types';
+import type {
+  BerlinEntity,
+  CollectibleConfig,
+  MovingPlatformConfig,
+  ObstacleConfig,
+  PlatformConfig,
+} from './types';
 
 export interface BuiltEntity {
   config: BerlinEntity;
@@ -11,10 +17,17 @@ export interface BuiltEntity {
   zone: Phaser.GameObjects.Zone;
 }
 
+export interface PendingActivation {
+  activationX: number;
+  activate: () => void;
+}
+
 export interface BuiltBerlinLevel {
   collectibles: Phaser.Physics.Arcade.StaticGroup;
   finish: Phaser.Physics.Arcade.StaticGroup;
   platforms: Phaser.Physics.Arcade.StaticGroup;
+  movingPlatforms: Phaser.GameObjects.Zone[];
+  pendingActivations: PendingActivation[];
   entities: BuiltEntity[];
 }
 
@@ -29,6 +42,8 @@ export class LevelBuilder {
     const collectibles = this.scene.physics.add.staticGroup();
     const finish = this.scene.physics.add.staticGroup();
     const platforms = this.scene.physics.add.staticGroup();
+    const movingPlatforms: Phaser.GameObjects.Zone[] = [];
+    const pendingActivations: PendingActivation[] = [];
     const entities = BERLIN_ENTITIES.map((config) => {
       const artwork = factory.create(config);
       const hitbox = 'hitbox' in config ? config.hitbox : undefined;
@@ -43,12 +58,17 @@ export class LevelBuilder {
       } else if (config.type === 'platform') {
         this.validatePlatform(config);
         platforms.add(zone);
+      } else if (config.type === 'movingPlatform') {
+        this.validatePlatform(config);
+        movingPlatforms.push(zone);
+        const pending = this.configureMovingPlatform(config, zone, artwork);
+        if (pending) pendingActivations.push(pending);
       } else {
         finish.add(zone);
       }
       return { config, artwork, zone };
     });
-    return { collectibles, finish, platforms, entities };
+    return { collectibles, finish, platforms, movingPlatforms, pendingActivations, entities };
   }
 
   private createZone(
@@ -57,9 +77,13 @@ export class LevelBuilder {
   ): Phaser.GameObjects.Zone {
     const isFinish = config.type === 'finish';
     const zone = this.scene.add.zone(
-      isFinish ? (CLUB_ENTRANCE_X + WORLD_WIDTH) / 2 : hitbox ? config.x + hitbox.offsetX : config.x,
+      isFinish
+        ? CLUB_ENTRANCE_X + config.width / 2
+        : hitbox
+          ? config.x + hitbox.offsetX
+          : config.x,
       isFinish ? DESIGN_HEIGHT / 2 : hitbox ? config.y + hitbox.offsetY : config.y,
-      isFinish ? WORLD_WIDTH - CLUB_ENTRANCE_X : hitbox ? hitbox.width : config.width * 0.78,
+      isFinish ? config.width : hitbox ? hitbox.width : config.width * 0.78,
       isFinish ? DESIGN_HEIGHT : hitbox ? hitbox.height : config.height * 0.82,
     );
     const isStatic = config.type === 'collectible' || config.type === 'finish' || config.type === 'platform';
@@ -98,7 +122,7 @@ export class LevelBuilder {
     if (zoneTop > GROUND_Y) this.logValidationError(`Invalid jump obstacle placement for ${config.id}`);
   }
 
-  private validatePlatform(config: PlatformConfig): void {
+  private validatePlatform(config: PlatformConfig | MovingPlatformConfig): void {
     if (config.topY <= 0 || config.width <= 0 || config.height <= 0) {
       this.logValidationError(`Invalid platform config for ${config.id}`);
     }
@@ -122,6 +146,57 @@ export class LevelBuilder {
       repeat: -1,
       ease: 'Sine.inOut',
     });
+  }
+
+  private configureMovingPlatform(
+    config: MovingPlatformConfig,
+    zone: Phaser.GameObjects.Zone,
+    artwork: Phaser.GameObjects.Container,
+  ): PendingActivation | undefined {
+    const half = config.movementDistance / 2;
+    const reverse = config.reverseInitialDirection === true;
+
+    const startTween = (): void => {
+      if (config.axis === 'horizontal') {
+        this.scene.tweens.add({
+          targets: [zone, artwork],
+          x: reverse ? config.x - half : config.x + half,
+          duration: config.durationMs,
+          delay: config.phaseMs,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.inOut',
+        });
+      } else {
+        this.scene.tweens.add({
+          targets: [zone, artwork],
+          y: reverse ? config.y - half : config.y + half,
+          duration: config.durationMs,
+          delay: config.phaseMs,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.inOut',
+        });
+      }
+    };
+
+    // Park the platform at whichever extreme the first tween leg starts from,
+    // so artwork and body always begin in sync regardless of activation mode.
+    if (config.axis === 'horizontal') {
+      const startX = reverse ? config.x + half : config.x - half;
+      zone.x = startX;
+      artwork.x = startX;
+    } else {
+      const startY = reverse ? config.y + half : config.y - half;
+      zone.y = startY;
+      artwork.y = startY;
+    }
+
+    if (config.activationX !== undefined) {
+      return { activationX: config.activationX, activate: startTween };
+    }
+    startTween();
+    return undefined;
   }
 }
 

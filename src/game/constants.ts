@@ -1,6 +1,6 @@
 export const DESIGN_WIDTH = 1280;
 export const DESIGN_HEIGHT = 720;
-export const WORLD_WIDTH = 10000;
+export const WORLD_WIDTH = 15500;
 export const GROUND_Y = 610;
 
 export const RUN_SPEED = 260;
