@@ -142,6 +142,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     scrollFactorX: 0.03,
   }).setAlpha(0.92);
 
+
   // City skyline sits above the sky and below every other layer, fixed to
   // the camera (no physics, no tiling). Its bottom edge is pinned to exactly
   // half the design height, recomputed from DESIGN_HEIGHT rather than a
@@ -169,6 +170,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
       0.18,
     );
   }
+
   for (const x of [1700, 3200]) {
     rectangle(layers.farBackground, x, 315, 12, 310, 0x17142d, Depth.FAR_BACKGROUND, 0.18);
     addCircle({
@@ -182,6 +184,8 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
       scrollFactorX: 0.18,
     });
   }
+
+
   for (const x of [1250, 3650]) {
     rectangle(layers.farBackground, x, 270, 8, 250, 0x20172f, Depth.FAR_BACKGROUND, 0.15);
     rectangle(layers.farBackground, x + 90, 160, 190, 7, 0x20172f, Depth.FAR_BACKGROUND, 0.15);
@@ -213,8 +217,8 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // how far the camera travels across the whole level.
   const houses = scene.add
     .image(0, GROUND_Y, 'berlin-mid-buildings')
-    .setOrigin(0, 1);
-  houses.setScale(305 / houses.height);
+    .setOrigin(0, 0.9);
+  houses.setScale(650 / houses.height);
   const cameraTravel = Math.max(1, WORLD_WIDTH - DESIGN_WIDTH);
   const textureTravel = Math.max(0, houses.displayWidth - DESIGN_WIDTH);
   const housesScrollFactor = Phaser.Math.Clamp(
