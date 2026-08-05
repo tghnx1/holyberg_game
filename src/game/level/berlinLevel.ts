@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Depth, GROUND_Y, WORLD_WIDTH } from '../constants';
+import { GROUND_SEGMENTS, PIT_ZONES } from './berlin/berlinLevelConfig';
 import type { SceneLayers } from './sceneLayers';
 
 export interface ObstacleSpec {
@@ -351,14 +352,52 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     }).setAlpha(0.8);
   }
 
-  rectangle(
-    layers.gameplay,
-    WORLD_WIDTH / 2,
-    GROUND_Y + 55,
-    WORLD_WIDTH,
-    110,
-    0x100c1b,
-    Depth.GAMEPLAY,
-    1,
-  );
+  // Asphalt is drawn per ground segment (not the full world) so it stops exactly
+  // at each pit boundary, matching the physics ground colliders in BerlinScene.
+  const asphaltColor = 0x100c1b;
+  const voidColor = 0x050308;
+  GROUND_SEGMENTS.forEach((segment) => {
+    rectangle(
+      layers.gameplay,
+      (segment.startX + segment.endX) / 2,
+      GROUND_Y + 55,
+      segment.endX - segment.startX,
+      110,
+      asphaltColor,
+      Depth.GAMEPLAY,
+      1,
+    );
+  });
+
+  // A dark void fills each pit range, and jagged "teeth" break up the asphalt
+  // edges on either side so the gap reads clearly before the player reaches it.
+  PIT_ZONES.forEach((pit) => {
+    rectangle(
+      layers.gameplay,
+      (pit.startX + pit.endX) / 2,
+      GROUND_Y + 230,
+      pit.endX - pit.startX,
+      440,
+      voidColor,
+      Depth.GAMEPLAY,
+      1,
+    );
+    [pit.startX, pit.endX].forEach((edgeX, index) => {
+      const dir = index === 0 ? 1 : -1;
+      for (let i = 0; i < 4; i += 1) {
+        const toothX = edgeX + dir * (10 + i * 16);
+        const toothHeight = 14 + ((i * 7) % 20);
+        addTriangle({
+          scene,
+          layer: layers.gameplay,
+          x: toothX,
+          y: GROUND_Y,
+          points: [-9 * dir, 0, 9 * dir, 0, 0, toothHeight],
+          color: asphaltColor,
+          depth: Depth.GAMEPLAY,
+          scrollFactorX: 1,
+        });
+      }
+    });
+  });
 }
