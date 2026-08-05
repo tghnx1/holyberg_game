@@ -99,16 +99,6 @@ function addTriangle(
   );
 }
 
-function addText(
-  options: Omit<ShapeOptions, 'color'> & {
-    text: string;
-    style: Phaser.Types.GameObjects.Text.TextStyle;
-  },
-): Phaser.GameObjects.Text {
-  const { scene, layer, x, y, text, style, depth, scrollFactorX, scrollFactorY } = options;
-  return configure(scene.add.text(x, y, text, style), layer, depth, scrollFactorX, scrollFactorY);
-}
-
 export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void {
   const rectangle = (
     layer: Phaser.GameObjects.Layer,
@@ -187,24 +177,21 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     rectangle(layers.farBackground, x + 90, 160, 190, 7, 0x20172f, Depth.FAR_BACKGROUND, 0.15);
   }
 
-  // Apartment and street façades.
-  rectangle(layers.environment, 400, 360, 800, 500, 0x2a1738, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 130, 530, 210, 65, 0x5c365f, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 130, 492, 160, 25, 0x9b6382, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 410, 520, 170, 90, 0x44263e, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 410, 470, 130, 22, 0xe8a22c, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 650, 360, 150, 200, 0x713557, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 650, 360, 120, 165, 0x221b45, Depth.ENVIRONMENT, 0.75);
-  addText({
-    scene,
-    layer: layers.environment,
-    x: 650,
-    y: 575,
-    text: 'EXIT',
-    style: { fontFamily: 'Space Mono', fontSize: '15px', color: '#ffca57' },
-    depth: Depth.ENVIRONMENT,
-    scrollFactorX: 0.75,
-  }).setOrigin(0.5);
+  // Foreground building row: a single non-tiled texture replacing the
+  // procedural house rectangles, windows and signs formerly drawn here.
+  // Height (and therefore scale) matches the removed apartment/street
+  // façade block (500px tall, bottom pinned to GROUND_Y), and the scroll
+  // factor is derived from how far the texture can travel relative to how
+  // far the camera travels across the whole level, so its left edge is
+  // visible at the level start and its right edge at the level end.
+  const buildings = scene.add.image(0, GROUND_Y, 'berlin-foreground-buildings').setOrigin(0, 1);
+  buildings.setScale(500 / buildings.height);
+  buildings.setDepth(Depth.ENVIRONMENT);
+  const cameraTravel = Math.max(1, WORLD_WIDTH - DESIGN_WIDTH);
+  const textureTravel = Math.max(0, buildings.displayWidth - DESIGN_WIDTH);
+  const scrollFactor = Phaser.Math.Clamp(textureTravel / cameraTravel, 0, 1);
+  buildings.setScrollFactor(scrollFactor, 0);
+  layers.environment.add(buildings);
 
   for (let x = 850; x < 2400; x += 240) {
     const height = 260 + ((x / 10) % 3) * 45;
@@ -233,22 +220,6 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
       }
     }
   }
-  addText({
-    scene,
-    layer: layers.environment,
-    x: 1120,
-    y: 300,
-    text: 'SPÄTI',
-    style: {
-      fontFamily: 'Archivo Black',
-      fontSize: '42px',
-      color: '#ffdf55',
-      backgroundColor: '#e93c54',
-    },
-    depth: Depth.ENVIRONMENT,
-    scrollFactorX: 0.75,
-  }).setOrigin(0.5);
-
   // The bridge section uses distinct factors from skyline to foreground railing.
   rectangle(layers.midBackground, 3350, 540, 1900, 140, 0x34235d, Depth.MID_BACKGROUND, 0.35);
   for (let x = 2520; x < 4250; x += 230) {
@@ -276,32 +247,10 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     });
     rectangle(layers.midBackground, x, 510, 18, 150, 0x73314b, Depth.MID_BACKGROUND, 0.55);
   }
-  for (const x of [2640, 4070]) {
-    rectangle(layers.environment, x, 365, 115, 290, 0x7d3e52, Depth.ENVIRONMENT, 0.72);
-    addTriangle({
-      scene,
-      layer: layers.environment,
-      x,
-      y: 175,
-      points: [0, 110, 58, 0, 116, 110],
-      color: 0xa54954,
-      depth: Depth.ENVIRONMENT,
-      scrollFactorX: 0.72,
-    });
-  }
-  rectangle(layers.environment, 3360, 410, 1100, 35, 0xf0bd38, Depth.ENVIRONMENT, 0.78);
-  addText({
-    scene,
-    layer: layers.environment,
-    x: 3360,
-    y: 408,
-    text: 'U  U  U  U  U  U  U  U  U',
-    style: { fontFamily: 'Space Mono', fontSize: '19px', color: '#171221' },
-    depth: Depth.ENVIRONMENT,
-    scrollFactorX: 0.78,
-  }).setOrigin(0.5);
 
-  // Club exterior and nearby buildings.
+  // Club exterior and nearby buildings (distant silhouette row only; the
+  // near-camera accent stripe and signage previously drawn here were part
+  // of the removed environment-layer house scenery).
   for (let x = 4380; x < WORLD_WIDTH; x += 260) {
     rectangle(
       layers.midBackground,
@@ -313,45 +262,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
       Depth.MID_BACKGROUND,
       0.5,
     );
-    rectangle(
-      layers.environment,
-      x,
-      350,
-      150,
-      8,
-      x % 520 ? 0xe94373 : 0x8a41ff,
-      Depth.ENVIRONMENT,
-      0.75,
-    );
   }
-  addText({
-    scene,
-    layer: layers.environment,
-    x: 4950,
-    y: 360,
-    text: 'HOLYBERG',
-    style: {
-      fontFamily: 'Archivo Black',
-      fontSize: '58px',
-      color: '#ff3e68',
-      stroke: '#7128b8',
-      strokeThickness: 5,
-    },
-    depth: Depth.ENVIRONMENT,
-    scrollFactorX: 0.75,
-  }).setOrigin(0.5);
-  rectangle(layers.environment, 6800, 485, 170, 250, 0x08070c, Depth.ENVIRONMENT, 0.75);
-  rectangle(layers.environment, 6800, 370, 210, 35, 0xec315f, Depth.ENVIRONMENT, 0.75);
-  addText({
-    scene,
-    layer: layers.environment,
-    x: 6800,
-    y: 370,
-    text: 'BACKSTAGE',
-    style: { fontFamily: 'Archivo Black', fontSize: '21px', color: '#fff' },
-    depth: Depth.ENVIRONMENT,
-    scrollFactorX: 0.75,
-  }).setOrigin(0.5);
 
   // Decorative near-camera elements never receive physics bodies.
   for (let x = 2460; x < 4320; x += 180) {
