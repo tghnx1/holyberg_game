@@ -5,6 +5,10 @@ export class BootScene extends Phaser.Scene {
     super('BootScene');
   }
 
+  preload(): void {
+    this.load.image('berlin-sky', 'assets/backgrounds/sky.png');
+  }
+
   create(): void {
     const graphics = this.make.graphics({ x: 0, y: 0 }, false);
     graphics.fillStyle(0x17101f).fillRoundedRect(0, 0, 80, 98, 18);

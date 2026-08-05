@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { Depth, GROUND_Y, WORLD_WIDTH } from '../constants';
+import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH, GROUND_Y, WORLD_WIDTH } from '../constants';
 import { GROUND_SEGMENTS, PIT_ZONES } from './berlin/berlinLevelConfig';
 import type { SceneLayers } from './sceneLayers';
 
@@ -121,10 +121,16 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     scrollFactorX: number,
   ) => addRectangle({ scene, layer, x, y, width, height, color, depth, scrollFactorX });
 
-  // A fixed sky canvas lets each district tint sit behind all parallax scenery.
-  rectangle(layers.sky, WORLD_WIDTH / 2, 300, WORLD_WIDTH, 620, 0x2a1742, Depth.SKY, 0);
-  rectangle(layers.sky, 3350, 300, 1900, 620, 0x502159, Depth.SKY, 0);
-  rectangle(layers.sky, 5150, 300, 1700, 620, 0x121021, Depth.SKY, 0);
+  // A fixed sunset image sits behind all parallax scenery and never scrolls
+  // or repeats; it covers exactly the viewport, not the whole world.
+  layers.sky.add(
+    scene.add
+      .image(0, 0, 'berlin-sky')
+      .setOrigin(0, 0)
+      .setDisplaySize(DESIGN_WIDTH, DESIGN_HEIGHT)
+      .setScrollFactor(0)
+      .setDepth(Depth.SKY),
+  );
   addCircle({
     scene,
     layer: layers.sky,
