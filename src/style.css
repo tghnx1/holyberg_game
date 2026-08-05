@@ -11,26 +11,26 @@
 html,
 body,
 #game {
+  position: fixed;
+  inset: 0;
   width: 100vw;
   height: 100dvh;
-  min-height: 100svh;
   margin: 0;
+  padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
+  background: black;
 }
 
-body {
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-    env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: radial-gradient(circle at 50% 20%, #492563, #10091d 60%);
+canvas {
+  display: block;
+  outline: none;
+  touch-action: none;
 }
-
-#game { display: flex; align-items: center; justify-content: center; }
-canvas { display: block !important; margin: auto; outline: none; max-width: 100%; max-height: 100%; }
 
 .orientation-overlay {
   position: fixed;
