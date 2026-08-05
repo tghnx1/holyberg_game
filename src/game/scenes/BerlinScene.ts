@@ -2,7 +2,6 @@ import Phaser from 'phaser';
 import {
   Depth,
   DESIGN_HEIGHT,
-  DESIGN_WIDTH,
   GROUND_Y,
   HIT_TIME,
   START_TIME,
@@ -42,6 +41,7 @@ export class BerlinScene extends Phaser.Scene {
   private duckKey!: Phaser.Input.Keyboard.Key;
   private debugKey?: Phaser.Input.Keyboard.Key;
   private invulnerable = false;
+  private touchDuckHeld = false;
   private finishTriggered = false;
   private layers!: SceneLayers;
   private level!: BuiltBerlinLevel;
@@ -51,6 +51,7 @@ export class BerlinScene extends Phaser.Scene {
   private layerDebug?: LayerDebugSystem;
   private debugOverlay?: Phaser.GameObjects.Container;
   private debugGraphics?: Phaser.GameObjects.Graphics;
+  private gameOverOverlay?: { background: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text };
 
   constructor() {
     super('BerlinScene');
@@ -124,16 +125,28 @@ export class BerlinScene extends Phaser.Scene {
     this.hud = new HudSystem(
       this,
       () => this.action(),
-      (pressed) => this.setDuck(pressed),
+      (pressed) => {
+        this.touchDuckHeld = pressed;
+      },
       this.layers.ui,
     );
     if (import.meta.env.DEV) console.debug('[BerlinScene] after HUD creation');
     this.hud.update(this.progress);
     this.createIntro();
     new OrientationController(this, {
-      onPause: () => this.physics.pause(),
+      onPause: () => {
+        // A touch-held duck can lose its pointerup while the device rotates
+        // (finger position/target changes mid-gesture); force it to release
+        // so input state is always clean when the overlay clears.
+        this.touchDuckHeld = false;
+        this.setDuck(false);
+        this.physics.pause();
+      },
       onResume: () => this.physics.resume(),
-      onLayout: (viewport) => this.hud.applyLayout(viewport),
+      onLayout: (viewport) => {
+        this.hud.applyLayout(viewport);
+        this.repositionOverlays();
+      },
     });
     this.keys = this.input.keyboard!.createCursorKeys();
     this.space = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
@@ -159,8 +172,9 @@ export class BerlinScene extends Phaser.Scene {
         },
       )
       .setOrigin(0.5);
+    const camera = this.cameras.main;
     this.intro = this.add
-      .container(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, [panel, text])
+      .container(camera.width / 2, camera.height / 2, [panel, text])
       .setScrollFactor(0)
       .setDepth(Depth.UI);
     this.layers.ui.add(this.intro);
@@ -252,21 +266,36 @@ export class BerlinScene extends Phaser.Scene {
     this.progress.state = 'gameOver';
     this.player.halt();
     this.physics.pause();
+    const camera = this.cameras.main;
+    const cx = camera.width / 2;
+    const cy = camera.height / 2;
     const background = this.add
-      .rectangle(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, 680, 240, 0x0a0710, 0.94)
+      .rectangle(cx, cy, 680, 240, 0x0a0710, 0.94)
       .setScrollFactor(0)
       .setDepth(Depth.UI);
     const text = this.add
-      .text(
-        DESIGN_WIDTH / 2,
-        DESIGN_HEIGHT / 2,
-        'YOU MISSED YOUR SET\n\nPRESS SPACE OR TAP JUMP TO RESTART',
-        { fontFamily: 'Archivo Black', fontSize: '34px', color: '#ff5b49', align: 'center' },
-      )
+      .text(cx, cy, 'YOU MISSED YOUR SET\n\nPRESS SPACE OR TAP JUMP TO RESTART', {
+        fontFamily: 'Archivo Black',
+        fontSize: '34px',
+        color: '#ff5b49',
+        align: 'center',
+      })
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(Depth.UI);
+    this.gameOverOverlay = { background, text };
     this.layers.ui.add([background, text]);
+  }
+
+  private repositionOverlays(): void {
+    const camera = this.cameras.main;
+    const cx = camera.width / 2;
+    const cy = camera.height / 2;
+    if (this.intro?.active) this.intro.setPosition(cx, cy);
+    if (this.gameOverOverlay) {
+      this.gameOverOverlay.background.setPosition(cx, cy);
+      this.gameOverOverlay.text.setPosition(cx, cy);
+    }
   }
 
   private createDevelopmentTools(): void {
@@ -368,7 +397,7 @@ export class BerlinScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.space) || Phaser.Input.Keyboard.JustDown(this.keys.up))
       this.action();
     if (this.progress.state !== 'running') return;
-    this.setDuck(this.duckKey.isDown || this.keys.down.isDown);
+    this.setDuck(this.duckKey.isDown || this.keys.down.isDown || this.touchDuckHeld);
     this.player.run(this.time.now);
     if (import.meta.env.DEV) {
       const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
