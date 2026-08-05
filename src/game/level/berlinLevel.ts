@@ -142,6 +142,20 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     scrollFactorX: 0.03,
   }).setAlpha(0.92);
 
+  // City skyline sits above the sky and below every other layer, fixed to
+  // the camera (no physics, no tiling). Its bottom edge is pinned to exactly
+  // half the design height, recomputed from DESIGN_HEIGHT rather than a
+  // hardcoded pixel value; it's scaled uniformly so it covers the full
+  // design width without distorting the artwork.
+  const city = scene.add.image(0, DESIGN_HEIGHT / 2, 'berlin-city').setOrigin(0, 1);
+  city.setScale((DESIGN_WIDTH / city.width) * 1.5);
+  const cityScrollFactor = Phaser.Math.Clamp(
+    (city.displayWidth - DESIGN_WIDTH) / (WORLD_WIDTH - DESIGN_WIDTH),
+    0,
+    1,
+  );
+  city.setScrollFactor(cityScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
+  layers.midBackground.add(city);
   // Very distant Berlin silhouettes and cranes.
   for (let x = 0; x < WORLD_WIDTH; x += 210) {
     rectangle(
