@@ -112,6 +112,34 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   city.setScrollFactor(cityScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
   layers.midBackground.add(city);
 
+  const housesPlain = scene.add
+    .image(0, GROUND_Y, 'berlin-houses-plain')
+    .setOrigin(0, 0.9);
+  housesPlain.setScale(650 / housesPlain.height);
+  const housesPlainScrollFactor = Phaser.Math.Clamp(
+    Math.max(0, housesPlain.displayWidth - DESIGN_WIDTH) / Math.max(1, WORLD_WIDTH - DESIGN_WIDTH),
+    0,
+    1,
+  );
+  housesPlain
+    .setScrollFactor(housesPlainScrollFactor, 0)
+    .setDepth(Depth.MID_BACKGROUND);
+  layers.midBackground.add(housesPlain);
+
+  const railway = scene.add
+    .image(0, GROUND_Y, 'berlin-railway')
+    .setOrigin(0, 0.9);
+  railway.setScale(650 / railway.height);
+  const railwayScrollFactor = Phaser.Math.Clamp(
+    Math.max(0, railway.displayWidth - DESIGN_WIDTH) / Math.max(1, WORLD_WIDTH - DESIGN_WIDTH),
+    0,
+    1,
+  );
+  railway
+    .setScrollFactor(railwayScrollFactor, 0)
+    .setDepth(Depth.MID_BACKGROUND);
+  layers.midBackground.add(railway);
+
   // Mid-background building row: a single non-tiled texture replacing the
   // procedural building rectangles and their nested window rectangles that
   // used to be drawn here. Scaled to the removed block's height, with a
