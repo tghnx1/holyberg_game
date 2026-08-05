@@ -8,7 +8,7 @@ export class BootScene extends Phaser.Scene {
   preload(): void {
     this.load.image('berlin-sky', 'assets/backgrounds/sky.png');
     this.load.image('berlin-city', 'assets/backgrounds/city.jpg');
-    this.load.image('berlin-foreground-buildings', 'assets/backgrounds/houses.png');
+    this.load.image('berlin-mid-buildings', 'assets/backgrounds/houses.png');
   }
 
   create(): void {
