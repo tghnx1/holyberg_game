@@ -102,7 +102,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // half the design height, recomputed from DESIGN_HEIGHT rather than a
   // hardcoded pixel value; it's scaled uniformly so it covers the full
   // design width without distorting the artwork.
-  const city = scene.add.image(0, DESIGN_HEIGHT / 2, 'berlin-city').setOrigin(0, 1);
+  const city = scene.add.image(0, DESIGN_HEIGHT / 2, 'berlin-city').setOrigin(0, 0.87);
   city.setScale((DESIGN_WIDTH / city.width) * 1.5);
   const cityScrollFactor = Phaser.Math.Clamp(
     (city.displayWidth - DESIGN_WIDTH) / (WORLD_WIDTH - DESIGN_WIDTH),
@@ -110,13 +110,12 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     1,
   );
   city.setScrollFactor(cityScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(city);
 
   const railway = scene.add
     .image(0, GROUND_Y, 'berlin-railway')
-    .setOrigin(0, 0.9);
+    .setOrigin(0, 0.95);
   railway.setScale(650 / railway.height);
-  const railwayScrollFactor = Phaser.Math.Clamp(
+  const railwayScrollFactor  = Phaser.Math.Clamp(
     Math.max(0, railway.displayWidth - DESIGN_WIDTH) / Math.max(1, WORLD_WIDTH - DESIGN_WIDTH),
     0,
     1,
@@ -124,36 +123,46 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   railway
     .setScrollFactor(railwayScrollFactor, 0)
     .setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(railway);
+
 
   // Two trains that only ever traverse the first visible stretch of the
   // railway (from the level start out to one design-width viewport). They
   // share the railway's own scroll factor so they stay glued to it, start
   // and end fully off that stretch's bounds, and loop; their equal speed and
   // mirrored start points make them cross exactly at the stretch's midpoint.
-  const trainSectionStartX = 0;
-  const trainSectionEndX = DESIGN_WIDTH;
-  const trainDurationMs = 9000;
+  const trainRightStartX = 0;
+  const trainRightEndX = DESIGN_WIDTH;
+  const trainRightDurationMs = 13000;
+  const trainRightStartDelayMs = 8000;
 
-  const trainRight = scene.add.image(0, GROUND_Y, 'berlin-train-right').setOrigin(0, 0.9);
+  const trainLeftStartX = 0;
+  const trainLeftEndX = DESIGN_WIDTH;
+  const trainLeftDurationMs = 65000;
+  const trainLeftStartDelayMs = 8000;
+
+  const trainRight = scene.add.image(0, GROUND_Y, 'berlin-train-right').setOrigin(0, 0.92);
   trainRight.setScrollFactor(railwayScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
-  trainRight.x = trainSectionStartX - trainRight.width;
+  trainRight.x = trainRightStartX - trainRight.width;
   layers.midBackground.add(trainRight);
+
   scene.tweens.add({
     targets: trainRight,
-    x: trainSectionEndX,
-    duration: trainDurationMs,
+    x: trainRightEndX,
+    duration: trainRightDurationMs,
+    delay: trainRightStartDelayMs,
     repeat: -1,
   });
 
-  const trainLeft = scene.add.image(0, GROUND_Y, 'berlin-train-left').setOrigin(0, 0.9);
+  const trainLeft = scene.add.image(0, GROUND_Y, 'berlin-train-left').setOrigin(0, 0.92);
   trainLeft.setScrollFactor(railwayScrollFactor, 0).setDepth(Depth.MID_BACKGROUND);
-  trainLeft.x = trainSectionEndX;
+  trainLeft.x = trainLeftEndX;
   layers.midBackground.add(trainLeft);
+
   scene.tweens.add({
     targets: trainLeft,
-    x: trainSectionStartX - trainLeft.width,
-    duration: trainDurationMs,
+    x: trainLeftStartX - trainLeft.width,
+    duration: trainLeftDurationMs,
+    delay: trainLeftStartDelayMs,
     repeat: -1,
   });
 
@@ -176,7 +185,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   houses
     .setScrollFactor(housesScrollFactor, 0)
     .setDepth(Depth.MID_BACKGROUND);
-  layers.midBackground.add(houses);
+
 
   // Asphalt is drawn per ground segment (not the full world) so it stops exactly
   // at each pit boundary, matching the physics ground colliders in BerlinScene.
@@ -194,7 +203,11 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
       1,
     );
   });
-
+  layers.midBackground.add(city);
+  layers.midBackground.add(trainRight);
+  layers.midBackground.add(trainLeft);
+  layers.midBackground.add(railway);
+  layers.midBackground.add(houses);
   // A dark void fills each pit range, and jagged "teeth" break up the asphalt
   // edges on either side so the gap reads clearly before the player reaches it.
   PIT_ZONES.forEach((pit) => {
