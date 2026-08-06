@@ -24,6 +24,19 @@ const PASTE_OFFSET = 40;
 const TOAST_MS = 1000;
 /** Where `P` persists the layout, and where entering layout mode reads it. */
 const STORAGE_KEY = 'holyberg-background-layout';
+/** Camera zoom limits while panning the map; 1 is normal gameplay scale. */
+const MIN_ZOOM = 0.15;
+const MAX_ZOOM = 2;
+const ZOOM_STEP = 1.04;
+/**
+ * Smallest on-screen size an entity is drawn and picked at. Zoomed out, a
+ * 48px collectible would be a couple of pixels wide and impossible to hit,
+ * so its marker stops shrinking here even though the artwork keeps scaling.
+ */
+const MIN_PICK_SCREEN = 18;
+/** World px the arrow keys pan by when nothing is selected. */
+const PAN_STEP = 120;
+const PAN_STEP_FAST = 600;
 
 const COLOR_IDLE = 0x53ffe0;
 const COLOR_SELECTED = 0xffe36d;
@@ -49,6 +62,10 @@ export interface LevelEditorHooks {
   spawn: (config: BerlinEntity) => BuiltEntity;
   /** Unregisters and destroys an entity, used when deleting. */
   despawn: (zone: Phaser.GameObjects.Zone) => void;
+  /** Detaches the gameplay camera so the editor can pan and zoom freely. */
+  releaseCamera: () => void;
+  /** Reattaches the gameplay camera and resets the view. */
+  restoreCamera: () => void;
 }
 
 /**
@@ -82,6 +99,7 @@ export class LevelEditorSystem {
   private pasteCount = 0;
   private readonly deleted: string[] = [];
   private restored = false;
+  private panning?: { pointerX: number; pointerY: number; scrollX: number; scrollY: number };
   /** Last action feedback, shown in the panel so a keypress is never silent. */
   private status = '';
 
@@ -165,6 +183,7 @@ export class LevelEditorSystem {
     this.scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this);
+    this.scene.input.on(Phaser.Input.Events.POINTER_WHEEL, this.onWheel, this);
 
     // Applied at build time, not on entering layout mode, so a saved layout is
     // already in place for the first frame the player sees.
@@ -192,6 +211,7 @@ export class LevelEditorSystem {
       if (entity.config.type !== 'movingPlatform') continue;
       this.shift(entity, entity.config.x - entity.artwork.x, entity.config.y - entity.artwork.y);
     }
+    this.hooks.releaseCamera();
     this.graphics.setVisible(true);
     this.panel.setVisible(true);
   }
@@ -199,6 +219,8 @@ export class LevelEditorSystem {
   private disable(): void {
     this.enabled = false;
     this.dragging = undefined;
+    this.panning = undefined;
+    this.hooks.restoreCamera();
     this.graphics.setVisible(false).clear();
     this.panel.setVisible(false);
     this.scene.physics.resume();
@@ -242,7 +264,10 @@ export class LevelEditorSystem {
   }
 
   private handleNudge(): void {
-    if (!this.selected) return;
+    if (!this.selected) {
+      this.handlePan();
+      return;
+    }
     const step = this.shiftKey.isDown ? NUDGE_STEP_FAST : NUDGE_STEP;
     let dx = 0;
     let dy = 0;
@@ -251,6 +276,16 @@ export class LevelEditorSystem {
     if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) dy -= step;
     if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) dy += step;
     this.moveBy(this.selected, dx, dy);
+  }
+
+  /** With nothing selected the arrow keys scroll the map instead. */
+  private handlePan(): void {
+    const step = this.shiftKey.isDown ? PAN_STEP_FAST : PAN_STEP;
+    const camera = this.scene.cameras.main;
+    if (this.cursors.left.isDown) camera.scrollX -= step;
+    if (this.cursors.right.isDown) camera.scrollX += step;
+    if (this.cursors.up.isDown) camera.scrollY -= step;
+    if (this.cursors.down.isDown) camera.scrollY += step;
   }
 
   // -------------------------------------------------------------- resizing
@@ -443,14 +478,42 @@ export class LevelEditorSystem {
     }
 
     const hit = this.entityAt(world);
-    this.selected = hit;
-    this.dragging = hit
-      ? { entity: hit, target: 'body', offsetX: world.x - hit.config.x, offsetY: world.y - hit.config.y }
-      : undefined;
+    if (hit) {
+      this.selected = hit;
+      this.dragging = {
+        entity: hit,
+        target: 'body',
+        offsetX: world.x - hit.config.x,
+        offsetY: world.y - hit.config.y,
+      };
+      return;
+    }
+
+    // Empty space drags the view instead of the level. The selection is kept
+    // so you can pan to the far end of the map and still paste what you copied.
+    const camera = this.scene.cameras.main;
+    this.dragging = undefined;
+    this.panning = {
+      pointerX: pointer.x,
+      pointerY: pointer.y,
+      scrollX: camera.scrollX,
+      scrollY: camera.scrollY,
+    };
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {
-    if (!this.enabled || !this.dragging || !pointer.isDown) return;
+    if (!this.enabled || !pointer.isDown) return;
+
+    if (this.panning) {
+      const camera = this.scene.cameras.main;
+      // Divide by zoom so a pixel of pointer travel is a pixel of screen
+      // travel whatever the view is scaled to.
+      camera.scrollX = this.panning.scrollX - (pointer.x - this.panning.pointerX) / camera.zoom;
+      camera.scrollY = this.panning.scrollY - (pointer.y - this.panning.pointerY) / camera.zoom;
+      return;
+    }
+
+    if (!this.dragging) return;
     const world = { x: pointer.worldX, y: pointer.worldY };
     const { entity, target, offsetX, offsetY } = this.dragging;
     if (target === 'body') {
@@ -464,20 +527,63 @@ export class LevelEditorSystem {
 
   private onPointerUp(): void {
     this.dragging = undefined;
+    this.panning = undefined;
+  }
+
+  /** Wheel zooms the map view around its centre. */
+  private onWheel(
+    _pointer: Phaser.Input.Pointer,
+    _over: unknown,
+    _dx: number,
+    dy: number,
+  ): void {
+    if (!this.enabled) return;
+    const camera = this.scene.cameras.main;
+    const factor = dy > 0 ? 1 / ZOOM_STEP : ZOOM_STEP;
+    camera.setZoom(Phaser.Math.Clamp(camera.zoom * factor, MIN_ZOOM, MAX_ZOOM));
+  }
+
+  /**
+   * Keeps the panel and toast at a fixed screen size and position. A camera
+   * zoom scales scrollFactor-0 objects too, so they need the inverse applied
+   * about the camera centre.
+   */
+  private syncOverlayToZoom(): void {
+    const camera = this.scene.cameras.main;
+    const zoom = camera.zoom;
+    const centreX = camera.width / 2;
+    const centreY = camera.height / 2;
+    const place = (object: Phaser.GameObjects.Text, screenX: number, screenY: number): void => {
+      object.setScale(1 / zoom);
+      object.setPosition(centreX + (screenX - centreX) / zoom, centreY + (screenY - centreY) / zoom);
+    };
+    place(this.panel, 18, 18);
+    place(this.toast, centreX, 90);
   }
 
   private withinMarker(world: Point, marker: Point): boolean {
-    return Phaser.Math.Distance.Between(world.x, world.y, marker.x, marker.y) <= MARKER_RADIUS + 4;
+    const tolerance = (MARKER_RADIUS + 4) / this.scene.cameras.main.zoom;
+    return Phaser.Math.Distance.Between(world.x, world.y, marker.x, marker.y) <= tolerance;
   }
 
-  /** Topmost editable entity whose art rectangle contains the point. */
+  /**
+   * Half-width/height an entity occupies for drawing and picking, never
+   * smaller than MIN_PICK_SCREEN once the zoom is taken into account.
+   */
+  private pickExtents(config: EditableConfig): { halfWidth: number; halfHeight: number } {
+    const minimum = MIN_PICK_SCREEN / this.scene.cameras.main.zoom;
+    return {
+      halfWidth: Math.max(config.width, minimum) / 2,
+      halfHeight: Math.max(config.height, minimum) / 2,
+    };
+  }
+
+  /** Topmost editable entity whose marker rectangle contains the point. */
   private entityAt(world: Point): EditableEntity | undefined {
     for (let index = this.entities.length - 1; index >= 0; index -= 1) {
       const { config } = this.entities[index];
-      if (
-        Math.abs(world.x - config.x) <= config.width / 2 &&
-        Math.abs(world.y - config.y) <= config.height / 2
-      ) {
+      const { halfWidth, halfHeight } = this.pickExtents(config);
+      if (Math.abs(world.x - config.x) <= halfWidth && Math.abs(world.y - config.y) <= halfHeight) {
         return this.entities[index];
       }
     }
@@ -490,39 +596,44 @@ export class LevelEditorSystem {
     const graphics = this.graphics;
     graphics.clear();
 
-    graphics.lineStyle(1, COLOR_IDLE, 0.35);
+    // Outlines and handles are drawn in world units, so everything gets
+    // divided by the zoom to stay a constant size on screen.
+    const zoom = this.scene.cameras.main.zoom;
+    const stroke = 1 / zoom;
+    const markerRadius = MARKER_RADIUS / zoom;
+
+    // Filled as well as outlined: zoomed out, the artwork itself is only a
+    // few pixels, so the marker is what you actually see and click.
+    graphics.fillStyle(COLOR_IDLE, 0.18);
+    graphics.lineStyle(stroke, COLOR_IDLE, 0.5);
     for (const { config } of this.entities) {
-      graphics.strokeRect(
-        config.x - config.width / 2,
-        config.y - config.height / 2,
-        config.width,
-        config.height,
-      );
+      const { halfWidth, halfHeight } = this.pickExtents(config);
+      graphics.fillRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
+      graphics.strokeRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
     }
 
     const selected = this.selected;
     if (selected) {
       const { config } = selected;
-      graphics.lineStyle(2, COLOR_SELECTED, 1);
-      graphics.strokeRect(
-        config.x - config.width / 2,
-        config.y - config.height / 2,
-        config.width,
-        config.height,
-      );
+      const { halfWidth, halfHeight } = this.pickExtents(config);
+      graphics.fillStyle(COLOR_SELECTED, 0.3);
+      graphics.fillRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
+      graphics.lineStyle(stroke * 2, COLOR_SELECTED, 1);
+      graphics.strokeRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
 
       if (config.type === 'movingPlatform') {
         const { start, end } = this.extremes(config);
-        graphics.lineStyle(2, COLOR_SELECTED, 0.6);
+        graphics.lineStyle(stroke * 2, COLOR_SELECTED, 0.6);
         graphics.lineBetween(start.x, start.y, end.x, end.y);
         graphics.fillStyle(COLOR_START, 1);
-        graphics.fillCircle(start.x, start.y, MARKER_RADIUS);
+        graphics.fillCircle(start.x, start.y, markerRadius);
         graphics.fillStyle(COLOR_END, 1);
-        graphics.fillCircle(end.x, end.y, MARKER_RADIUS);
+        graphics.fillCircle(end.x, end.y, markerRadius);
       }
     }
 
     this.panel.setText(this.panelText());
+    this.syncOverlayToZoom();
   }
 
   private panelText(): string {
@@ -530,9 +641,15 @@ export class LevelEditorSystem {
       'LEVEL EDITOR  —  E exit   P save config',
       'click select · drag move · arrows 1px · shift+arrows 10px',
       '+/- resize (shift = coarse) · C copy · V paste · del remove',
+      'drag empty space to scroll · wheel to zoom · arrows scroll when nothing selected',
     ];
     if (this.deleted.length) lines.push(`${this.deleted.length} deleted`);
     if (this.status) lines.push(this.status);
+    const camera = this.scene.cameras.main;
+    lines.push(
+      `view x ${Math.round(camera.scrollX)}-${Math.round(camera.scrollX + camera.width / camera.zoom)}` +
+        `   zoom ${camera.zoom.toFixed(2)}`,
+    );
     const selected = this.selected;
     if (!selected) {
       lines.push('', 'no selection');

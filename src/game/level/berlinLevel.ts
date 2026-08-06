@@ -153,10 +153,24 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
     );
   }
   const railwayStartX = (WORLD_WIDTH - railwayLayout.width) / 2 - 400;
+  // A TileSprite repeats the cropped section across the span instead of
+  // stretching one copy over it, so the bridge keeps its authored pixel
+  // density however wide the span is.
   const railway = scene.add
-    .image(railwayStartX, railwayLayout.baselineY, railwayLayout.key)
+    .tileSprite(
+      railwayStartX,
+      railwayLayout.baselineY,
+      railwayLayout.width,
+      railwayLayout.targetHeight,
+      railwayLayout.key,
+    )
     .setOrigin(0, 1);
-  railway.setDisplaySize(railwayLayout.width, railwayLayout.targetHeight);
+  // Uniform scale derived from the texture's own height, so the tile fills
+  // targetHeight exactly and the horizontal scale matches it.
+  const railwayTextureHeight = scene.textures.get(railwayLayout.key).getSourceImage().height;
+  const railwayScale = railwayLayout.targetHeight / railwayTextureHeight;
+  railway.tileScaleX = railwayScale;
+  railway.tileScaleY = railwayScale;
   railway.setScrollFactor(railwayLayout.scrollFactorX, 0);
   debugTargets.push({ name: 'railway', object: railway });
 

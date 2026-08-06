@@ -3,7 +3,8 @@ import { Depth, WORLD_WIDTH } from '../../constants';
 
 export interface DebugTarget {
   name: string;
-  object: Phaser.GameObjects.Image;
+  /** Any bottom-anchored background object; the railway is a TileSprite. */
+  object: Phaser.GameObjects.Image | Phaser.GameObjects.TileSprite;
   /** Set when `object` is a child of a container positioned in world space. */
   container?: Phaser.GameObjects.Container;
 }

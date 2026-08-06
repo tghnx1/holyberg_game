@@ -162,7 +162,7 @@ export class BerlinScene extends Phaser.Scene {
     this.keys = this.input.keyboard!.createCursorKeys();
     this.space = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1, -260, 0).setLerp(0.08, 0.08);
+    this.followPlayer();
     if (import.meta.env.DEV) this.createDevelopmentTools();
   }
 
@@ -327,6 +327,8 @@ export class BerlinScene extends Phaser.Scene {
         }
         this.levelBuilder.removeEntity(zone);
       },
+      releaseCamera: () => this.cameras.main.stopFollow(),
+      restoreCamera: () => this.followPlayer(),
     });
     this.editor = layoutEditor;
     this.input.keyboard?.on('keydown-P', () => {
@@ -408,6 +410,12 @@ export class BerlinScene extends Phaser.Scene {
     status?.setText(
       `STATE ${this.player.animationState}\nSECTION ${BERLIN_SECTIONS[this.sections.index].id}\nX ${Math.round(this.player.x)}  TIME ${this.progress.seconds.toFixed(1)}\nSCORE ${this.progress.score}  USB ${this.progress.hasUsb ? 'YES' : 'NO'}`,
     );
+  }
+
+  /** The gameplay camera: also used to undo the dev editor's free panning. */
+  private followPlayer(): void {
+    this.cameras.main.setZoom(1);
+    this.cameras.main.startFollow(this.player, true, 0.1, 0.1, -260, 0).setLerp(0.08, 0.08);
   }
 
   private watchObstacle(zone: Phaser.GameObjects.Zone): void {

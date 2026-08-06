@@ -16,7 +16,7 @@ export const backgroundLayout = {
     key: 'berlin-sky',
     baselineY: DESIGN_HEIGHT,
     targetHeight: DESIGN_HEIGHT,
-    targetWidth: DESIGN_WIDTH,
+    targetWidth: DESIGN_WIDTH * 1.2,
     depth: Depth.SKY,
   },
   city: {
