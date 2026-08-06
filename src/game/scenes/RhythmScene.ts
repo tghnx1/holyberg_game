@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
+import { trace } from '../debugTrace';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
@@ -55,16 +56,20 @@ export class RhythmScene extends Phaser.Scene {
   constructor() { super('RhythmScene'); }
   init(data: { score?: number }): void { this.berlinScore = data.score ?? 0; }
   preload(): void {
+    trace('RhythmScene.preload');
     if (import.meta.env.DEV) console.debug('[RhythmScene] preload');
     this.load.json('holyberg-demo-chart', 'charts/demo.json');
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => trace('chart load COMPLETE'));
     // Surfaced rather than swallowed: a missing chart shows up as an empty
     // scene, which is indistinguishable from a freeze.
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      trace(`chart LOAD ERROR ${file.url}`);
       console.error(`[RhythmScene] failed to load ${file.key} from ${file.url}`);
     });
   }
 
   create(): void {
+    trace('RhythmScene.create');
     // Attached first so an exit route exists even if the build below fails.
     attachFullscreenExitControl(this);
     try {
@@ -72,6 +77,7 @@ export class RhythmScene extends Phaser.Scene {
     } catch (error) {
       // A throw in here used to leave the previous scene's last frame on the
       // canvas with no way to tell what happened, which reads as a freeze.
+      trace(`RhythmScene BUILD THREW: ${error instanceof Error ? error.message : String(error)}`);
       this.showFatalError(error);
     }
   }

@@ -6,6 +6,7 @@ import {
   START_TIME,
   WORLD_WIDTH,
 } from '../constants';
+import { trace } from '../debugTrace';
 import { Player } from '../entities/Player';
 import {
   BERLIN_ENTITIES,
@@ -352,6 +353,7 @@ export class BerlinScene extends Phaser.Scene {
 
   private finish(): void {
     if (this.finishTriggered || this.progress.state !== 'running') return;
+    trace(`finish fs=${this.scale.isFullscreen} paused=${this.scene.isPaused()}`);
     if (import.meta.env.DEV) {
       console.debug('[Berlin → Rhythm] finish', {
         fullscreen: this.scale.isFullscreen,
@@ -374,6 +376,7 @@ export class BerlinScene extends Phaser.Scene {
       1800,
     );
     this.time.delayedCall(2200, () => {
+      trace('delayedCall fired -> scene.start(RhythmScene)');
       if (import.meta.env.DEV) console.debug('[Berlin → Rhythm] starting RhythmScene');
       this.scene.start('RhythmScene', { score: this.progress.score });
     });
