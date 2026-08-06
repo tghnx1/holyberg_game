@@ -44,6 +44,9 @@ export class BerlinScene extends Phaser.Scene {
   private debugKey?: Phaser.Input.Keyboard.Key;
   private invulnerable = false;
   private touchDuckHeld = false;
+  /** Set while the orientation overlay holds the scene, and during teardown. */
+  private inputSuspended = false;
+  private shuttingDown = false;
   private finishTriggered = false;
   private trainsStarted = false;
   private world!: BuiltBerlinWorld;
@@ -73,6 +76,8 @@ export class BerlinScene extends Phaser.Scene {
     this.progress = { state: 'intro', seconds: START_TIME, score: 0, hasUsb: false };
     this.finishTriggered = false;
     this.trainsStarted = false;
+    this.inputSuspended = false;
+    this.shuttingDown = false;
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT).setBackgroundColor('#2a1742');
     this.layers = createSceneLayers(this);
@@ -127,10 +132,8 @@ export class BerlinScene extends Phaser.Scene {
     if (import.meta.env.DEV) console.debug('[BerlinScene] before HUD creation');
     this.hud = new HudSystem(
       this,
-      () => this.action(),
-      (pressed) => {
-        this.touchDuckHeld = pressed;
-      },
+      () => this.touchJump(),
+      (pressed) => this.touchDuck(pressed),
       this.layers.ui,
     );
     if (import.meta.env.DEV) console.debug('[BerlinScene] after HUD creation');
@@ -141,11 +144,16 @@ export class BerlinScene extends Phaser.Scene {
         // A touch-held duck can lose its pointerup while the device rotates
         // (finger position/target changes mid-gesture); force it to release
         // so input state is always clean when the overlay clears.
+        this.inputSuspended = true;
+        this.hud.releaseTouchCrouch();
         this.touchDuckHeld = false;
         this.setDuck(false);
         this.physics.pause();
       },
-      onResume: () => this.physics.resume(),
+      onResume: () => {
+        this.inputSuspended = false;
+        this.physics.resume();
+      },
       onLayout: (viewport) => {
         this.hud.applyLayout(viewport);
         this.repositionOverlays();
@@ -163,11 +171,16 @@ export class BerlinScene extends Phaser.Scene {
 
   private createIntro(): void {
     const panel = this.add.rectangle(0, 0, 650, 340, 0x0d0916, 0.94).setStrokeStyle(5, 0xff5e3c);
+    // Touch devices get the zone instructions; keyboard wording is unchanged
+    // everywhere else.
+    const controls = this.game.device.input.touch
+      ? 'HOLD LEFT — DUCK\nTAP RIGHT — JUMP\nTAP RIGHT TO START'
+      : 'SPACE / ↑  JUMP     S / ↓  DUCK\nPRESS SPACE OR TAP JUMP TO START';
     const text = this.add
       .text(
         0,
         0,
-        'INCOMING CALL\n\nDUDE, WHERE ARE YOU?\nYOU’RE PLAYING NEXT.\n\nSPACE / ↑  JUMP     S / ↓  DUCK\nPRESS SPACE OR TAP JUMP TO START',
+        `INCOMING CALL\n\nDUDE, WHERE ARE YOU?\nYOU’RE PLAYING NEXT.\n\n${controls}`,
         {
           fontFamily: 'Space Mono',
           fontSize: '23px',
@@ -189,6 +202,38 @@ export class BerlinScene extends Phaser.Scene {
       fullscreen.setPosition(0, 142);
       this.intro.add(fullscreen);
     }
+  }
+
+  /**
+   * Touch input is ignored while the layout editor owns the frame, while the
+   * orientation overlay holds the scene, once the run is over, and during
+   * teardown. Returning false tells the HUD the control did nothing, so its
+   * hint stays visible.
+   */
+  private touchInputBlocked(): boolean {
+    return (
+      this.shuttingDown ||
+      this.inputSuspended ||
+      this.editor?.active === true ||
+      this.progress.state === 'won'
+    );
+  }
+
+  private touchJump(): boolean {
+    if (this.touchInputBlocked()) return false;
+    this.action();
+    return true;
+  }
+
+  private touchDuck(pressed: boolean): boolean {
+    if (!pressed) {
+      this.touchDuckHeld = false;
+      return true;
+    }
+    // During the intro only the jump zone may start the run.
+    if (this.touchInputBlocked() || this.progress.state !== 'running') return false;
+    this.touchDuckHeld = true;
+    return true;
   }
 
   private action(): void {
@@ -389,6 +434,8 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private teardown(): void {
+    this.shuttingDown = true;
+    this.hud.destroy();
     this.editor?.destroy();
     this.editor = undefined;
     this.editorKey = undefined;

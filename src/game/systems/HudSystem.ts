@@ -12,19 +12,48 @@ const style: Phaser.Types.GameObjects.Text.TextStyle = {
   strokeThickness: 6,
 };
 
+const hintStyle: Phaser.Types.GameObjects.Text.TextStyle = {
+  fontFamily: 'Space Mono',
+  fontSize: '15px',
+  color: '#ffffff',
+  stroke: '#10091d',
+  strokeThickness: 4,
+};
+
+/** Share of the viewport width given to the crouch zone; the rest jumps. */
+const DUCK_ZONE_FRACTION = 0.35;
+const HINT_ALPHA = 0.38;
+
+/** Returning false lets the HUD know the scene ignored the action. */
+export type TouchAction = () => boolean;
+export type TouchHoldAction = (pressed: boolean) => boolean;
+
 export class HudSystem {
   readonly score: Phaser.GameObjects.Text;
   readonly message: Phaser.GameObjects.Text;
-  readonly jump: Phaser.GameObjects.Container;
-  readonly duck: Phaser.GameObjects.Container;
   private readonly scene: Phaser.Scene;
   /** Last string pushed to the score label; setText re-renders its texture. */
   private scoreText = '';
 
+  /** Touch-only: full-height screen zones, not created at all on desktop. */
+  private duckZone?: Phaser.GameObjects.Zone;
+  private jumpZone?: Phaser.GameObjects.Zone;
+  private duckHint?: Phaser.GameObjects.Text;
+  private jumpHint?: Phaser.GameObjects.Text;
+  /**
+   * Pointer that started the current crouch. Crouch ends only when this exact
+   * pointer lifts, so a second finger tapping jump cannot cancel it and
+   * dragging the crouching finger across the zone border changes nothing.
+   */
+  private crouchPointerId?: number;
+  private readonly onPointerUp: (pointer: Phaser.Input.Pointer) => void;
+  private readonly onGameOut: () => void;
+  private readonly onBlur: () => void;
+
   constructor(
     scene: Phaser.Scene,
-    onJump: () => void,
-    onDuck: (pressed: boolean) => void,
+    private readonly onJump: TouchAction,
+    private readonly onDuck: TouchHoldAction,
     uiLayer?: Phaser.GameObjects.Layer,
   ) {
     this.scene = scene;
@@ -33,38 +62,82 @@ export class HudSystem {
       .text(0, 0, '', { ...style, fontSize: '26px', align: 'center' })
       .setOrigin(0.5)
       .setAlpha(0);
-    this.jump = this.button(scene, 'JUMP', 0xff4f23).on('pointerdown', onJump);
-    this.duck = this.button(scene, 'DUCK', 0x925bd1)
-      .on(
-        'pointerdown',
-        (pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
-          event.stopPropagation();
-          pointer.event?.preventDefault();
-          onDuck(true);
-        },
-      )
-      .on(
-        'pointerup',
-        (_pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
-          event.stopPropagation();
-          onDuck(false);
-        },
-      )
-      .on(
-        'pointerupoutside',
-        (_pointer: Phaser.Input.Pointer, event: Phaser.Types.Input.EventData) => {
-          event.stopPropagation();
-          onDuck(false);
-        },
-      )
-      .on('pointerout', () => onDuck(false));
-    // Safety net: if the pointer leaves the game canvas entirely mid-drag
-    // (common on touch devices), the button never sees pointerup/pointerout.
-    scene.input.on('gameout', () => onDuck(false));
-    const objects = [this.score, this.message, this.jump, this.duck];
-    objects.forEach((object) => object.setScrollFactor(0).setDepth(Depth.UI));
-    uiLayer?.add(objects);
+    for (const object of [this.score, this.message]) {
+      object.setScrollFactor(0).setDepth(Depth.UI);
+    }
+    uiLayer?.add([this.score, this.message]);
+
+    this.onPointerUp = (pointer) => this.releaseCrouchFor(pointer.id);
+    this.onGameOut = () => this.releaseTouchCrouch();
+    this.onBlur = () => this.releaseTouchCrouch();
+
+    if (scene.game.device.input.touch) this.createTouchZones(scene, uiLayer);
+
+    // A pointer lifted anywhere ends the crouch it started, including outside
+    // the zone or off the canvas entirely.
+    scene.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp);
+    scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onPointerUp);
+    scene.input.on(Phaser.Input.Events.GAME_OUT, this.onGameOut);
+    scene.game.events.on(Phaser.Core.Events.BLUR, this.onBlur);
+
     this.applyLayout(getViewportInfo(scene.scale));
+  }
+
+  private createTouchZones(scene: Phaser.Scene, uiLayer?: Phaser.GameObjects.Layer): void {
+    // Below Depth.UI so the intro panel and its fullscreen button still win
+    // the pointer; Phaser's topOnly input hands the event to the highest one.
+    const zoneDepth = Depth.UI - 5;
+
+    this.duckZone = scene.add.zone(0, 0, 1, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(zoneDepth);
+    this.jumpZone = scene.add.zone(0, 0, 1, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(zoneDepth);
+    this.duckZone.setInteractive();
+    this.jumpZone.setInteractive();
+
+    this.duckHint = scene.add
+      .text(0, 0, 'HOLD · DUCK', hintStyle)
+      .setOrigin(0.5, 1)
+      .setAlpha(HINT_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(zoneDepth + 1);
+    this.jumpHint = scene.add
+      .text(0, 0, 'TAP · JUMP', hintStyle)
+      .setOrigin(0.5, 1)
+      .setAlpha(HINT_ALPHA)
+      .setScrollFactor(0)
+      .setDepth(zoneDepth + 1);
+
+    // The action is decided here, by which zone the pointer went down in.
+    this.jumpZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.preventDefault();
+      if (this.onJump()) this.fadeHint(this.jumpHint);
+    });
+
+    this.duckZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event?.preventDefault();
+      if (this.crouchPointerId !== undefined) return;
+      if (!this.onDuck(true)) return;
+      this.crouchPointerId = pointer.id;
+      this.fadeHint(this.duckHint);
+    });
+
+    uiLayer?.add([this.duckZone, this.jumpZone, this.duckHint, this.jumpHint]);
+  }
+
+  private releaseCrouchFor(pointerId: number): void {
+    if (this.crouchPointerId !== pointerId) return;
+    this.releaseTouchCrouch();
+  }
+
+  /** Drops any held crouch. Safe to call at any time, from anywhere. */
+  releaseTouchCrouch(): void {
+    if (this.crouchPointerId === undefined) return;
+    this.crouchPointerId = undefined;
+    this.onDuck(false);
+  }
+
+  private fadeHint(hint?: Phaser.GameObjects.Text): void {
+    if (!hint || hint.alpha === 0) return;
+    this.scene.tweens.add({ targets: hint, alpha: 0, duration: 400 });
   }
 
   update(progress: BerlinProgress): void {
@@ -86,33 +159,33 @@ export class HudSystem {
   }
 
   applyLayout(viewport: ViewportInfo): void {
-    // Camera width follows the viewport aspect ratio under Scale.EXPAND (see
-    // ExpandScale.ts), so HUD elements anchor to the camera's own visible
-    // bounds instead of the old fixed DESIGN_WIDTH/DESIGN_HEIGHT constants.
+    // Camera width follows the viewport aspect ratio under Scale.EXPAND, so
+    // HUD elements anchor to the camera's own visible bounds rather than the
+    // fixed design constants.
     const camera = this.scene.cameras.main;
-    const left = camera.scrollX;
-    const top = camera.scrollY;
-    const right = left + camera.width;
-    const bottom = top + camera.height;
-    const width = right - left;
-    const height = bottom - top;
+    const width = camera.width;
+    const height = camera.height;
     const margin = viewport.safeMargin;
-    const scale = viewport.compactLandscape ? 0.82 : 1;
     this.score.setPosition(width - margin, margin).setScale(viewport.hudScale);
     this.message.setPosition(width / 2, margin + 66).setScale(viewport.hudScale);
-    this.jump.setPosition(width - margin - 66, height - margin - 66).setScale(scale);
-    this.duck.setPosition(width - margin - 210, height - margin - 66).setScale(scale);
+
+    // Zones span the full height and split the width; resizing them here keeps
+    // them covering the viewport exactly after a rotation or resize.
+    const duckWidth = Math.round(width * DUCK_ZONE_FRACTION);
+    this.duckZone?.setPosition(0, 0).setSize(duckWidth, height);
+    this.jumpZone?.setPosition(duckWidth, 0).setSize(width - duckWidth, height);
+
+    const hintY = height - margin;
+    this.duckHint?.setPosition(duckWidth / 2, hintY).setScale(viewport.hudScale);
+    this.jumpHint?.setPosition(duckWidth + (width - duckWidth) / 2, hintY).setScale(viewport.hudScale);
   }
 
-  private button(scene: Phaser.Scene, label: string, color: number): Phaser.GameObjects.Container {
-    const circle = scene.add.circle(0, 0, 58, color, 0.86).setStrokeStyle(4, 0xffce69);
-    const text = scene.add.text(0, 0, label, { ...style, fontSize: '16px' }).setOrigin(0.5);
-    const container = scene.add.container(0, 0, [circle, text]).setSize(120, 120);
-    // Hit area (156x156) is intentionally larger than the visible circle
-    // (116 diameter) so touch input is forgiving on small screens. A Geom.Circle
-    // hitArea does not hit-test correctly on Container game objects in this
-    // Phaser version (confirmed: pointerdown never fires), so use a Rectangle.
-    container.setInteractive(new Phaser.Geom.Rectangle(-78, -78, 156, 156), Phaser.Geom.Rectangle.Contains);
-    return container;
+  /** Releases every listener this system registered on the scene and game. */
+  destroy(): void {
+    this.releaseTouchCrouch();
+    this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.onPointerUp);
+    this.scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onPointerUp);
+    this.scene.input.off(Phaser.Input.Events.GAME_OUT, this.onGameOut);
+    this.scene.game.events.off(Phaser.Core.Events.BLUR, this.onBlur);
   }
 }

@@ -10,7 +10,12 @@ import {
   JUMP_VELOCITY,
   RUN_SPEED,
 } from '../constants';
-import { JUMP_BUFFER_MS, playerBodyFor } from '../level/berlin/playerPhysics';
+import {
+  canConsumeJump,
+  COYOTE_TIME_MS,
+  JUMP_BUFFER_MS,
+  playerBodyFor,
+} from '../level/berlin/playerPhysics';
 import type { PlayerAnimationState } from '../level/berlin/types';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
@@ -21,6 +26,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private hitInputsLockedUntil = -Infinity;
   private hitSlowUntil = -Infinity;
   private jumpCount = 0;
+  /** Last time the feet were actually on something; drives coyote time. */
+  private lastGroundedAt = -Infinity;
   private visual: Phaser.GameObjects.Sprite;
 
   constructor(scene: Phaser.Scene, x: number) {
@@ -43,12 +50,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setVelocityX(this.speed);
     const body = this.body as Phaser.Physics.Arcade.Body;
     const grounded = body.blocked.down || body.touching.down;
+    // Jump state resets only on real ground contact, never in mid-air.
     if (grounded) {
+      this.lastGroundedAt = now;
       this.jumpCount = 0;
+    } else if (this.jumpCount === 0 && now > this.lastGroundedAt + COYOTE_TIME_MS) {
+      // Walked off an edge and let coyote time lapse: the ground jump is
+      // forfeit, which leaves exactly one air jump rather than two.
+      this.jumpCount = 1;
     }
+
+    // The first jump goes through canConsumeJump, so it works while grounded
+    // and for COYOTE_TIME_MS after leaving the ground. The second is the only
+    // other impulse allowed before touching down again.
+    const buffered = now <= this.jumpBufferedUntil;
+    const firstJump = canConsumeJump(now, this.lastGroundedAt, this.jumpBufferedUntil, this.crouched);
+    const airJump = buffered && !this.crouched && this.jumpCount > 0 && this.jumpCount < 2;
     let jumpedThisFrame = false;
-    if (this.jumpBufferedUntil >= now && this.jumpCount < 2 && (grounded || this.jumpCount > 0)) {
-      this.setVelocityY(this.jumpCount === 0 ? JUMP_VELOCITY : -680);
+    if (firstJump || airJump) {
+      // Both impulses are the same strength; there is no weaker second jump.
+      this.setVelocityY(JUMP_VELOCITY);
+      // Clearing the buffer here is what makes one press worth one jump.
       this.jumpBufferedUntil = -Infinity;
       this.jumpCount += 1;
       jumpedThisFrame = true;
