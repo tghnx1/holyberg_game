@@ -4,8 +4,8 @@
     "type": "collectible",
     "kind": "usb",
     "label": "USB",
-    "x": 650,
-    "y": 538,
+    "x": 861,
+    "y": 576,
     "width": 86,
     "height": 62,
     "score": 500,
@@ -15,8 +15,8 @@
     "id": "trash-bags",
     "type": "obstacle",
     "action": "jump",
-    "x": 1000,
-    "y": 579,
+    "x": 617,
+    "y": 575,
     "width": 84,
     "height": 62,
     "label": "TRASH BAGS",
@@ -32,8 +32,8 @@
     "id": "low-sign",
     "type": "obstacle",
     "action": "duck",
-    "x": 1400,
-    "y": 535,
+    "x": 870,
+    "y": 526,
     "width": 150,
     "height": 30,
     "label": "LOW SIGN",
@@ -339,8 +339,8 @@
     "type": "obstacle",
     "action": "moving",
     "label": "CYCLIST",
-    "x": 9982,
-    "y": 569,
+    "x": 9846,
+    "y": 568,
     "width": 105,
     "height": 78,
     "hitbox": {
@@ -601,22 +601,5 @@
     "height": 48,
     "score": 400,
     "artSlot": "collectible.vinyl"
-  },
-  {
-    "id": "trash-bags-copy",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 995,
-    "y": 456,
-    "width": 84,
-    "height": 62,
-    "label": "TRASH BAGS",
-    "artSlot": "obstacle.trash",
-    "hitbox": {
-      "width": 67,
-      "height": 56,
-      "offsetX": 0,
-      "offsetY": 3
-    }
   }
 ]
