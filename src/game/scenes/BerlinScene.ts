@@ -378,7 +378,19 @@ export class BerlinScene extends Phaser.Scene {
     this.time.delayedCall(2200, () => {
       trace('delayedCall fired -> scene.start(RhythmScene)');
       if (import.meta.env.DEV) console.debug('[Berlin → Rhythm] starting RhythmScene');
-      this.scene.start('RhythmScene', { score: this.progress.score });
+      const rhythm = this.scene.manager.getScene('RhythmScene');
+      trace(`Rhythm target exists=${Boolean(rhythm)} status=${rhythm?.sys.settings.status}`);
+      trace('before scene.start');
+      try {
+        this.scene.start('RhythmScene', { score: this.progress.score });
+        trace('scene.start returned');
+      } catch (error) {
+        trace(
+          `scene.start THREW: ${
+            error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+          }`,
+        );
+      }
     });
   }
 
@@ -504,23 +516,49 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private teardown(): void {
+    // TEMPORARY: each step is isolated so the on-screen trace names the one
+    // that throws. A throw here escapes through SceneManager.processQueue into
+    // game.step, and Phaser re-arms requestAnimationFrame only after step
+    // returns — so one bad line stops the whole loop and RhythmScene never
+    // starts. Catching per step is diagnosis, not the fix.
+    const step = (name: string, run: () => void): void => {
+      trace(`${name} begin`);
+      try {
+        run();
+        trace(`${name} done`);
+      } catch (error) {
+        trace(
+          `TEARDOWN THREW at ${name}: ${
+            error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+          }`,
+        );
+        console.error(`[BerlinScene] teardown failed at ${name}`, error);
+      }
+    };
+
+    trace('Berlin SHUTDOWN begin');
     this.shuttingDown = true;
-    this.hud.destroy();
-    this.tutorial.destroy();
-    this.editor?.destroy();
+    step('hud.destroy', () => this.hud.destroy());
+    step('tutorial.destroy', () => this.tutorial.destroy());
+    step('editor.destroy', () => this.editor?.destroy());
+    step('culling.destroy', () => this.culling.destroy());
+    step('removeColliders', () => {
+      for (const collider of this.obstacleColliders.values()) {
+        this.physics.world.removeCollider(collider);
+      }
+      this.obstacleColliders.clear();
+    });
+    step('pendingActivations.clear', () => {
+      this.pendingActivations.length = 0;
+    });
+    step('tweens.killAll', () => this.tweens.killAll());
+    step('time.removeAllEvents', () => this.time.removeAllEvents());
+    step('keyboard.removeAllListeners', () => this.input.keyboard?.removeAllListeners());
     this.editor = undefined;
     this.editorKey = undefined;
     this.debugKey = undefined;
     this.layerDebug = undefined;
-    this.culling.destroy();
-    for (const collider of this.obstacleColliders.values()) {
-      this.physics.world.removeCollider(collider);
-    }
-    this.obstacleColliders.clear();
-    this.pendingActivations.length = 0;
-    this.tweens.killAll();
-    this.time.removeAllEvents();
-    this.input.keyboard?.removeAllListeners();
+    trace('Berlin SHUTDOWN end');
   }
 
   /** The gameplay camera: also used to undo the dev editor's free panning. */

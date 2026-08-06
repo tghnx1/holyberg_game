@@ -14,6 +14,20 @@ function host(): HTMLElement {
   return document.getElementById('game') ?? document.body;
 }
 
+/**
+ * Phaser re-arms requestAnimationFrame *after* calling game.step, so anything
+ * that throws inside a step kills the loop for good. Catching it here is the
+ * only way to see it on a device with no console.
+ */
+export function installTraceErrorTrap(): void {
+  window.addEventListener('error', (event) => {
+    trace(`UNCAUGHT: ${event.message} @ ${event.filename}:${event.lineno}`);
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    trace(`UNHANDLED REJECTION: ${String(event.reason)}`);
+  });
+}
+
 export function trace(message: string): void {
   const stamp = ((Date.now() - started) / 1000).toFixed(2);
   const line = `${stamp}s ${message}`;
