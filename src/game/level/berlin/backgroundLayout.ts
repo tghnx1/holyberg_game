@@ -1,4 +1,4 @@
-import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH } from '../../constants';
+import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH, RUN_SPEED } from '../../constants';
 
 export { DESIGN_WIDTH, DESIGN_HEIGHT };
 
@@ -29,13 +29,31 @@ export const backgroundLayout = {
     depth: Depth.MID_BACKGROUND,
   } satisfies BackgroundImageLayout,
   trains: {
-    baselineY: 300,
+    baselineY: 428,
     depth: Depth.MID_BACKGROUND,
-    durationMs: 65000,
-    repeatDelay: 1500,
+    /** Default px/s each train travels; a train may override it with `speed`. */
+    speed: RUN_SPEED,
     ease: 'Linear' as const,
-    right: { key: 'berlin-train-right' },
-    left: { key: 'berlin-train-left' },
+
+    // Rides alongside the player for the whole level: same speed as the
+    // character, so it holds a fixed spot on screen from x 0 to the far end
+    // of the map. train-right still sweeps past it head-on around t=14s.
+    left: {
+      key: 'berlin-train-left',
+      startX: 1000,
+      initialDelayMs: 8000,
+      repeat: 0,
+      repeatDelayMs: 0,
+      speed: RUN_SPEED + 50,
+    },
+
+    right: {
+      key: 'berlin-train-right',
+      startX: 7300,
+      initialDelayMs: 0,
+      repeat: -1,
+      repeatDelayMs: 0,
+    },
   },
   railwaySection: {
     key: 'berlin-railway',

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DESIGN_WIDTH, GROUND_Y, RUN_SPEED, WORLD_WIDTH } from '../constants';
+import { DESIGN_WIDTH, GROUND_Y, WORLD_WIDTH } from '../constants';
 import { GROUND_SEGMENTS, PIT_ZONES } from './berlin/berlinLevelConfig';
 import { backgroundLayout } from './berlin/backgroundLayout';
 import { attachBackgroundDebug, isBackgroundDebugEnabled, type DebugTarget } from './berlin/backgroundDebug';
@@ -12,18 +12,11 @@ import type { SceneLayers } from './sceneLayers';
 const BACKGROUND_ORDER = [
   'sky',
   'city',
-  'trainLeft',
   'trainRight',
+  'trainLeft',
   'railway',
   'houses',
 ] as const;
-
-// Absolute world-x starting positions for the two trains (left edge of the
-// sprite, since both use origin 0,1). train-left enters near the left of the
-// opening viewport and heads right; train-right starts mid-screen and heads
-// left.
-const TRAIN_LEFT_START_X = WORLD_WIDTH / 7;
-const TRAIN_RIGHT_START_X =  WORLD_WIDTH / 6;
 
 export interface ObstacleSpec {
   x: number;
@@ -158,32 +151,42 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // original (cropped, unscaled) pixel size. Each one starts at an explicit
   // world x and tweens to the x at which it has fully cleared the opposite
   // side of the opening viewport.
+  interface TrainLayout {
+    key: string;
+    startX: number;
+    initialDelayMs: number;
+    /** -1 loops forever; 0 runs the pass exactly once. */
+    repeat: number;
+    repeatDelayMs: number;
+    /** Overrides backgroundLayout.trains.speed for this train only. */
+    speed?: number;
+  }
+
   const addTrain = (
-    key: string,
+    layout: TrainLayout,
     name: string,
-    startX: number,
     /** Given the sprite's own width, the x it should finish at. */
     resolveEndX: (displayWidth: number) => number,
-    /** -1 loops forever; 0 runs the pass exactly once. */
-    repeat: number,
   ): Phaser.GameObjects.Image => {
     const train = scene.add
-      .image(startX, backgroundLayout.trains.baselineY, key)
+      .image(layout.startX, backgroundLayout.trains.baselineY, layout.key)
       .setOrigin(0, 1);
     debugTargets.push({ name, object: train });
 
     const endX = resolveEndX(train.displayWidth);
 
-    // Duration comes from the distance the train actually covers, so both
-    // trains move at exactly RUN_SPEED (the player's pixels-per-second run
-    // speed) regardless of sprite width or how far apart start and end are.
+    // Duration comes from the distance the train actually covers, so the
+    // train holds backgroundLayout.trains.speed regardless of sprite width
+    // or how far apart start and end are.
     scene.tweens.add({
       targets: train,
       x: endX,
-      duration: (Math.abs(endX - startX) / RUN_SPEED) * 1000,
+      duration:
+        (Math.abs(endX - layout.startX) / (layout.speed ?? backgroundLayout.trains.speed)) * 1000,
       ease: backgroundLayout.trains.ease,
-      repeat,
-      repeatDelay: backgroundLayout.trains.repeatDelay,
+      delay: layout.initialDelayMs,
+      repeat: layout.repeat,
+      repeatDelay: layout.repeatDelayMs,
     });
 
     return train;
@@ -191,24 +194,13 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
 
   // Runs right-to-left, ending once its right edge is past world x 0.
   const trainRight = addTrain(
-    backgroundLayout.trains.right.key,
+    backgroundLayout.trains.right,
     'train-right',
-    TRAIN_RIGHT_START_X,
     (displayWidth) => -displayWidth,
-    -1,
   );
 
-  // Runs left-to-right, ending once its left edge is past the viewport's
-  // right edge.
-  const trainLeft = addTrain(
-    backgroundLayout.trains.left.key,
-    'train-left',
-    TRAIN_LEFT_START_X,
-    // Crosses one viewport width from wherever it starts, so moving
-    // TRAIN_LEFT_START_X moves the whole pass without breaking direction.
-    () => WORLD_WIDTH,
-    0,
-  );
+  // Runs left-to-right, ending once it reaches the far edge of the level.
+  const trainLeft = addTrain(backgroundLayout.trains.left, 'train-left', () => WORLD_WIDTH);
 
   // Mid-background building row: a single non-tiled texture replacing the
   // procedural building rectangles and their nested window rectangles that
