@@ -28,6 +28,7 @@ import { addFullscreenButton, OrientationController } from '../responsive/Orient
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
 import { HudSystem } from '../systems/HudSystem';
 import { LayerDebugSystem } from '../systems/LayerDebugSystem';
+import { LevelEditorSystem } from '../systems/LevelEditorSystem';
 import { SectionTracker } from '../systems/SectionTracker';
 import type { BerlinProgress } from '../types/game';
 
@@ -47,10 +48,18 @@ export class BerlinScene extends Phaser.Scene {
   private world!: BuiltBerlinWorld;
   private layers!: SceneLayers;
   private level!: BuiltBerlinLevel;
+  private levelBuilder!: LevelBuilder;
+  /** Kept so the dev editor can drop an obstacle's overlap when deleting it. */
+  private readonly obstacleColliders = new Map<
+    Phaser.GameObjects.Zone,
+    Phaser.Physics.Arcade.Collider
+  >();
   private pendingActivations: PendingActivation[] = [];
   private readonly scoreSystem = new BerlinScoreSystem();
   private readonly sections = new SectionTracker();
   private layerDebug?: LayerDebugSystem;
+  private editor?: LevelEditorSystem;
+  private editorKey?: Phaser.Input.Keyboard.Key;
   private debugOverlay?: Phaser.GameObjects.Container;
   private debugGraphics?: Phaser.GameObjects.Graphics;
   private gameOverOverlay?: { background: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text };
@@ -94,15 +103,14 @@ export class BerlinScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, killZone, () => this.gameOver());
     });
     if (import.meta.env.DEV) console.debug('[BerlinScene] before LevelBuilder.build');
-    this.level = new LevelBuilder(this, this.layers.gameplay).build();
+    this.levelBuilder = new LevelBuilder(this, this.layers.gameplay);
+    this.level = this.levelBuilder.build();
     this.pendingActivations = this.level.pendingActivations;
     if (import.meta.env.DEV) console.debug('[BerlinScene] after LevelBuilder.build');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before obstacle overlaps');
     this.level.entities
       .filter(({ config }) => config.type === 'obstacle')
-      .forEach(({ zone }) => {
-        this.physics.add.overlap(this.player, zone, () => this.hitObstacle(zone));
-      });
+      .forEach(({ zone }) => this.watchObstacle(zone));
     if (import.meta.env.DEV) console.debug('[BerlinScene] after obstacle overlaps');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before platform colliders');
     this.physics.add.collider(
@@ -303,6 +311,28 @@ export class BerlinScene extends Phaser.Scene {
 
   private createDevelopmentTools(): void {
     this.layerDebug = new LayerDebugSystem(this, this.layers);
+    const layoutEditor = new LevelEditorSystem(this, this.level.entities, {
+      // Platforms and collectibles join groups the colliders already watch;
+      // an obstacle needs its own overlap, exactly as create() registers it.
+      spawn: (config) => {
+        const built = this.levelBuilder.addEntity(config);
+        if (config.type === 'obstacle') this.watchObstacle(built.zone);
+        return built;
+      },
+      despawn: (zone) => {
+        const collider = this.obstacleColliders.get(zone);
+        if (collider) {
+          this.physics.world.removeCollider(collider);
+          this.obstacleColliders.delete(zone);
+        }
+        this.levelBuilder.removeEntity(zone);
+      },
+    });
+    this.editor = layoutEditor;
+    this.input.keyboard?.on('keydown-P', () => {
+      layoutEditor.printConfig();
+    });
+    this.editorKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.debugKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);
     this.debugGraphics = this.add
       .graphics()
@@ -380,6 +410,13 @@ export class BerlinScene extends Phaser.Scene {
     );
   }
 
+  private watchObstacle(zone: Phaser.GameObjects.Zone): void {
+    this.obstacleColliders.set(
+      zone,
+      this.physics.add.overlap(this.player, zone, () => this.hitObstacle(zone)),
+    );
+  }
+
   private syncScore(): void {
     this.progress.score = this.scoreSystem.score;
     this.hud.update(this.progress);
@@ -394,6 +431,14 @@ export class BerlinScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.layerDebug?.update();
+    // Edit mode owns the frame: returning here freezes the player, the
+    // countdown and every gameplay check, and keeps arrow keys and space
+    // from reaching the jump/duck handlers below.
+    if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
+    if (this.editor?.active) {
+      this.editor.update();
+      return;
+    }
     if (this.debugKey && Phaser.Input.Keyboard.JustDown(this.debugKey))
       this.debugOverlay?.setVisible(!this.debugOverlay.visible);
     this.updateDebug();
