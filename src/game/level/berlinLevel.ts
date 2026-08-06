@@ -18,10 +18,12 @@ const BACKGROUND_ORDER = [
   'houses',
 ] as const;
 
-// Absolute world-x starting positions for the two trains, as fractions of
-// the whole level width.
-const TRAIN_RIGHT_START_X = WORLD_WIDTH / 5;
-const TRAIN_LEFT_START_X = WORLD_WIDTH / 3;
+// Absolute world-x starting positions for the two trains (left edge of the
+// sprite, since both use origin 0,1). train-left enters near the left of the
+// opening viewport and heads right; train-right starts mid-screen and heads
+// left.
+const TRAIN_LEFT_START_X = WORLD_WIDTH / 7;
+const TRAIN_RIGHT_START_X =  WORLD_WIDTH / 6;
 
 export interface ObstacleSpec {
   x: number;
@@ -145,7 +147,6 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // no parallax lag), positioned relative to FIRST_RAILWAY_START_X so the
   // whole section can be relocated by changing that one constant.
   const sectionStartX = backgroundLayout.railwaySection.sectionWidth / 5;
-  const sectionWidth = sectionStartX * 3;
   const railway = scene.add
     .image(sectionStartX, backgroundLayout.railwaySection.baselineY, backgroundLayout.railwaySection.key)
     .setOrigin(0, 1);
@@ -153,45 +154,61 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   railway.setScrollFactor(1, 0);
   debugTargets.push({ name: 'railway', object: railway });
 
-  // Two trains that only ever traverse the first railway section, in
-  // section-local coordinates: train-right starts from the section's right
-  // edge and runs right-to-left, train-left starts from the section's left
-  // edge and runs left-to-right. Both keep their original (cropped,
-  // unscaled) pixel size.
-  const trainRight = scene.add
-    .image(0, backgroundLayout.trains.baselineY, backgroundLayout.trains.right.key)
-    .setOrigin(0, 1);
-  trainRight.x = TRAIN_RIGHT_START_X;
-  debugTargets.push({ name: 'train-right', object: trainRight });
+  // Two trains crossing the first railway section, both keeping their
+  // original (cropped, unscaled) pixel size. Each one starts at an explicit
+  // world x and tweens to the x at which it has fully cleared the opposite
+  // side of the opening viewport.
+  const addTrain = (
+    key: string,
+    name: string,
+    startX: number,
+    /** Given the sprite's own width, the x it should finish at. */
+    resolveEndX: (displayWidth: number) => number,
+    /** -1 loops forever; 0 runs the pass exactly once. */
+    repeat: number,
+  ): Phaser.GameObjects.Image => {
+    const train = scene.add
+      .image(startX, backgroundLayout.trains.baselineY, key)
+      .setOrigin(0, 1);
+    debugTargets.push({ name, object: train });
 
-  // Each train's tween duration is derived from RUN_SPEED (the player's
-  // pixels-per-second run speed) so both trains cross the screen at exactly
-  // the same speed the player runs, regardless of their sprite width.
-  const trainRightDistance = sectionWidth + trainRight.displayWidth;
-  scene.tweens.add({
-    targets: trainRight,
-    x: sectionStartX - trainRight.displayWidth,
-    duration: (trainRightDistance / RUN_SPEED) * 1000,
-    ease: backgroundLayout.trains.ease,
-    repeat: -1,
-    repeatDelay: backgroundLayout.trains.repeatDelay,
-  });
+    const endX = resolveEndX(train.displayWidth);
 
-  const trainLeft = scene.add
-    .image(0, backgroundLayout.trains.baselineY, backgroundLayout.trains.left.key)
-    .setOrigin(0, 1);
-  trainLeft.x = TRAIN_LEFT_START_X;
-  debugTargets.push({ name: 'train-left', object: trainLeft });
+    // Duration comes from the distance the train actually covers, so both
+    // trains move at exactly RUN_SPEED (the player's pixels-per-second run
+    // speed) regardless of sprite width or how far apart start and end are.
+    scene.tweens.add({
+      targets: train,
+      x: endX,
+      duration: (Math.abs(endX - startX) / RUN_SPEED) * 1000,
+      ease: backgroundLayout.trains.ease,
+      repeat,
+      repeatDelay: backgroundLayout.trains.repeatDelay,
+    });
 
-  const trainLeftDistance = sectionWidth + trainLeft.displayWidth;
-  scene.tweens.add({
-    targets: trainLeft,
-    x: sectionStartX + sectionWidth,
-    duration: (trainLeftDistance / RUN_SPEED) * 1000,
-    ease: backgroundLayout.trains.ease,
-    repeat: -1,
-    repeatDelay: backgroundLayout.trains.repeatDelay,
-  });
+    return train;
+  };
+
+  // Runs right-to-left, ending once its right edge is past world x 0.
+  const trainRight = addTrain(
+    backgroundLayout.trains.right.key,
+    'train-right',
+    TRAIN_RIGHT_START_X,
+    (displayWidth) => -displayWidth,
+    -1,
+  );
+
+  // Runs left-to-right, ending once its left edge is past the viewport's
+  // right edge.
+  const trainLeft = addTrain(
+    backgroundLayout.trains.left.key,
+    'train-left',
+    TRAIN_LEFT_START_X,
+    // Crosses one viewport width from wherever it starts, so moving
+    // TRAIN_LEFT_START_X moves the whole pass without breaking direction.
+    () => WORLD_WIDTH,
+    0,
+  );
 
   // Mid-background building row: a single non-tiled texture replacing the
   // procedural building rectangles and their nested window rectangles that

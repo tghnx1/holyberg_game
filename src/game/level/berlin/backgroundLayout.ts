@@ -28,12 +28,15 @@ export const backgroundLayout = {
     targetHeight: 640,
     depth: Depth.MID_BACKGROUND,
   } satisfies BackgroundImageLayout,
-  houses: {
-    key: 'berlin-mid-buildings',
-    baselineY: 675,
-    targetHeight: 650,
+  trains: {
+    baselineY: 300,
     depth: Depth.MID_BACKGROUND,
-  } satisfies BackgroundImageLayout,
+    durationMs: 65000,
+    repeatDelay: 1500,
+    ease: 'Linear' as const,
+    right: { key: 'berlin-train-right' },
+    left: { key: 'berlin-train-left' },
+  },
   railwaySection: {
     key: 'berlin-railway',
     startX: FIRST_RAILWAY_START_X,
@@ -42,15 +45,12 @@ export const backgroundLayout = {
     targetHeight: 650,
     depth: Depth.MID_BACKGROUND,
   },
-  trains: {
-    baselineY: 642,
+  houses: {
+    key: 'berlin-mid-buildings',
+    baselineY: 675,
+    targetHeight: 650,
     depth: Depth.MID_BACKGROUND,
-    durationMs: 65000,
-    repeatDelay: 1500,
-    ease: 'Linear' as const,
-    right: { key: 'berlin-train-right' },
-    left: { key: 'berlin-train-left' },
-  },
+  } satisfies BackgroundImageLayout,
   ground: {
     asphaltColor: 0x100c1b,
     voidColor: 0x050308,

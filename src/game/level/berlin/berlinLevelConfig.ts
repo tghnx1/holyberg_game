@@ -226,7 +226,7 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     artSlot: 'collectible.energy',
   },
   groundObstacle('puddle', 7050, 'PUDDLE', 'obstacle.puddle', 130, 38),
-  platform('platform-1', 7500, 440, 470),
+  platform('platform-1', 7100, 440, 470),
   duckObstacle('night-pipe', 8100, 'LOW PIPE', 'obstacle.pipe', 160, 30, 174, 34, 11),
   groundObstacle('taxi', 8400, 'TAXI', 'obstacle.taxi', 175, 82),
 
@@ -268,8 +268,11 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
   },
 
   // SECTION 8 — FINAL MOVING PLATFORM PIT — x 12000–13800
-  movingPlatform('final-moving-platform-1', 12450, 280, 480, 'horizontal', 110, 2300, 0, 11300, true),
-  movingPlatform('final-moving-platform-2', 13150, 240, 350, 'horizontal', 140, 2100, 1050),
+  movingPlatform('final-moving-platform-1', 12150, 280, 450, 'horizontal', 110, 2300, 0, 11300, true),
+  movingPlatform('final-moving-platform-2', 12550, 260, 300, 'horizontal', 140, 2100, 1050, 11300),
+  movingPlatform('final-moving-platform-3', 12950, 280, 400, 'horizontal', 140, 2100, 1050, 11300),
+  movingPlatform('final-moving-platform-4', 13350, 260, 350, 'horizontal', 140, 2100, 1050, 11300),
+  movingPlatform('final-moving-platform-5', 13750, 280, 200, 'horizontal', 140, 2100, 1050, 11300),
 
   // SECTION 9 — CLUB FINALE — x 13800–15500
   groundObstacle('final-barrier', 14000, 'BARRIER', 'obstacle.barrier', 115, 72),
