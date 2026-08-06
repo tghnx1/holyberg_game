@@ -202,16 +202,19 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // Runs left-to-right, ending once it reaches the far edge of the level.
   const trainLeft = addTrain(backgroundLayout.trains.left, 'train-left', () => WORLD_WIDTH);
 
-  // Mid-background building row: a single non-tiled texture replacing the
-  // procedural building rectangles and their nested window rectangles that
-  // used to be drawn here. World-aligned (scrollFactor 1) and stretched to
-  // the full level width, same as the railway.
-  const houses = scene.add
-    .image(0, backgroundLayout.houses.baselineY, backgroundLayout.houses.key)
-    .setOrigin(0, 1);
-  houses.setDisplaySize(WORLD_WIDTH, backgroundLayout.houses.targetHeight);
-  houses.setScrollFactor(1, 0);
-  debugTargets.push({ name: 'houses', object: houses });
+  // Mid-background houses: three separate cutouts at their natural texture
+  // size, world-aligned (scrollFactor 1) like the railway. Each one is
+  // bottom-anchored to the shared baseline; `anchor` decides whether its x
+  // is the left or the right edge.
+  const houses = backgroundLayout.houses.items.map((item) => {
+    const house = scene.add
+      .image(item.x, backgroundLayout.houses.baselineY, item.key)
+      .setOrigin(item.anchor === 'right' ? 1 : 0, 1);
+    house.setScale(backgroundLayout.houses.scale);
+    house.setScrollFactor(1, 0);
+    debugTargets.push({ name: item.name, object: house });
+    return house;
+  });
 
   const backgroundObjects = {
     sky,
@@ -222,10 +225,13 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     houses,
   };
 
+  // One entry may hold several images (the houses); they share its depth slot.
   BACKGROUND_ORDER.forEach((name, index) => {
-    const object = backgroundObjects[name];
-    object.setDepth(index);
-    layers.midBackground.add(object);
+    const entry = backgroundObjects[name];
+    for (const object of Array.isArray(entry) ? entry : [entry]) {
+      object.setDepth(index);
+      layers.midBackground.add(object);
+    }
   });
 
   // Asphalt is drawn per ground segment (not the full world) so it stops exactly

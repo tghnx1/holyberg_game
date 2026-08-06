@@ -1,4 +1,4 @@
-import { DESIGN_HEIGHT, GROUND_Y, WORLD_WIDTH } from '../../constants';
+import { GROUND_Y, WORLD_WIDTH } from '../../constants';
 import { CROUCHING_BODY } from './playerPhysics';
 import type { BerlinEntity, BerlinSection, GroundSegment, PitZone } from './types';
 
@@ -22,16 +22,12 @@ export const BERLIN_SECTIONS: readonly BerlinSection[] = [
 
 export const CLUB_ENTRANCE_X = 15000;
 
+/** One unbroken floor across the whole level: there are no pits to fall into. */
 export const GROUND_SEGMENTS: readonly GroundSegment[] = [
-  { id: 'ground-1', startX: 0, endX: 1600 },
-  { id: 'ground-2', startX: 3200, endX: 12000 },
-  { id: 'ground-3', startX: 13800, endX: WORLD_WIDTH },
+  { id: 'ground-1', startX: 0, endX: WORLD_WIDTH },
 ] as const;
 
-export const PIT_ZONES: readonly PitZone[] = [
-  { id: 'pit-1', startX: 1600, endX: 3200 },
-  { id: 'pit-2', startX: 12000, endX: 13800 },
-] as const;
+export const PIT_ZONES: readonly PitZone[] = [] as const;
 
 const platform = (id: string, x: number, width: number, topY: number): BerlinEntity => ({
   id,
@@ -289,16 +285,6 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     height: 66,
     score: 250,
     artSlot: 'collectible.pass',
-  },
-  {
-    id: 'club-finish',
-    type: 'finish',
-    label: 'FINISH',
-    x: CLUB_ENTRANCE_X + 200,
-    y: DESIGN_HEIGHT / 2,
-    width: 400,
-    height: DESIGN_HEIGHT,
-    artSlot: 'finish.backstage',
   },
 ] as const;
 

@@ -1,4 +1,4 @@
-import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH, RUN_SPEED } from '../../constants';
+import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH, RUN_SPEED, WORLD_WIDTH } from '../../constants';
 
 export { DESIGN_WIDTH, DESIGN_HEIGHT };
 
@@ -29,7 +29,7 @@ export const backgroundLayout = {
     depth: Depth.MID_BACKGROUND,
   } satisfies BackgroundImageLayout,
   trains: {
-    baselineY: 428,
+    baselineY: 429,
     depth: Depth.MID_BACKGROUND,
     /** Default px/s each train travels; a train may override it with `speed`. */
     speed: RUN_SPEED,
@@ -63,12 +63,21 @@ export const backgroundLayout = {
     targetHeight: 650,
     depth: Depth.MID_BACKGROUND,
   },
+  // Three separate house cutouts drawn at their natural texture size (no
+  // scaling, no stretching to the world width) and dropped at the start,
+  // middle and end of the level. `x` is the sprite's left edge, except for
+  // the last one, which is anchored by its right edge to WORLD_WIDTH.
   houses: {
-    key: 'berlin-mid-buildings',
     baselineY: 675,
-    targetHeight: 650,
     depth: Depth.MID_BACKGROUND,
-  } satisfies BackgroundImageLayout,
+    /** Uniform shrink applied to every house; 0.5 renders them half size. */
+    scale: 0.26,
+    items: [
+      { name: 'house-1', key: 'berlin-house-1', anchor: 'left' as const, x: -300 },
+      { name: 'house-2', key: 'berlin-house-2', anchor: 'left' as const, x: WORLD_WIDTH / 2 },
+      { name: 'house-3', key: 'berlin-house-3', anchor: 'right' as const, x: WORLD_WIDTH },
+    ],
+  },
   ground: {
     asphaltColor: 0x100c1b,
     voidColor: 0x050308,
