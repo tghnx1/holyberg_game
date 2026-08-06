@@ -145,6 +145,13 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
   // margin at each end. Widening or narrowing it in backgroundLayout keeps
   // it centred without touching a separate start-x constant.
   const railwayLayout = backgroundLayout.railwaySection;
+  if (!scene.textures.exists(railwayLayout.key)) {
+    console.error(
+      `[berlinLevel] texture "${railwayLayout.key}" is not loaded. ` +
+        'Expected public/assets/backgrounds/railway.png, requested by BootScene as ' +
+        "this.load.image('berlin-railway', 'assets/backgrounds/railway.png').",
+    );
+  }
   const railwayStartX = (WORLD_WIDTH - railwayLayout.width) / 2 - 400;
   const railway = scene.add
     .image(railwayStartX, railwayLayout.baselineY, railwayLayout.key)

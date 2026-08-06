@@ -165,6 +165,11 @@ export class LevelEditorSystem {
     this.scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this);
+
+    // Applied at build time, not on entering layout mode, so a saved layout is
+    // already in place for the first frame the player sees.
+    this.restoreSavedConfig();
+    this.restored = true;
   }
 
   get active(): boolean {
@@ -186,12 +191,6 @@ export class LevelEditorSystem {
     for (const entity of this.entities) {
       if (entity.config.type !== 'movingPlatform') continue;
       this.shift(entity, entity.config.x - entity.artwork.x, entity.config.y - entity.artwork.y);
-    }
-    // Only on the first entry per scene: re-reading on every toggle would
-    // throw away edits made since the last save whenever you dip out to play.
-    if (!this.restored) {
-      this.restored = true;
-      this.restoreSavedConfig();
     }
     this.graphics.setVisible(true);
     this.panel.setVisible(true);
@@ -583,6 +582,7 @@ export class LevelEditorSystem {
    * the scene lacks were pasted and get rebuilt.
    */
   private restoreSavedConfig(): void {
+    if (this.restored) return;
     let saved: EditableConfig[];
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
