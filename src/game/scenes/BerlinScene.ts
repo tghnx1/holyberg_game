@@ -8,11 +8,13 @@ import {
 } from '../constants';
 import { Player } from '../entities/Player';
 import {
+  BERLIN_ENTITIES,
   BERLIN_SECTIONS,
   CLUB_ENTRANCE_X,
   GROUND_SEGMENTS,
 } from '../level/berlin/berlinLevelConfig';
 import { applyCollectibleReward } from '../level/berlin/berlinRules';
+import { resolveIntroStart } from '../level/berlin/controlsTutorial';
 import {
   isCollectible,
   LevelBuilder,
@@ -24,6 +26,7 @@ import { buildBerlinWorld, type BuiltBerlinWorld } from '../level/berlinLevel';
 import { createSceneLayers, type SceneLayers } from '../level/sceneLayers';
 import { addFullscreenButton, OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
+import { ControlsTutorialSystem } from '../systems/ControlsTutorialSystem';
 import { CullingSystem } from '../systems/CullingSystem';
 import { HudSystem } from '../systems/HudSystem';
 // Type-only: the implementations are dynamically imported below so the whole
@@ -47,6 +50,11 @@ export class BerlinScene extends Phaser.Scene {
   /** Set while the orientation overlay holds the scene, and during teardown. */
   private inputSuspended = false;
   private shuttingDown = false;
+  private tutorialGatingTimer = false;
+  private introHint?: Phaser.GameObjects.Text;
+  private introFullscreen?: Phaser.GameObjects.Text;
+  /** Latest safe-area margin, kept so the start gate can re-anchor itself. */
+  private safeMargin = 24;
   private finishTriggered = false;
   private trainsStarted = false;
   private world!: BuiltBerlinWorld;
@@ -60,6 +68,7 @@ export class BerlinScene extends Phaser.Scene {
   >();
   private pendingActivations: PendingActivation[] = [];
   private culling!: CullingSystem;
+  private tutorial!: ControlsTutorialSystem;
   private readonly scoreSystem = new BerlinScoreSystem();
   private readonly sections = new SectionTracker();
   private layerDebug?: LayerDebugSystem;
@@ -138,6 +147,22 @@ export class BerlinScene extends Phaser.Scene {
     );
     if (import.meta.env.DEV) console.debug('[BerlinScene] after HUD creation');
     this.hud.update(this.progress);
+    this.tutorial = new ControlsTutorialSystem(
+      this,
+      BERLIN_ENTITIES,
+      {
+        setPlayerFrozen: (frozen) => this.player.setFrozen(frozen),
+        setAirHold: (hold) => {
+          if (hold) this.player.requestAirHold();
+          else this.player.releaseAirHold();
+        },
+        onComplete: () => {
+          this.tutorialGatingTimer = false;
+        },
+      },
+      this.layers.ui,
+    );
+    this.tutorialGatingTimer = this.tutorial.gatesTimer;
     this.createIntro();
     new OrientationController(this, {
       onPause: () => {
@@ -155,7 +180,9 @@ export class BerlinScene extends Phaser.Scene {
         this.physics.resume();
       },
       onLayout: (viewport) => {
+        this.safeMargin = viewport.safeMargin;
         this.hud.applyLayout(viewport);
+        this.tutorial.applyLayout(viewport);
         this.repositionOverlays();
       },
     });
@@ -169,47 +196,54 @@ export class BerlinScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
   }
 
+  /**
+   * The start gate: no panel, just a corner fullscreen button and a one-line
+   * prompt. Both live in one container so starting the run removes them
+   * together, leaving the guided tutorial overlay as the only thing on screen.
+   */
   private createIntro(): void {
-    const panel = this.add.rectangle(0, 0, 650, 340, 0x0d0916, 0.94).setStrokeStyle(5, 0xff5e3c);
-    // Touch devices get the zone instructions; keyboard wording is unchanged
-    // everywhere else.
-    const controls = this.game.device.input.touch
-      ? 'HOLD LEFT — DUCK\nTAP RIGHT — JUMP\nTAP RIGHT TO START'
-      : 'SPACE / ↑  JUMP     S / ↓  DUCK\nPRESS SPACE OR TAP JUMP TO START';
-    const text = this.add
-      .text(
-        0,
-        0,
-        `INCOMING CALL\n\nDUDE, WHERE ARE YOU?\nYOU’RE PLAYING NEXT.\n\n${controls}`,
-        {
-          fontFamily: 'Space Mono',
-          fontSize: '23px',
-          fontStyle: 'bold',
-          color: '#fff',
-          align: 'center',
-          lineSpacing: 8,
-        },
-      )
-      .setOrigin(0.5);
-    const camera = this.cameras.main;
-    this.intro = this.add
-      .container(camera.width / 2, camera.height / 2, [panel, text])
-      .setScrollFactor(0)
-      .setDepth(Depth.UI);
-    this.layers.ui.add(this.intro);
-    const fullscreen = addFullscreenButton(this);
-    if (fullscreen) {
-      fullscreen.setPosition(0, 142);
-      this.intro.add(fullscreen);
+    const touch = this.game.device.input.touch;
+    this.introHint = this.add
+      .text(0, 0, touch ? 'TAP TO START' : 'PRESS SPACE TO START', {
+        fontFamily: 'Space Mono',
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        stroke: '#10091d',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5, 1);
+
+    const children: Phaser.GameObjects.GameObject[] = [this.introHint];
+    this.introFullscreen = addFullscreenButton(this);
+    if (this.introFullscreen) {
+      this.introFullscreen.setOrigin(0, 0);
+      children.push(this.introFullscreen);
     }
+
+    this.intro = this.add.container(0, 0, children).setScrollFactor(0).setDepth(Depth.UI);
+    this.layers.ui.add(this.intro);
+    this.layoutIntro();
+  }
+
+  /** Corner-anchored, so a rotation or resize keeps both readable. */
+  private layoutIntro(): void {
+    if (!this.intro?.active) return;
+    const camera = this.cameras.main;
+    const margin = this.safeMargin;
+    this.introHint?.setPosition(camera.width / 2, camera.height - margin);
+    this.introFullscreen?.setPosition(margin, margin);
   }
 
   /**
-   * Touch input is ignored while the layout editor owns the frame, while the
-   * orientation overlay holds the scene, once the run is over, and during
-   * teardown. Returning false tells the HUD the control did nothing, so its
-   * hint stays visible.
+   * The countdown hook. The run timer was removed from this game, so nothing
+   * ticks behind this today; it is what a restored countdown would read, and
+   * it stays true for the whole guided tutorial.
    */
+  get runTimerGated(): boolean {
+    return this.tutorialGatingTimer;
+  }
+
   private touchInputBlocked(): boolean {
     return (
       this.shuttingDown ||
@@ -240,8 +274,18 @@ export class BerlinScene extends Phaser.Scene {
     if (this.progress.state === 'running' && !this.player.canAcceptHitInput(this.time.now)) return;
     if (this.progress.state === 'intro') {
       this.progress.state = 'running';
+      // Cue spacing is planned from where the run actually begins.
+      this.tutorial.planFromStart(this.player.x);
+      // Removes the hint and the fullscreen button together.
       this.intro.destroy();
+      this.introHint = undefined;
+      this.introFullscreen = undefined;
       this.hud.flash(BERLIN_SECTIONS[0].label, 900);
+      // One buffered impulse, so the input that starts the run also jumps and
+      // no second press is needed. The buffer is cleared on consumption, so it
+      // can never spend both jumps.
+      const start = resolveIntroStart(this.tutorial.state);
+      if (start.jump) this.player.requestJump(this.time.now);
     } else if (this.progress.state === 'running') this.player.requestJump(this.time.now);
   }
 
@@ -252,6 +296,8 @@ export class BerlinScene extends Phaser.Scene {
 
   private hitObstacle(zone: Phaser.GameObjects.Zone): void {
     if (this.invulnerable || this.progress.state !== 'running') return;
+    // The duck prompt holds the player still; nothing may punish them there.
+    if (this.tutorial.penaltiesSuspended) return;
     const config = zone.getData('config') as BerlinEntity;
     if (zone.getData('alreadyHit')) return;
     zone.setData('alreadyHit', true);
@@ -310,10 +356,7 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private repositionOverlays(): void {
-    const camera = this.cameras.main;
-    const cx = camera.width / 2;
-    const cy = camera.height / 2;
-    if (this.intro?.active) this.intro.setPosition(cx, cy);
+    this.layoutIntro();
   }
 
   private async createDevelopmentTools(): Promise<void> {
@@ -436,6 +479,7 @@ export class BerlinScene extends Phaser.Scene {
   private teardown(): void {
     this.shuttingDown = true;
     this.hud.destroy();
+    this.tutorial.destroy();
     this.editor?.destroy();
     this.editor = undefined;
     this.editorKey = undefined;
@@ -477,7 +521,7 @@ export class BerlinScene extends Phaser.Scene {
     return playerBody.velocity.y >= 0 && previousBottom <= platformBody.top + 6;
   }
 
-  update(): void {
+  update(_time: number, delta: number): void {
     this.layerDebug?.update();
     // Edit mode owns the frame: returning here freezes the player, the
     // countdown and every gameplay check, and keeps arrow keys and space
@@ -525,6 +569,13 @@ export class BerlinScene extends Phaser.Scene {
       this.hud.flash(`${transition.label}${transition.clean ? '\nCLEAN +250' : ''}`, 900);
     }
     this.hud.update(this.progress);
+    this.tutorial.update(
+      this.player.x,
+      this.player.isCrouched(),
+      this.player.didJumpThisFrame,
+      this.player.jumpsThisAirtime,
+      delta,
+    );
     this.culling.update();
   }
 }

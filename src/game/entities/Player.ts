@@ -10,12 +10,7 @@ import {
   JUMP_VELOCITY,
   RUN_SPEED,
 } from '../constants';
-import {
-  canConsumeJump,
-  COYOTE_TIME_MS,
-  JUMP_BUFFER_MS,
-  playerBodyFor,
-} from '../level/berlin/playerPhysics';
+import { JUMP_BUFFER_MS, playerBodyFor, resolveJumpImpulse } from '../level/berlin/playerPhysics';
 import type { PlayerAnimationState } from '../level/berlin/types';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
@@ -28,6 +23,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private jumpCount = 0;
   /** Last time the feet were actually on something; drives coyote time. */
   private lastGroundedAt = -Infinity;
+  /** Read by the controls tutorial: a real impulse landed on this frame. */
+  didJumpThisFrame = false;
+  /** Set while the duck tutorial holds the player still. */
+  private frozen = false;
+  /** Tutorial asked to suspend the player mid-air; engages at the apex. */
+  private airHoldRequested = false;
+  private airHolding = false;
   private visual: Phaser.GameObjects.Sprite;
 
   constructor(scene: Phaser.Scene, x: number) {
@@ -47,34 +49,37 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   run(now: number): void {
     if (now >= this.hitSlowUntil && this.speed !== RUN_SPEED) this.speed = RUN_SPEED;
-    this.setVelocityX(this.speed);
+    this.setVelocityX(this.frozen ? 0 : this.speed);
     const body = this.body as Phaser.Physics.Arcade.Body;
     const grounded = body.blocked.down || body.touching.down;
-    // Jump state resets only on real ground contact, never in mid-air.
-    if (grounded) {
-      this.lastGroundedAt = now;
-      this.jumpCount = 0;
-    } else if (this.jumpCount === 0 && now > this.lastGroundedAt + COYOTE_TIME_MS) {
-      // Walked off an edge and let coyote time lapse: the ground jump is
-      // forfeit, which leaves exactly one air jump rather than two.
-      this.jumpCount = 1;
-    }
+    const jump = resolveJumpImpulse({
+      now,
+      grounded,
+      crouched: this.crouched,
+      lastGroundedAt: this.lastGroundedAt,
+      bufferedUntil: this.jumpBufferedUntil,
+      jumpCount: this.jumpCount,
+    });
+    this.lastGroundedAt = jump.lastGroundedAt;
+    this.jumpBufferedUntil = jump.bufferedUntil;
+    this.jumpCount = jump.jumpCount;
+    const jumpedThisFrame = jump.jumped;
+    // Both impulses are the same strength; there is no weaker second jump.
+    if (jumpedThisFrame) this.setVelocityY(JUMP_VELOCITY);
+    this.didJumpThisFrame = jumpedThisFrame;
 
-    // The first jump goes through canConsumeJump, so it works while grounded
-    // and for COYOTE_TIME_MS after leaving the ground. The second is the only
-    // other impulse allowed before touching down again.
-    const buffered = now <= this.jumpBufferedUntil;
-    const firstJump = canConsumeJump(now, this.lastGroundedAt, this.jumpBufferedUntil, this.crouched);
-    const airJump = buffered && !this.crouched && this.jumpCount > 0 && this.jumpCount < 2;
-    let jumpedThisFrame = false;
-    if (firstJump || airJump) {
-      // Both impulses are the same strength; there is no weaker second jump.
-      this.setVelocityY(JUMP_VELOCITY);
-      // Clearing the buffer here is what makes one press worth one jump.
-      this.jumpBufferedUntil = -Infinity;
-      this.jumpCount += 1;
-      jumpedThisFrame = true;
+    if (jumpedThisFrame && this.airHolding) {
+      // Jumping out of the hold: gravity must be back before the pin below,
+      // or the impulse would be cancelled on the frame it is applied.
+      this.releaseAirHold();
+    } else if (this.airHoldRequested && !this.airHolding && !grounded && body.velocity.y >= 0) {
+      // Engage at the apex so the character rises normally and then hangs,
+      // rather than stopping dead the instant it leaves the ground.
+      this.airHolding = true;
+      body.setAllowGravity(false);
+      this.setVelocityY(0);
     }
+    if (this.airHolding) this.setVelocityY(0);
     this.animationState = this.crouched
       ? 'crouch'
       : grounded
@@ -104,6 +109,33 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (now < this.hitInputsLockedUntil) return;
     this.jumpBufferedUntil = now + JUMP_BUFFER_MS;
   }
+  /** Stops forward motion without touching RUN_SPEED or any physics value. */
+  setFrozen(value: boolean): void {
+    this.frozen = value;
+    if (value) this.setVelocityX(0);
+  }
+
+  /** Impulses used in the current airtime; 2 means a double jump just landed. */
+  get jumpsThisAirtime(): number {
+    return this.jumpCount;
+  }
+
+  /** Suspends the player at the top of the current jump until released. */
+  requestAirHold(): void {
+    this.airHoldRequested = true;
+  }
+
+  releaseAirHold(): void {
+    this.airHoldRequested = false;
+    if (!this.airHolding) return;
+    this.airHolding = false;
+    (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(true);
+  }
+
+  isCrouched(): boolean {
+    return this.crouched;
+  }
+
   setCrouched(value: boolean): void {
     if (value === this.crouched) return;
     const body = this.body as Phaser.Physics.Arcade.Body;
