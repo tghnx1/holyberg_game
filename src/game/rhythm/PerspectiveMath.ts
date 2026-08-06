@@ -64,8 +64,3 @@ export function getPerspectivePosition(
   };
 }
 
-export function getHighwayX(normalizedX: number, yProgress: number, screenCenterX = 640): number {
-  const clamped = Math.min(1, Math.max(0, yProgress));
-  const halfWidth = HORIZON_HALF_WIDTH + (HIT_LINE_HALF_WIDTH - HORIZON_HALF_WIDTH) * clamped;
-  return screenCenterX + normalizedX * halfWidth;
-}

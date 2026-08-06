@@ -1,6 +1,6 @@
 import { GROUND_Y, WORLD_WIDTH } from '../../constants';
 import { CROUCHING_BODY } from './playerPhysics';
-import type { BerlinEntity, BerlinSection, GroundSegment, PitZone } from './types';
+import type { BerlinEntity, BerlinSection, GroundSegment } from './types';
 
 export const BERLIN_SECTIONS: readonly BerlinSection[] = [
   { id: 'tutorial', label: 'APARTMENT', startX: 0, endX: 1600, artSlot: 'background.apartment' },
@@ -26,8 +26,6 @@ export const CLUB_ENTRANCE_X = 15000;
 export const GROUND_SEGMENTS: readonly GroundSegment[] = [
   { id: 'ground-1', startX: 0, endX: WORLD_WIDTH },
 ] as const;
-
-export const PIT_ZONES: readonly PitZone[] = [] as const;
 
 const platform = (id: string, x: number, width: number, topY: number): BerlinEntity => ({
   id,

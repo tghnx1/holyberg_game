@@ -1,4 +1,3 @@
-export const LANE_COUNT = 4;
 export const PERFECT_WINDOW_MS = 70;
 export const EXCELLENT_WINDOW_MS = 130;
 export const GOOD_WINDOW_MS = 230;

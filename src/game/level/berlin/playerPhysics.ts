@@ -1,4 +1,3 @@
-import { GROUND_Y } from '../../constants';
 import type { PlayerBodySpec } from './types';
 
 const PLAYER_FRAME_HEIGHT = 98;
@@ -31,10 +30,4 @@ export function canConsumeJump(
   return !crouched && now <= lastGroundedAt + COYOTE_TIME_MS && now <= bufferedUntil;
 }
 
-export function jumpVelocityFor(jumpIndex: number): number {
-  return jumpIndex >= 2 ? -680 : -720;
-}
 
-export function standingFeetY(): number {
-  return GROUND_Y;
-}

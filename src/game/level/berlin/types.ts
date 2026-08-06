@@ -27,11 +27,6 @@ export interface GroundSegment {
   endX: number;
 }
 
-export interface PitZone {
-  id: string;
-  startX: number;
-  endX: number;
-}
 
 export interface LevelEntityBase {
   id: string;
@@ -91,16 +86,10 @@ export interface CollectibleConfig extends LevelEntityBase {
   mandatory?: boolean;
 }
 
-export interface FinishConfig extends LevelEntityBase {
-  type: 'finish';
-  label: string;
-  y: number;
-}
 
 export type BerlinEntity =
   | ObstacleConfig
   | CollectibleConfig
-  | FinishConfig
   | PlatformConfig
   | MovingPlatformConfig;
 

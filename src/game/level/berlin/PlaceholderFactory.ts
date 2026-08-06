@@ -10,7 +10,6 @@ const colors = {
   platform: 0x59c1ff,
   movingPlatform: 0x2f8fd6,
   collectible: 0x4fd5c7,
-  finish: 0xff3f73,
 } as const;
 
 export class PlaceholderFactory {

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { DESIGN_HEIGHT, GROUND_Y } from '../../constants';
+import { GROUND_Y } from '../../constants';
 import { CROUCHING_BODY, STANDING_BODY } from './playerPhysics';
-import { BERLIN_ENTITIES, CLUB_ENTRANCE_X } from './berlinLevelConfig';
+import { BERLIN_ENTITIES } from './berlinLevelConfig';
 import { PlaceholderFactory } from './PlaceholderFactory';
 import type {
   BerlinEntity,
@@ -24,7 +24,6 @@ export interface PendingActivation {
 
 export interface BuiltBerlinLevel {
   collectibles: Phaser.Physics.Arcade.StaticGroup;
-  finish: Phaser.Physics.Arcade.StaticGroup;
   platforms: Phaser.Physics.Arcade.StaticGroup;
   movingPlatforms: Phaser.GameObjects.Zone[];
   pendingActivations: PendingActivation[];
@@ -34,7 +33,6 @@ export interface BuiltBerlinLevel {
 export class LevelBuilder {
   private readonly factory: PlaceholderFactory;
   private readonly collectibles: Phaser.Physics.Arcade.StaticGroup;
-  private readonly finish: Phaser.Physics.Arcade.StaticGroup;
   private readonly platforms: Phaser.Physics.Arcade.StaticGroup;
   private readonly movingPlatforms: Phaser.GameObjects.Zone[] = [];
   private readonly pendingActivations: PendingActivation[] = [];
@@ -46,7 +44,6 @@ export class LevelBuilder {
   ) {
     this.factory = new PlaceholderFactory(scene, layer);
     this.collectibles = scene.physics.add.staticGroup();
-    this.finish = scene.physics.add.staticGroup();
     this.platforms = scene.physics.add.staticGroup();
   }
 
@@ -54,7 +51,6 @@ export class LevelBuilder {
     BERLIN_ENTITIES.forEach((config) => this.addEntity(config));
     return {
       collectibles: this.collectibles,
-      finish: this.finish,
       platforms: this.platforms,
       movingPlatforms: this.movingPlatforms,
       pendingActivations: this.pendingActivations,
@@ -86,8 +82,6 @@ export class LevelBuilder {
       this.movingPlatforms.push(zone);
       const pending = this.configureMovingPlatform(config, zone, artwork);
       if (pending) this.pendingActivations.push(pending);
-    } else {
-      this.finish.add(zone);
     }
     const built = { config, artwork, zone };
     this.entities.push(built);
@@ -107,7 +101,6 @@ export class LevelBuilder {
 
     this.collectibles.remove(zone);
     this.platforms.remove(zone);
-    this.finish.remove(zone);
     const moving = this.movingPlatforms.indexOf(zone);
     if (moving >= 0) this.movingPlatforms.splice(moving, 1);
 
@@ -120,18 +113,13 @@ export class LevelBuilder {
     config: BerlinEntity,
     hitbox?: { offsetX: number; offsetY: number; width: number; height: number },
   ): Phaser.GameObjects.Zone {
-    const isFinish = config.type === 'finish';
     const zone = this.scene.add.zone(
-      isFinish
-        ? CLUB_ENTRANCE_X + config.width / 2
-        : hitbox
-          ? config.x + hitbox.offsetX
-          : config.x,
-      isFinish ? DESIGN_HEIGHT / 2 : hitbox ? config.y + hitbox.offsetY : config.y,
-      isFinish ? config.width : hitbox ? hitbox.width : config.width * 0.78,
-      isFinish ? DESIGN_HEIGHT : hitbox ? hitbox.height : config.height * 0.82,
+      hitbox ? config.x + hitbox.offsetX : config.x,
+      hitbox ? config.y + hitbox.offsetY : config.y,
+      hitbox ? hitbox.width : config.width * 0.78,
+      hitbox ? hitbox.height : config.height * 0.82,
     );
-    const isStatic = config.type === 'collectible' || config.type === 'finish' || config.type === 'platform';
+    const isStatic = config.type === 'collectible' || config.type === 'platform';
     this.scene.physics.add.existing(zone, isStatic);
     const body = zone.body as
       | Phaser.Physics.Arcade.Body

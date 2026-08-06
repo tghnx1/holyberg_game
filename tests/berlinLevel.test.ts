@@ -2,9 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BERLIN_ENTITIES,
   BERLIN_SECTIONS,
-  CLUB_ENTRANCE_X,
   GROUND_SEGMENTS,
-  PIT_ZONES,
   sectionIndexAtX,
 } from '../src/game/level/berlin/berlinLevelConfig';
 import { applyCollectibleReward, canFinishBerlin } from '../src/game/level/berlin/berlinRules';
@@ -35,11 +33,8 @@ describe('Berlin level config', () => {
     expect(sectionIndexAtX(1599)).toBe(0);
     expect(sectionIndexAtX(1600)).toBe(1);
   });
-  it('keeps USB and finish at their authored positions', () => {
+  it('keeps USB at its authored position', () => {
     expect(BERLIN_ENTITIES.find((entity) => entity.id === 'usb')?.x).toBe(650);
-    expect(BERLIN_ENTITIES.find((entity) => entity.type === 'finish')?.x).toBe(
-      CLUB_ENTRANCE_X + 200,
-    );
   });
   it('gives every gameplay object a unique id and independent dimensions', () => {
     expect(new Set(BERLIN_ENTITIES.map((entity) => entity.id)).size).toBe(BERLIN_ENTITIES.length);
@@ -67,38 +62,17 @@ describe('Berlin level config', () => {
     expect(applyCollectibleReward(12, false, usb).hasUsb).toBe(true);
   });
   it('keeps every ground obstacle and platform inside the 15500-unit world', () => {
-    expect(
-      BERLIN_ENTITIES.filter((entity) => entity.type !== 'finish').every(
-        (entity) => entity.x >= 0 && entity.x <= 15500,
-      ),
-    ).toBe(true);
+    expect(BERLIN_ENTITIES.every((entity) => entity.x >= 0 && entity.x <= 15500)).toBe(true);
   });
-  it('defines two moving platforms per pit with opposite phases', () => {
+  it('gives the early moving platforms opposite phases', () => {
     const early = BERLIN_ENTITIES.filter(
       (entity) => entity.type === 'movingPlatform' && entity.id.startsWith('early-'),
     );
-    const final = BERLIN_ENTITIES.filter(
-      (entity) => entity.type === 'movingPlatform' && entity.id.startsWith('final-'),
-    );
     expect(early).toHaveLength(2);
-    expect(final).toHaveLength(2);
     expect(early.map((p) => 'phaseMs' in p && p.phaseMs).sort()).toEqual([0, 1350]);
-    expect(final.map((p) => 'phaseMs' in p && p.phaseMs).sort()).toEqual([0, 1050]);
   });
-  it('leaves no ground segment or platform overlapping a pit range', () => {
-    for (const pit of PIT_ZONES) {
-      for (const segment of GROUND_SEGMENTS) {
-        const overlaps = segment.startX < pit.endX && segment.endX > pit.startX;
-        expect(overlaps).toBe(false);
-      }
-    }
-  });
-  it('defines three ground segments that never cover the pit ranges', () => {
-    expect(GROUND_SEGMENTS.map((segment) => [segment.startX, segment.endX])).toEqual([
-      [0, 1600],
-      [3200, 12000],
-      [13800, 15500],
-    ]);
+  it('defines one unbroken ground segment across the world', () => {
+    expect(GROUND_SEGMENTS.map((segment) => [segment.startX, segment.endX])).toEqual([[0, 15500]]);
   });
 });
 

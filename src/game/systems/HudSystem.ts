@@ -13,7 +13,6 @@ const style: Phaser.Types.GameObjects.Text.TextStyle = {
 };
 
 export class HudSystem {
-  readonly time: Phaser.GameObjects.Text;
   readonly score: Phaser.GameObjects.Text;
   readonly message: Phaser.GameObjects.Text;
   readonly jump: Phaser.GameObjects.Container;
@@ -27,7 +26,6 @@ export class HudSystem {
     uiLayer?: Phaser.GameObjects.Layer,
   ) {
     this.scene = scene;
-    this.time = scene.add.text(0, 0, '', style);
     this.score = scene.add.text(0, 0, '', style).setOrigin(1, 0);
     this.message = scene.add
       .text(0, 0, '', { ...style, fontSize: '26px', align: 'center' })
@@ -61,14 +59,13 @@ export class HudSystem {
     // Safety net: if the pointer leaves the game canvas entirely mid-drag
     // (common on touch devices), the button never sees pointerup/pointerout.
     scene.input.on('gameout', () => onDuck(false));
-    const objects = [this.time, this.score, this.message, this.jump, this.duck];
+    const objects = [this.score, this.message, this.jump, this.duck];
     objects.forEach((object) => object.setScrollFactor(0).setDepth(Depth.UI));
     uiLayer?.add(objects);
     this.applyLayout(getViewportInfo(scene.scale));
   }
 
   update(progress: BerlinProgress): void {
-    this.time.setText(`TIME  ${Math.ceil(progress.seconds)}`);
     this.score.setText(`SCORE  ${progress.score}\nUSB  ${progress.hasUsb ? '✓' : '—'}`);
   }
 
@@ -96,7 +93,6 @@ export class HudSystem {
     const height = bottom - top;
     const margin = viewport.safeMargin;
     const scale = viewport.compactLandscape ? 0.82 : 1;
-    this.time.setPosition(margin, margin).setScale(viewport.hudScale);
     this.score.setPosition(width - margin, margin).setScale(viewport.hudScale);
     this.message.setPosition(width / 2, margin + 66).setScale(viewport.hudScale);
     this.jump.setPosition(width - margin - 66, height - margin - 66).setScale(scale);

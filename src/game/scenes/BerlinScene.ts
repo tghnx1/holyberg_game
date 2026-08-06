@@ -3,7 +3,6 @@ import {
   Depth,
   DESIGN_HEIGHT,
   GROUND_Y,
-  HIT_TIME,
   START_TIME,
   WORLD_WIDTH,
 } from '../constants';
@@ -12,7 +11,6 @@ import {
   BERLIN_SECTIONS,
   CLUB_ENTRANCE_X,
   GROUND_SEGMENTS,
-  PIT_ZONES,
 } from '../level/berlin/berlinLevelConfig';
 import { applyCollectibleReward } from '../level/berlin/berlinRules';
 import {
@@ -62,7 +60,6 @@ export class BerlinScene extends Phaser.Scene {
   private editorKey?: Phaser.Input.Keyboard.Key;
   private debugOverlay?: Phaser.GameObjects.Container;
   private debugGraphics?: Phaser.GameObjects.Graphics;
-  private gameOverOverlay?: { background: Phaser.GameObjects.Rectangle; text: Phaser.GameObjects.Text };
 
   constructor() {
     super('BerlinScene');
@@ -91,16 +88,6 @@ export class BerlinScene extends Phaser.Scene {
       );
       this.physics.add.existing(ground, true);
       this.physics.add.collider(this.player, ground);
-    });
-    PIT_ZONES.forEach((pit) => {
-      const killZone = this.add.zone(
-        (pit.startX + pit.endX) / 2,
-        DESIGN_HEIGHT + 80,
-        pit.endX - pit.startX,
-        200,
-      );
-      this.physics.add.existing(killZone, true);
-      this.physics.add.overlap(this.player, killZone, () => this.gameOver());
     });
     if (import.meta.env.DEV) console.debug('[BerlinScene] before LevelBuilder.build');
     this.levelBuilder = new LevelBuilder(this, this.layers.gameplay);
@@ -131,7 +118,6 @@ export class BerlinScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.level.collectibles, (_player, zone) =>
       this.collect(zone as Phaser.GameObjects.Zone),
     );
-    this.physics.add.overlap(this.player, this.level.finish, () => this.finish());
     if (import.meta.env.DEV) console.debug('[BerlinScene] before HUD creation');
     this.hud = new HudSystem(
       this,
@@ -203,7 +189,6 @@ export class BerlinScene extends Phaser.Scene {
       this.intro.destroy();
       this.hud.flash(BERLIN_SECTIONS[0].label, 900);
     } else if (this.progress.state === 'running') this.player.requestJump(this.time.now);
-    else if (this.progress.state === 'gameOver') this.scene.restart();
   }
 
   private setDuck(pressed: boolean): void {
@@ -222,9 +207,8 @@ export class BerlinScene extends Phaser.Scene {
     this.invulnerable = true;
     this.sections.markDamage();
     this.scoreSystem.hitObstacle();
-    this.progress.seconds = Math.max(0, this.progress.seconds - HIT_TIME);
     this.syncScore();
-    this.hud.flash(`HIT ${config.id.toUpperCase()}\n-${HIT_TIME} SEC  -100`);
+    this.hud.flash(`HIT ${config.id.toUpperCase()}\n-100`);
     this.player.hurt();
     this.player.startHitReaction(this.time.now);
     this.player.setTintFill(0xff3d66);
@@ -233,7 +217,6 @@ export class BerlinScene extends Phaser.Scene {
       this.invulnerable = false;
       this.player.clearTint();
     });
-    if (this.progress.seconds <= 0) this.gameOver();
   }
 
   private collect(zone: Phaser.GameObjects.Zone): void {
@@ -272,41 +255,11 @@ export class BerlinScene extends Phaser.Scene {
     );
   }
 
-  private gameOver(): void {
-    if (this.progress.state === 'gameOver') return;
-    this.progress.state = 'gameOver';
-    this.player.halt();
-    this.physics.pause();
-    const camera = this.cameras.main;
-    const cx = camera.width / 2;
-    const cy = camera.height / 2;
-    const background = this.add
-      .rectangle(cx, cy, 680, 240, 0x0a0710, 0.94)
-      .setScrollFactor(0)
-      .setDepth(Depth.UI);
-    const text = this.add
-      .text(cx, cy, 'YOU MISSED YOUR SET\n\nPRESS SPACE OR TAP JUMP TO RESTART', {
-        fontFamily: 'Archivo Black',
-        fontSize: '34px',
-        color: '#ff5b49',
-        align: 'center',
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(Depth.UI);
-    this.gameOverOverlay = { background, text };
-    this.layers.ui.add([background, text]);
-  }
-
   private repositionOverlays(): void {
     const camera = this.cameras.main;
     const cx = camera.width / 2;
     const cy = camera.height / 2;
     if (this.intro?.active) this.intro.setPosition(cx, cy);
-    if (this.gameOverOverlay) {
-      this.gameOverOverlay.background.setPosition(cx, cy);
-      this.gameOverOverlay.text.setPosition(cx, cy);
-    }
   }
 
   private createDevelopmentTools(): void {
@@ -437,7 +390,7 @@ export class BerlinScene extends Phaser.Scene {
     return playerBody.velocity.y >= 0 && previousBottom <= platformBody.top + 6;
   }
 
-  update(_time: number, delta: number): void {
+  update(): void {
     this.layerDebug?.update();
     // Edit mode owns the frame: returning here freezes the player, the
     // countdown and every gameplay check, and keeps arrow keys and space
@@ -478,7 +431,6 @@ export class BerlinScene extends Phaser.Scene {
       });
     }
     if (!this.finishTriggered && this.player.x >= CLUB_ENTRANCE_X) this.finish();
-    this.progress.seconds = Math.max(0, this.progress.seconds - delta / 1000);
     const transition = this.sections.update(this.player.x);
     if (transition.changed) {
       if (transition.clean) this.scoreSystem.awardCleanSection();
@@ -486,6 +438,5 @@ export class BerlinScene extends Phaser.Scene {
       this.hud.flash(`${transition.label}${transition.clean ? '\nCLEAN +250' : ''}`, 900);
     }
     this.hud.update(this.progress);
-    if (this.progress.seconds <= 0) this.gameOver();
   }
 }

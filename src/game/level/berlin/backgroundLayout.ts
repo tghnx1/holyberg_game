@@ -88,11 +88,8 @@ export const backgroundLayout = {
   },
   ground: {
     asphaltColor: 0x100c1b,
-    voidColor: 0x050308,
     asphaltHeight: 110,
     asphaltOffsetY: 55,
-    pitHeight: 440,
-    pitOffsetY: 230,
     depth: Depth.GAMEPLAY,
   },
 } as const;
