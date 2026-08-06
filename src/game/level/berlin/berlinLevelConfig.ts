@@ -151,8 +151,11 @@ const movingObstacle = (
   artSlot,
 });
 
+// Authoritative level layout. The dev layout editor (E) saves a draft to
+// localStorage, which is per-browser and never leaves the machine it was
+// edited on; this array is what every browser and device actually loads, so
+// a finished layout must be exported back into it.
 export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
-  // SECTION 1 — TUTORIAL — x 0–1600
   {
     id: 'usb',
     type: 'collectible',
@@ -165,14 +168,10 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     score: 500,
     artSlot: 'collectible.usb',
   },
-  groundObstacle('trash-bags', 1000, 'TRASH BAGS', 'obstacle.trash'),
-  duckObstacle('low-sign', 1400, 'LOW SIGN', 'obstacle.lowSign', 150, 30, 164, 34),
-
-  // SECTION 2 — FIRST PIT — x 1600–3200
-  movingPlatform('early-moving-platform-1', 2050, 340, 490, 'vertical', 60, 2700, 0),
-  movingPlatform('early-moving-platform-2', 2700, 320, 390, 'vertical', 60, 2700, 1350),
-
-  // SECTION 3 — KIEZ STREET — x 3200–5000
+  groundObstacle('trash-bags', 1000, 'TRASH BAGS', 'obstacle.trash', 84, 62),
+  duckObstacle('low-sign', 1400, 'LOW SIGN', 'obstacle.lowSign', 150, 30, 164, 34, 10),
+  movingPlatform('early-moving-platform-1', 2049, 340, 455, 'vertical', 60, 2700, 0),
+  movingPlatform('early-moving-platform-2', 2699, 320, 348, 'vertical', 60, 2700, 1350),
   {
     id: 'headphones',
     type: 'collectible',
@@ -186,10 +185,21 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     artSlot: 'collectible.headphones',
   },
   groundObstacle('scooter', 3450, 'SCOOTER', 'obstacle.scooter', 100, 55),
-  movingObstacle('cyclist-1', 4250, 'CYCLIST', 'npc.cyclist', 105, 78, 96, 72, 80, 2600),
+  // Nudged off the derived ground baseline in the layout editor.
+  {
+    id: 'cyclist-1',
+    type: 'obstacle',
+    action: 'moving',
+    label: 'CYCLIST',
+    x: 4239,
+    y: 569,
+    width: 105,
+    height: 78,
+    hitbox: { width: 96, height: 72, offsetX: 0, offsetY: 3 },
+    movement: { distance: 80, durationMs: 2600 },
+    artSlot: 'npc.cyclist',
+  },
   groundObstacle('street-barrier', 4750, 'BARRIER', 'obstacle.barrier', 105, 68),
-
-  // SECTION 4 — OBERBAUMBRÜCKE — x 5000–6800
   {
     id: 'poster',
     type: 'collectible',
@@ -205,15 +215,13 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
   duckObstacle('bridge-cable', 5200, 'BRIDGE CABLE', 'obstacle.cable', 160, 25, 176, 32, 12),
   groundObstacle('bridge-crate', 5600, 'CRATE', 'obstacle.trash', 90, 60),
   movingObstacle('wanderer-1', 6150, 'NIGHT WANDERER', 'npc.wanderer', 70, 100, 61, 94, 70, 2800),
-
-  // SECTION 5 — NIGHT BERLIN — x 6800–8500
   {
     id: 'night-bonus',
     type: 'collectible',
     kind: 'energy',
     label: 'NIGHT BONUS',
-    x: 7600,
-    y: 350,
+    x: 7604,
+    y: 345,
     width: 48,
     height: 48,
     score: 250,
@@ -223,26 +231,35 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
   platform('platform-1', 7100, 440, 470),
   duckObstacle('night-pipe', 8100, 'LOW PIPE', 'obstacle.pipe', 160, 30, 174, 34, 11),
   groundObstacle('taxi', 8400, 'TAXI', 'obstacle.taxi', 175, 82),
-
-  // SECTION 6 — SCAFFOLD ASCENT — x 8500–10300
   groundObstacle('scaffold-barrier', 8750, 'BARRIER', 'obstacle.barrier', 115, 72),
   platform('platform-2', 9000, 360, 470),
-  platform('platform-3', 9600, 320, 380),
+  platform('platform-3', 9594, 320, 356),
   {
     id: 'artifact-1',
     type: 'collectible',
     kind: 'vinyl',
     label: 'ARTIFACT',
-    x: 9850,
-    y: 205,
+    x: 9926,
+    y: 190,
     width: 48,
     height: 48,
     score: 400,
     artSlot: 'collectible.vinyl',
   },
-  movingObstacle('cyclist-2', 10100, 'CYCLIST', 'npc.cyclist', 105, 78, 96, 72, 70, 2900),
-
-  // SECTION 7 — ROOFTOPS — x 10300–12000
+  // Nudged off the derived ground baseline in the layout editor.
+  {
+    id: 'cyclist-2',
+    type: 'obstacle',
+    action: 'moving',
+    label: 'CYCLIST',
+    x: 9982,
+    y: 569,
+    width: 105,
+    height: 78,
+    hitbox: { width: 96, height: 72, offsetX: 0, offsetY: 3 },
+    movement: { distance: 70, durationMs: 2900 },
+    artSlot: 'npc.cyclist',
+  },
   duckObstacle('rooftop-cable', 10600, 'ROOFTOP CABLE', 'obstacle.cable', 160, 25, 176, 32, 12),
   platform('platform-4', 10700, 360, 470),
   groundObstacle('rooftop-crate', 11100, 'ROOFTOP CRATE', 'obstacle.trash', 100, 65),
@@ -253,22 +270,17 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     type: 'collectible',
     kind: 'poster',
     label: 'ARTIFACT',
-    x: 11800,
-    y: 155,
+    x: 11977,
+    y: 127,
     width: 48,
     height: 48,
     score: 500,
     artSlot: 'collectible.poster',
   },
-
-  // SECTION 8 — FINAL MOVING PLATFORM PIT — x 12000–13800
   movingPlatform('final-moving-platform-1', 12150, 280, 450, 'horizontal', 110, 2300, 0, 11300, true),
   movingPlatform('final-moving-platform-2', 12550, 260, 300, 'horizontal', 140, 2100, 1050, 11300),
   movingPlatform('final-moving-platform-3', 12950, 280, 400, 'horizontal', 140, 2100, 1050, 11300),
-  movingPlatform('final-moving-platform-4', 13350, 260, 350, 'horizontal', 140, 2100, 1050, 11300),
-  movingPlatform('final-moving-platform-5', 13750, 280, 200, 'horizontal', 140, 2100, 1050, 11300),
-
-  // SECTION 9 — CLUB FINALE — x 13800–15500
+  movingPlatform('final-moving-platform-5', 13472, 280, 256, 'horizontal', 140, 2100, 1050, 11300),
   groundObstacle('final-barrier', 14000, 'BARRIER', 'obstacle.barrier', 115, 72),
   duckObstacle('club-awning', 14400, 'CLUB AWNING', 'obstacle.lowSign', 160, 28, 174, 32, 10),
   movingObstacle('final-wanderer', 14800, 'NIGHT WANDERER', 'npc.wanderer', 70, 100, 61, 94, 60, 3000),
@@ -283,6 +295,42 @@ export const BERLIN_ENTITIES: readonly BerlinEntity[] = [
     height: 66,
     score: 250,
     artSlot: 'collectible.pass',
+  },
+  {
+    id: 'artifact-2-copy',
+    type: 'collectible',
+    kind: 'poster',
+    label: 'ARTIFACT',
+    x: 12730,
+    y: 111,
+    width: 48,
+    height: 48,
+    score: 500,
+    artSlot: 'collectible.poster',
+  },
+  {
+    id: 'artifact-2-copy-copy',
+    type: 'collectible',
+    kind: 'poster',
+    label: 'ARTIFACT',
+    x: 13827,
+    y: 124,
+    width: 48,
+    height: 48,
+    score: 500,
+    artSlot: 'collectible.poster',
+  },
+  {
+    id: 'artifact-1-copy',
+    type: 'collectible',
+    kind: 'vinyl',
+    label: 'ARTIFACT',
+    x: 3008,
+    y: 190,
+    width: 48,
+    height: 48,
+    score: 400,
+    artSlot: 'collectible.vinyl',
   },
 ] as const;
 

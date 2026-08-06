@@ -185,14 +185,39 @@ export class LevelEditorSystem {
     this.scene.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_WHEEL, this.onWheel, this);
 
-    // Applied at build time, not on entering layout mode, so a saved layout is
-    // already in place for the first frame the player sees.
-    this.restoreSavedConfig();
+    // BERLIN_ENTITIES is the authoritative layout. A localStorage draft is
+    // per-browser, so applying it automatically made the same build show a
+    // different level on a phone than on the desktop that edited it, and let a
+    // stale draft mask later source edits. It now loads only on request.
+    if (this.draftRequested()) this.restoreSavedConfig();
+    else this.warnAboutUnappliedDraft();
     this.restored = true;
   }
 
   get active(): boolean {
     return this.enabled;
+  }
+
+  /** Opt-in for an in-progress layout draft: open the game with `?draft=1`. */
+  private draftRequested(): boolean {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('draft') === '1';
+  }
+
+  private warnAboutUnappliedDraft(): void {
+    if (typeof window === 'undefined') return;
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    console.info(
+      `[LevelEditor] A saved layout draft exists in this browser but was NOT applied: ` +
+        `berlinLevelConfig.ts is authoritative. Open with ?draft=1 to load the draft, ` +
+        `or export it into BERLIN_ENTITIES to make it real for every device.`,
+    );
   }
 
   /** Drops every listener this system registered, for scene shutdown. */
@@ -648,7 +673,7 @@ export class LevelEditorSystem {
 
   private panelText(): string {
     const lines = [
-      'LEVEL EDITOR  —  E exit   P save config',
+      'LEVEL EDITOR  —  E exit   P save draft (localStorage, this browser only)',
       'click select · drag move · arrows 1px · shift+arrows 10px',
       '+/- resize (shift = coarse) · C copy · V paste · del remove',
       'drag empty space to scroll · wheel to zoom · arrows scroll when nothing selected',
