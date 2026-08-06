@@ -26,8 +26,10 @@ import { addFullscreenButton, OrientationController } from '../responsive/Orient
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
 import { CullingSystem } from '../systems/CullingSystem';
 import { HudSystem } from '../systems/HudSystem';
-import { LayerDebugSystem } from '../systems/LayerDebugSystem';
-import { LevelEditorSystem } from '../systems/LevelEditorSystem';
+// Type-only: the implementations are dynamically imported below so the whole
+// editor is dropped from a production bundle rather than shipped as dead code.
+import type { LayerDebugSystem } from '../systems/LayerDebugSystem';
+import type { LevelEditorSystem } from '../systems/LevelEditorSystem';
 import { SectionTracker } from '../systems/SectionTracker';
 import type { BerlinProgress } from '../types/game';
 
@@ -153,7 +155,7 @@ export class BerlinScene extends Phaser.Scene {
     this.space = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.followPlayer();
-    if (import.meta.env.DEV) this.createDevelopmentTools();
+    void this.createDevelopmentTools();
     // `once` so a restart cannot stack handlers; everything registered above
     // is released here rather than left attached to a dead scene.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
@@ -269,7 +271,15 @@ export class BerlinScene extends Phaser.Scene {
     if (this.intro?.active) this.intro.setPosition(cx, cy);
   }
 
-  private createDevelopmentTools(): void {
+  private async createDevelopmentTools(): Promise<void> {
+    // Guard inside the method, not at the call site: with DEV folded to false
+    // the bundler drops everything below, so the editor chunks are never even
+    // emitted for a production build.
+    if (!import.meta.env.DEV) return;
+    const [{ LayerDebugSystem }, { LevelEditorSystem }] = await Promise.all([
+      import('../systems/LayerDebugSystem'),
+      import('../systems/LevelEditorSystem'),
+    ]);
     this.layerDebug = new LayerDebugSystem(this, this.layers);
     const layoutEditor = new LevelEditorSystem(this, this.level.entities, {
       // Platforms and collectibles join groups the colliders already watch;

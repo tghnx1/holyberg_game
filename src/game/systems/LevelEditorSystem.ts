@@ -22,8 +22,10 @@ const MIN_SIZE = 8;
 const PASTE_OFFSET = 40;
 /** How long the on-screen confirmation stays up. */
 const TOAST_MS = 1000;
-/** Where `P` persists the layout, and where entering layout mode reads it. */
+/** Local backup only; the JSON file written by SAVE_ENDPOINT is authoritative. */
 const STORAGE_KEY = 'holyberg-background-layout';
+/** Handled by the dev-only Vite middleware; absent from production builds. */
+const SAVE_ENDPOINT = '/__level-editor/save';
 /** Camera zoom limits while panning the map; 1 is normal gameplay scale. */
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 2;
@@ -99,6 +101,8 @@ export class LevelEditorSystem {
   private pasteCount = 0;
   private readonly deleted: string[] = [];
   private restored = false;
+  /** Set while a save is in flight so P cannot stack overlapping requests. */
+  private saving = false;
   private panning?: { pointerX: number; pointerY: number; scrollX: number; scrollY: number };
   /** Last action feedback, shown in the panel so a keypress is never silent. */
   private status = '';
@@ -185,10 +189,9 @@ export class LevelEditorSystem {
     this.scene.input.on(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_WHEEL, this.onWheel, this);
 
-    // BERLIN_ENTITIES is the authoritative layout. A localStorage draft is
-    // per-browser, so applying it automatically made the same build show a
-    // different level on a phone than on the desktop that edited it, and let a
-    // stale draft mask later source edits. It now loads only on request.
+    // The generated JSON is the level. A localStorage backup is per-browser,
+    // so applying it automatically would make the same build show a different
+    // level on a phone than on the desktop that edited it.
     if (this.draftRequested()) this.restoreSavedConfig();
     else this.warnAboutUnappliedDraft();
     this.restored = true;
@@ -196,6 +199,22 @@ export class LevelEditorSystem {
 
   get active(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * Reapplies this browser's backup over the loaded level. Nothing is written
+   * to the JSON file until P is pressed. Call from the console as
+   * `__game.scene.getScene('BerlinScene').editor.restoreDraft()`, or open the
+   * game with `?draft=1`.
+   */
+  restoreDraft(): boolean {
+    this.restored = false;
+    const before = this.entities.length;
+    this.restoreSavedConfig();
+    this.restored = true;
+    const applied = this.entities.length !== before || this.deleted.length > 0;
+    this.flash(applied ? 'DRAFT RESTORED' : 'NO DRAFT FOUND');
+    return applied;
   }
 
   /** Opt-in for an in-progress layout draft: open the game with `?draft=1`. */
@@ -673,7 +692,7 @@ export class LevelEditorSystem {
 
   private panelText(): string {
     const lines = [
-      'LEVEL EDITOR  —  E exit   P save draft (localStorage, this browser only)',
+      'LEVEL EDITOR  —  E exit   P save to berlinLevel.generated.json',
       'click select · drag move · arrows 1px · shift+arrows 10px',
       '+/- resize (shift = coarse) · C copy · V paste · del remove',
       'drag empty space to scroll · wheel to zoom · arrows scroll when nothing selected',
@@ -716,16 +735,51 @@ export class LevelEditorSystem {
    * `__game.scene.getScene('BerlinScene').editor.saveConfig()`.
    */
   saveConfig(): void {
+    if (this.saving) {
+      this.flash('SAVE ALREADY IN PROGRESS');
+      return;
+    }
     const config = this.entities.map(({ config: entity }) => entity);
     const json = JSON.stringify(config, null, 2);
     console.log(json);
+
+    // Backup first: if the request fails the work is still recoverable from
+    // this browser via restoreDraft().
     try {
       window.localStorage.setItem(STORAGE_KEY, json);
-      this.flash('CONFIG SAVED');
     } catch {
-      // Private browsing or a full quota; the console copy is still there.
-      this.flash('SAVE FAILED — SEE CONSOLE');
+      console.warn('[LevelEditor] could not write the localStorage backup');
     }
+
+    this.saving = true;
+    this.flash('SAVING…');
+    void fetch(SAVE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: json,
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+        this.flash('CONFIG SAVED TO FILE');
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        // A refused connection means the Vite dev server is not running, which
+        // is by far the most common cause and not obvious from "Failed to fetch".
+        const hint =
+          error instanceof TypeError
+            ? ' Is `npm run dev` running? The save endpoint only exists on the dev server.'
+            : '';
+        console.error(
+          `[LevelEditor] save to ${SAVE_ENDPOINT} failed: ${message}.${hint} ` +
+            'The layout is still in this browser; call restoreDraft() to reapply it.',
+        );
+        this.flash('SAVE FAILED — SEE CONSOLE');
+      })
+      .finally(() => {
+        this.saving = false;
+      });
   }
 
   /**
