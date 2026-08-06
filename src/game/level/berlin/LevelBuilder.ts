@@ -37,6 +37,11 @@ export class LevelBuilder {
   private readonly movingPlatforms: Phaser.GameObjects.Zone[] = [];
   private readonly pendingActivations: PendingActivation[] = [];
   private readonly entities: BuiltEntity[] = [];
+  /**
+   * Zones torn down by the editor. Checked instead of `zone.active`, which the
+   * culling system toggles as objects leave and re-enter the camera.
+   */
+  private readonly removed = new WeakSet<Phaser.GameObjects.Zone>();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -98,6 +103,7 @@ export class LevelBuilder {
     const index = this.entities.findIndex((entity) => entity.zone === zone);
     if (index < 0) return;
     const [entity] = this.entities.splice(index, 1);
+    this.removed.add(zone);
 
     this.collectibles.remove(zone);
     this.platforms.remove(zone);
@@ -191,7 +197,7 @@ export class LevelBuilder {
 
     const startTween = (): void => {
       // The editor can delete a platform before its activation x is reached.
-      if (!zone.active) return;
+      if (this.removed.has(zone)) return;
       if (config.axis === 'horizontal') {
         this.scene.tweens.add({
           targets: [zone, artwork],

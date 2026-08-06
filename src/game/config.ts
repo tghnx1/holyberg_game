@@ -19,7 +19,17 @@ export const config: Phaser.Types.Core.GameConfig = {
   height: DESIGN_HEIGHT,
   backgroundColor: '#10091d',
   pixelArt: false,
+  // Nothing behind the canvas is ever meant to show through, so an opaque
+  // context lets the compositor skip blending the game against the page.
+  transparent: false,
+  render: {
+    powerPreference: 'high-performance',
+    transparent: false,
+  },
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: 1550 }, debug: false } },
-  scale: { mode: Phaser.Scale.EXPAND, autoCenter: Phaser.Scale.CENTER_BOTH },
+  // zoom 1 keeps the drawing buffer the same size as the CSS box: Phaser 3
+  // does not scale by devicePixelRatio, so this is a 1:1 backing store and a
+  // phone renders the same pixel count as a desktop at the same CSS size.
+  scale: { mode: Phaser.Scale.EXPAND, autoCenter: Phaser.Scale.CENTER_BOTH, zoom: 1 },
   scene: [BootScene, BerlinScene, RhythmScene, ResultScene],
 };

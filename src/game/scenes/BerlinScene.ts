@@ -24,6 +24,7 @@ import { buildBerlinWorld, type BuiltBerlinWorld } from '../level/berlinLevel';
 import { createSceneLayers, type SceneLayers } from '../level/sceneLayers';
 import { addFullscreenButton, OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
+import { CullingSystem } from '../systems/CullingSystem';
 import { HudSystem } from '../systems/HudSystem';
 import { LayerDebugSystem } from '../systems/LayerDebugSystem';
 import { LevelEditorSystem } from '../systems/LevelEditorSystem';
@@ -53,6 +54,7 @@ export class BerlinScene extends Phaser.Scene {
     Phaser.Physics.Arcade.Collider
   >();
   private pendingActivations: PendingActivation[] = [];
+  private culling!: CullingSystem;
   private readonly scoreSystem = new BerlinScoreSystem();
   private readonly sections = new SectionTracker();
   private layerDebug?: LayerDebugSystem;
@@ -92,6 +94,8 @@ export class BerlinScene extends Phaser.Scene {
     if (import.meta.env.DEV) console.debug('[BerlinScene] before LevelBuilder.build');
     this.levelBuilder = new LevelBuilder(this, this.layers.gameplay);
     this.level = this.levelBuilder.build();
+    this.culling = new CullingSystem(this);
+    this.culling.trackAll(this.level.entities);
     this.pendingActivations = this.level.pendingActivations;
     if (import.meta.env.DEV) console.debug('[BerlinScene] after LevelBuilder.build');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before obstacle overlaps');
@@ -150,6 +154,9 @@ export class BerlinScene extends Phaser.Scene {
     this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.followPlayer();
     if (import.meta.env.DEV) this.createDevelopmentTools();
+    // `once` so a restart cannot stack handlers; everything registered above
+    // is released here rather than left attached to a dead scene.
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.teardown, this);
   }
 
   private createIntro(): void {
@@ -270,6 +277,7 @@ export class BerlinScene extends Phaser.Scene {
       spawn: (config) => {
         const built = this.levelBuilder.addEntity(config);
         if (config.type === 'obstacle') this.watchObstacle(built.zone);
+        this.culling.track(built);
         return built;
       },
       despawn: (zone) => {
@@ -278,9 +286,14 @@ export class BerlinScene extends Phaser.Scene {
           this.physics.world.removeCollider(collider);
           this.obstacleColliders.delete(zone);
         }
+        this.culling.release(zone);
         this.levelBuilder.removeEntity(zone);
       },
-      releaseCamera: () => this.cameras.main.stopFollow(),
+      releaseCamera: () => {
+        // Panning the map must not leave objects hidden behind the cull test.
+        this.culling.restoreAll();
+        this.cameras.main.stopFollow();
+      },
       restoreCamera: () => this.followPlayer(),
     });
     this.editor = layoutEditor;
@@ -365,6 +378,23 @@ export class BerlinScene extends Phaser.Scene {
     );
   }
 
+  private teardown(): void {
+    this.editor?.destroy();
+    this.editor = undefined;
+    this.editorKey = undefined;
+    this.debugKey = undefined;
+    this.layerDebug = undefined;
+    this.culling.destroy();
+    for (const collider of this.obstacleColliders.values()) {
+      this.physics.world.removeCollider(collider);
+    }
+    this.obstacleColliders.clear();
+    this.pendingActivations.length = 0;
+    this.tweens.killAll();
+    this.time.removeAllEvents();
+    this.input.keyboard?.removeAllListeners();
+  }
+
   /** The gameplay camera: also used to undo the dev editor's free panning. */
   private followPlayer(): void {
     this.cameras.main.setZoom(1);
@@ -423,12 +453,12 @@ export class BerlinScene extends Phaser.Scene {
         });
       }
     }
-    if (this.pendingActivations.length) {
-      this.pendingActivations = this.pendingActivations.filter((pending) => {
-        if (this.player.x < pending.activationX) return true;
-        pending.activate();
-        return false;
-      });
+    // Swept in place: filter() would allocate a fresh array every frame.
+    for (let index = this.pendingActivations.length - 1; index >= 0; index -= 1) {
+      const pending = this.pendingActivations[index];
+      if (this.player.x < pending.activationX) continue;
+      pending.activate();
+      this.pendingActivations.splice(index, 1);
     }
     if (!this.finishTriggered && this.player.x >= CLUB_ENTRANCE_X) this.finish();
     const transition = this.sections.update(this.player.x);
@@ -438,5 +468,6 @@ export class BerlinScene extends Phaser.Scene {
       this.hud.flash(`${transition.label}${transition.clean ? '\nCLEAN +250' : ''}`, 900);
     }
     this.hud.update(this.progress);
+    this.culling.update();
   }
 }

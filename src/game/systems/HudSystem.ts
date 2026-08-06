@@ -18,6 +18,8 @@ export class HudSystem {
   readonly jump: Phaser.GameObjects.Container;
   readonly duck: Phaser.GameObjects.Container;
   private readonly scene: Phaser.Scene;
+  /** Last string pushed to the score label; setText re-renders its texture. */
+  private scoreText = '';
 
   constructor(
     scene: Phaser.Scene,
@@ -66,7 +68,10 @@ export class HudSystem {
   }
 
   update(progress: BerlinProgress): void {
-    this.score.setText(`SCORE  ${progress.score}\nUSB  ${progress.hasUsb ? '✓' : '—'}`);
+    const next = `SCORE  ${progress.score}\nUSB  ${progress.hasUsb ? '✓' : '—'}`;
+    if (next === this.scoreText) return;
+    this.scoreText = next;
+    this.score.setText(next);
   }
 
   flash(text: string, duration = 1100): void {

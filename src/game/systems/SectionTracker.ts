@@ -1,18 +1,33 @@
 import { BERLIN_SECTIONS, sectionIndexAtX } from '../level/berlin/berlinLevelConfig';
 
+export interface SectionTransition {
+  changed: boolean;
+  clean: boolean;
+  label: string;
+}
+
 export class SectionTracker {
   index = 0;
   damaged = false;
+  /** Reused so the per-frame call in BerlinScene.update allocates nothing. */
+  private readonly result: SectionTransition = { changed: false, clean: false, label: '' };
   markDamage(): void {
     this.damaged = true;
   }
-  update(x: number): { changed: boolean; clean: boolean; label: string } {
+  update(x: number): SectionTransition {
     const next = sectionIndexAtX(x);
-    if (next === this.index)
-      return { changed: false, clean: false, label: BERLIN_SECTIONS[this.index].label };
-    const clean = !this.damaged && next > this.index;
+    const result = this.result;
+    if (next === this.index) {
+      result.changed = false;
+      result.clean = false;
+      result.label = BERLIN_SECTIONS[this.index].label;
+      return result;
+    }
+    result.changed = true;
+    result.clean = !this.damaged && next > this.index;
+    result.label = BERLIN_SECTIONS[next].label;
     this.index = next;
     this.damaged = false;
-    return { changed: true, clean, label: BERLIN_SECTIONS[next].label };
+    return result;
   }
 }

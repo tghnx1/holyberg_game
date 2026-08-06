@@ -195,6 +195,16 @@ export class LevelEditorSystem {
     return this.enabled;
   }
 
+  /** Drops every listener this system registered, for scene shutdown. */
+  destroy(): void {
+    this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
+    this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
+    this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this);
+    this.scene.input.off(Phaser.Input.Events.POINTER_WHEEL, this.onWheel, this);
+    this.toastTimer?.remove();
+    this.toastTimer = undefined;
+  }
+
   toggle(): void {
     if (this.enabled) this.disable();
     else this.enable();

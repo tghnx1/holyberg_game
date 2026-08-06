@@ -77,9 +77,12 @@ export const backgroundLayout = {
     /**
      * Sizes the first house in `items`; the rest are scaled to match its
      * rendered height, so differing source resolutions don't change how big
-     * a house comes out.
+     * a house comes out. Tied to the source resolution: the textures were
+     * downsampled to 4096px wide for mobile texture limits, and this value
+     * was raised from 0.26 to keep the rendered size identical. Re-exporting
+     * a house at a different height means recomputing it.
      */
-    scale: 0.26,
+    scale: 0.551619,
     items: [
       { name: 'house-1', key: 'berlin-house-1', anchor: 'left' as const, x: -300 },
       { name: 'house-2', key: 'berlin-house-2', anchor: 'left' as const, x: WORLD_WIDTH / 2 },
