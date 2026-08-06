@@ -22,16 +22,6 @@ export class OrientationController {
 
   refresh(): void {
     const viewport = getViewportInfo(this.scene.scale);
-    if (import.meta.env.DEV) {
-      console.debug('[Orientation]', {
-        scene: this.scene.scene.key,
-        width: viewport.physicalWidth,
-        height: viewport.physicalHeight,
-        portrait: viewport.portrait,
-        fullscreen: this.scene.scale.isFullscreen,
-        scenePaused: this.scene.scene.isPaused(),
-      });
-    }
     // A zero or absent measurement is not an orientation. Acting on one would
     // latch the scene paused on the frame it was created, and recovery would
     // depend on a later RESIZE that may never arrive.

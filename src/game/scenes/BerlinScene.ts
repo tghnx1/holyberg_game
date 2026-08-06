@@ -6,7 +6,6 @@ import {
   START_TIME,
   WORLD_WIDTH,
 } from '../constants';
-import { trace } from '../debugTrace';
 import { Player } from '../entities/Player';
 import {
   BERLIN_ENTITIES,
@@ -353,18 +352,6 @@ export class BerlinScene extends Phaser.Scene {
 
   private finish(): void {
     if (this.finishTriggered || this.progress.state !== 'running') return;
-    trace(`finish fs=${this.scale.isFullscreen} paused=${this.scene.isPaused()}`);
-    if (import.meta.env.DEV) {
-      console.debug('[Berlin → Rhythm] finish', {
-        fullscreen: this.scale.isFullscreen,
-        scenePaused: this.scene.isPaused(),
-        physicsPaused: this.physics.world.isPaused,
-        parentSize: {
-          width: this.scale.parentSize.width,
-          height: this.scale.parentSize.height,
-        },
-      });
-    }
     this.finishTriggered = true;
     this.progress.state = 'won';
     this.progress.score = this.scoreSystem.finish(this.progress.seconds);
@@ -376,21 +363,7 @@ export class BerlinScene extends Phaser.Scene {
       1800,
     );
     this.time.delayedCall(2200, () => {
-      trace('delayedCall fired -> scene.start(RhythmScene)');
-      if (import.meta.env.DEV) console.debug('[Berlin → Rhythm] starting RhythmScene');
-      const rhythm = this.scene.manager.getScene('RhythmScene');
-      trace(`Rhythm target exists=${Boolean(rhythm)} status=${rhythm?.sys.settings.status}`);
-      trace('before scene.start');
-      try {
-        this.scene.start('RhythmScene', { score: this.progress.score });
-        trace('scene.start returned');
-      } catch (error) {
-        trace(
-          `scene.start THREW: ${
-            error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-          }`,
-        );
-      }
+      this.scene.start('RhythmScene', { score: this.progress.score });
     });
   }
 
@@ -515,50 +488,32 @@ export class BerlinScene extends Phaser.Scene {
     );
   }
 
+  /**
+   * Releases only what Phaser does not.
+   *
+   * Registered from create(), so it runs *after* the systems that register at
+   * scene boot: by this point ArcadePhysics.shutdown has already nulled
+   * `physics.world`, TweenManager.shutdown has already called killAll, and
+   * Clock.shutdown has already destroyed every timer. Repeating that work here
+   * threw on the null world, and because SHUTDOWN runs inside
+   * SceneManager.processQueue during game.step — which re-arms
+   * requestAnimationFrame only after it returns — the throw stopped the loop
+   * and the queued start of RhythmScene never ran.
+   */
   private teardown(): void {
-    // TEMPORARY: each step is isolated so the on-screen trace names the one
-    // that throws. A throw here escapes through SceneManager.processQueue into
-    // game.step, and Phaser re-arms requestAnimationFrame only after step
-    // returns — so one bad line stops the whole loop and RhythmScene never
-    // starts. Catching per step is diagnosis, not the fix.
-    const step = (name: string, run: () => void): void => {
-      trace(`${name} begin`);
-      try {
-        run();
-        trace(`${name} done`);
-      } catch (error) {
-        trace(
-          `TEARDOWN THREW at ${name}: ${
-            error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-          }`,
-        );
-        console.error(`[BerlinScene] teardown failed at ${name}`, error);
-      }
-    };
-
-    trace('Berlin SHUTDOWN begin');
     this.shuttingDown = true;
-    step('hud.destroy', () => this.hud.destroy());
-    step('tutorial.destroy', () => this.tutorial.destroy());
-    step('editor.destroy', () => this.editor?.destroy());
-    step('culling.destroy', () => this.culling.destroy());
-    step('removeColliders', () => {
-      for (const collider of this.obstacleColliders.values()) {
-        this.physics.world.removeCollider(collider);
-      }
-      this.obstacleColliders.clear();
-    });
-    step('pendingActivations.clear', () => {
-      this.pendingActivations.length = 0;
-    });
-    step('tweens.killAll', () => this.tweens.killAll());
-    step('time.removeAllEvents', () => this.time.removeAllEvents());
-    step('keyboard.removeAllListeners', () => this.input.keyboard?.removeAllListeners());
+    // Listeners on the *game* emitter outlive the scene, so these must go.
+    this.hud.destroy();
+    this.tutorial.destroy();
+    this.editor?.destroy();
+    this.culling.destroy();
+    // The colliders themselves are gone with the world; just drop our handles.
+    this.obstacleColliders.clear();
+    this.pendingActivations.length = 0;
     this.editor = undefined;
     this.editorKey = undefined;
     this.debugKey = undefined;
     this.layerDebug = undefined;
-    trace('Berlin SHUTDOWN end');
   }
 
   /** The gameplay camera: also used to undo the dev editor's free panning. */
