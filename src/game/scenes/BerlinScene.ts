@@ -330,7 +330,7 @@ export class BerlinScene extends Phaser.Scene {
     });
     this.editor = layoutEditor;
     this.input.keyboard?.on('keydown-P', () => {
-      layoutEditor.printConfig();
+      layoutEditor.saveConfig();
     });
     this.editorKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.debugKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);

@@ -22,6 +22,8 @@ const MIN_SIZE = 8;
 const PASTE_OFFSET = 40;
 /** How long the on-screen confirmation stays up. */
 const TOAST_MS = 1000;
+/** Where `P` persists the layout, and where entering layout mode reads it. */
+const STORAGE_KEY = 'holyberg-background-layout';
 
 const COLOR_IDLE = 0x53ffe0;
 const COLOR_SELECTED = 0xffe36d;
@@ -29,7 +31,7 @@ const COLOR_START = 0x7ef0ff;
 const COLOR_END = 0xff7ac1;
 
 interface EditableEntity {
-  /** Mutable working copy of the authored config; `C` prints these. */
+  /** Mutable working copy of the authored config; `P` saves these. */
   config: EditableConfig;
   artwork: Phaser.GameObjects.Container;
   zone: Phaser.GameObjects.Zone;
@@ -59,7 +61,7 @@ export interface LevelEditorHooks {
  */
 export class LevelEditorSystem {
   private readonly entities: EditableEntity[];
-  /** Authored positions, kept so `C` can report what actually changed. */
+  /** Authored positions, kept so a saved layout can report what changed. */
   private readonly authored = new Map<string, { x: number; y: number; movementDistance?: number }>();
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly panel: Phaser.GameObjects.Text;
@@ -79,6 +81,7 @@ export class LevelEditorSystem {
   private clipboard?: EditableConfig;
   private pasteCount = 0;
   private readonly deleted: string[] = [];
+  private restored = false;
   /** Last action feedback, shown in the panel so a keypress is never silent. */
   private status = '';
 
@@ -126,7 +129,7 @@ export class LevelEditorSystem {
       .setVisible(false);
 
     // Screen-fixed confirmation, independent of the panel so it shows even
-    // when printConfig is called from the console with edit mode off.
+    // when saveConfig is called from the console with edit mode off.
     this.toast = this.scene.add
       .text(this.scene.scale.width / 2, 90, '', {
         fontFamily: 'Archivo Black',
@@ -183,6 +186,12 @@ export class LevelEditorSystem {
     for (const entity of this.entities) {
       if (entity.config.type !== 'movingPlatform') continue;
       this.shift(entity, entity.config.x - entity.artwork.x, entity.config.y - entity.artwork.y);
+    }
+    // Only on the first entry per scene: re-reading on every toggle would
+    // throw away edits made since the last save whenever you dip out to play.
+    if (!this.restored) {
+      this.restored = true;
+      this.restoreSavedConfig();
     }
     this.graphics.setVisible(true);
     this.panel.setVisible(true);
@@ -283,13 +292,18 @@ export class LevelEditorSystem {
       config.hitbox.offsetY = Math.round(config.hitbox.offsetY * scaleY);
     }
 
-    // PlaceholderFactory puts the sized image or rectangle first in the
-    // container; the optional debug label after it keeps its own size.
+    this.applyArtworkSize(entity, width, height);
+    this.resizeZone(entity, scaleX, scaleY);
+  }
+
+  /**
+   * PlaceholderFactory puts the sized image or rectangle first in the
+   * container; the optional debug label after it keeps its own size.
+   */
+  private applyArtworkSize(entity: EditableEntity, width: number, height: number): void {
     const body = entity.artwork.list[0];
     if (body instanceof Phaser.GameObjects.Rectangle) body.setSize(width, height);
     else if (body instanceof Phaser.GameObjects.Image) body.setDisplaySize(width, height);
-
-    this.resizeZone(entity, scaleX, scaleY);
   }
 
   private resizeZone(entity: EditableEntity, scaleX: number, scaleY: number): void {
@@ -327,31 +341,41 @@ export class LevelEditorSystem {
       config.topY += PASTE_OFFSET;
     }
 
+    this.selected = this.addEntity(config);
+    this.status = `pasted ${config.id}`;
+  }
+
+  /** Builds a live entity and starts tracking it. */
+  private addEntity(config: EditableConfig): EditableEntity {
     const built = this.hooks.spawn(config);
     const entity: EditableEntity = { config, artwork: built.artwork, zone: built.zone };
     this.entities.push(entity);
-    // Recorded as authored at its spawn position, so the printed diff only
-    // reports movement applied after the paste.
+    // Recorded as authored at its spawn position, so the saved diff only
+    // reports movement applied afterwards.
     this.authored.set(config.id, {
       x: config.x,
       y: config.y,
       movementDistance: config.type === 'movingPlatform' ? config.movementDistance : undefined,
     });
-    this.selected = entity;
+    return entity;
   }
 
-  /** Destroys the selection and drops it from the printed config. */
+  /** Destroys the selection and drops it from the saved config. */
   private deleteSelected(): void {
     const entity = this.selected;
     if (!entity) return;
+    this.deleted.push(entity.config.id);
+    this.removeEntity(entity);
+    this.status = `deleted ${entity.config.id}`;
+  }
+
+  private removeEntity(entity: EditableEntity): void {
     const index = this.entities.indexOf(entity);
     if (index >= 0) this.entities.splice(index, 1);
-    this.deleted.push(entity.config.id);
     this.authored.delete(entity.config.id);
-    this.selected = undefined;
-    this.dragging = undefined;
+    if (this.selected === entity) this.selected = undefined;
+    if (this.dragging?.entity === entity) this.dragging = undefined;
     this.hooks.despawn(entity.zone);
-    this.status = `deleted ${entity.config.id}`;
   }
 
   private uniqueId(base: string): string {
@@ -504,7 +528,7 @@ export class LevelEditorSystem {
 
   private panelText(): string {
     const lines = [
-      'LEVEL EDITOR  —  E exit   P print config',
+      'LEVEL EDITOR  —  E exit   P save config',
       'click select · drag move · arrows 1px · shift+arrows 10px',
       '+/- resize (shift = coarse) · C copy · V paste · del remove',
     ];
@@ -535,15 +559,75 @@ export class LevelEditorSystem {
   // --------------------------------------------------------------- output
 
   /**
-   * Logs the complete current config and flashes a confirmation on screen, so
-   * the shortcut is never silent even with devtools closed. Public so it can
-   * also be driven from the console:
-   * `__game.scene.getScene('BerlinScene').editor.printConfig()`.
+   * Persists the layout to localStorage, logs it, and flashes a confirmation
+   * so the shortcut is never silent even with devtools closed. Public so it
+   * can also be driven from the console:
+   * `__game.scene.getScene('BerlinScene').editor.saveConfig()`.
    */
-  printConfig(): void {
+  saveConfig(): void {
     const config = this.entities.map(({ config: entity }) => entity);
-    console.log(JSON.stringify(config, null, 2));
-    this.flash('CONFIG PRINTED');
+    const json = JSON.stringify(config, null, 2);
+    console.log(json);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, json);
+      this.flash('CONFIG SAVED');
+    } catch {
+      // Private browsing or a full quota; the console copy is still there.
+      this.flash('SAVE FAILED — SEE CONSOLE');
+    }
+  }
+
+  /**
+   * Reapplies a previously saved layout. The stored snapshot is authoritative:
+   * entities it doesn't mention were deleted and are removed again, and ones
+   * the scene lacks were pasted and get rebuilt.
+   */
+  private restoreSavedConfig(): void {
+    let saved: EditableConfig[];
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      saved = parsed as EditableConfig[];
+    } catch {
+      return;
+    }
+
+    const byId = new Map(this.entities.map((entity) => [entity.config.id, entity]));
+    const savedIds = new Set(saved.map((config) => config.id));
+
+    for (const entity of [...this.entities]) {
+      if (!savedIds.has(entity.config.id)) this.removeEntity(entity);
+    }
+
+    for (const config of saved) {
+      if (!config || typeof config.id !== 'string') continue;
+      const existing = byId.get(config.id);
+      if (existing) this.applyConfig(existing, config);
+      else this.addEntity(structuredClone(config));
+    }
+  }
+
+  /** Moves and resizes an entity to match a stored config. */
+  private applyConfig(entity: EditableEntity, saved: EditableConfig): void {
+    const current = entity.config;
+    const dx = saved.x - current.x;
+    const dy = saved.y - current.y;
+    const scaleX = current.width === 0 ? 1 : saved.width / current.width;
+    const scaleY = current.height === 0 ? 1 : saved.height / current.height;
+
+    entity.config = structuredClone(saved);
+    this.shift(entity, dx, dy);
+    if (scaleX !== 1 || scaleY !== 1) {
+      this.applyArtworkSize(entity, saved.width, saved.height);
+      this.resizeZone(entity, scaleX, scaleY);
+    }
+    this.authored.set(saved.id, {
+      x: saved.x,
+      y: saved.y,
+      movementDistance: saved.type === 'movingPlatform' ? saved.movementDistance : undefined,
+    });
   }
 
   private flash(message: string): void {
