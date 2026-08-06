@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
+import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { combineScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
 import type { RhythmResult } from '../rhythm/types';
@@ -10,6 +11,7 @@ export class ResultScene extends Phaser.Scene {
   init(data: RhythmResult): void { this.result = data; }
   create(): void {
     new OrientationController(this);
+    attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#090611');
     for (let index = 0; index < 12; index += 1) this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, 0x22112e);
     const total = combineScores(this.result.berlinScore, this.result.score);

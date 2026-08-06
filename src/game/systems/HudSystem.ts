@@ -46,6 +46,8 @@ export class HudSystem {
    * dragging the crouching finger across the zone border changes nothing.
    */
   private crouchPointerId?: number;
+  /** Pointer currently pressing the jump zone, matched on release. */
+  private jumpPointerId?: number;
   private readonly onPointerUp: (pointer: Phaser.Input.Pointer) => void;
   private readonly onGameOut: () => void;
   private readonly onBlur: () => void;
@@ -55,6 +57,12 @@ export class HudSystem {
     private readonly onJump: TouchAction,
     private readonly onDuck: TouchHoldAction,
     uiLayer?: Phaser.GameObjects.Layer,
+    /**
+     * Fired on the pointerup that completes a jump-zone press. Browsers only
+     * grant fullscreen from a completed gesture, so the startup request has to
+     * happen here rather than on pointerdown.
+     */
+    private readonly onJumpRelease?: () => void,
   ) {
     this.scene = scene;
     this.score = scene.add.text(0, 0, '', style).setOrigin(1, 0);
@@ -109,6 +117,8 @@ export class HudSystem {
     // The action is decided here, by which zone the pointer went down in.
     this.jumpZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event?.preventDefault();
+      // The jump still happens here, so normal play keeps its fast response.
+      this.jumpPointerId = pointer.id;
       if (this.onJump()) this.fadeHint(this.jumpHint);
     });
 
@@ -124,6 +134,10 @@ export class HudSystem {
   }
 
   private releaseCrouchFor(pointerId: number): void {
+    if (this.jumpPointerId === pointerId) {
+      this.jumpPointerId = undefined;
+      this.onJumpRelease?.();
+    }
     if (this.crouchPointerId !== pointerId) return;
     this.releaseTouchCrouch();
   }

@@ -24,7 +24,11 @@ import {
 import type { BerlinEntity, CollectibleConfig } from '../level/berlin/types';
 import { buildBerlinWorld, type BuiltBerlinWorld } from '../level/berlinLevel';
 import { createSceneLayers, type SceneLayers } from '../level/sceneLayers';
-import { addFullscreenButton, OrientationController } from '../responsive/OrientationController';
+import {
+  attachFullscreenExitControl,
+  requestGameFullscreen,
+} from '../responsive/FullscreenController';
+import { OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
 import { ControlsTutorialSystem } from '../systems/ControlsTutorialSystem';
 import { CullingSystem } from '../systems/CullingSystem';
@@ -50,9 +54,10 @@ export class BerlinScene extends Phaser.Scene {
   /** Set while the orientation overlay holds the scene, and during teardown. */
   private inputSuspended = false;
   private shuttingDown = false;
+  /** Set when the run starts on touch; consumed by the matching pointerup. */
+  private startupFullscreenPending = false;
   private tutorialGatingTimer = false;
   private introHint?: Phaser.GameObjects.Text;
-  private introFullscreen?: Phaser.GameObjects.Text;
   /** Latest safe-area margin, kept so the start gate can re-anchor itself. */
   private safeMargin = 24;
   private finishTriggered = false;
@@ -144,6 +149,7 @@ export class BerlinScene extends Phaser.Scene {
       () => this.touchJump(),
       (pressed) => this.touchDuck(pressed),
       this.layers.ui,
+      () => this.completeStartupGesture(),
     );
     if (import.meta.env.DEV) console.debug('[BerlinScene] after HUD creation');
     this.hud.update(this.progress);
@@ -190,6 +196,7 @@ export class BerlinScene extends Phaser.Scene {
     this.space = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.followPlayer();
+    attachFullscreenExitControl(this);
     void this.createDevelopmentTools();
     // `once` so a restart cannot stack handlers; everything registered above
     // is released here rather than left attached to a dead scene.
@@ -214,14 +221,7 @@ export class BerlinScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 1);
 
-    const children: Phaser.GameObjects.GameObject[] = [this.introHint];
-    this.introFullscreen = addFullscreenButton(this);
-    if (this.introFullscreen) {
-      this.introFullscreen.setOrigin(0, 0);
-      children.push(this.introFullscreen);
-    }
-
-    this.intro = this.add.container(0, 0, children).setScrollFactor(0).setDepth(Depth.UI);
+    this.intro = this.add.container(0, 0, [this.introHint]).setScrollFactor(0).setDepth(Depth.UI);
     this.layers.ui.add(this.intro);
     this.layoutIntro();
   }
@@ -232,7 +232,6 @@ export class BerlinScene extends Phaser.Scene {
     const camera = this.cameras.main;
     const margin = this.safeMargin;
     this.introHint?.setPosition(camera.width / 2, camera.height - margin);
-    this.introFullscreen?.setPosition(margin, margin);
   }
 
   /**
@@ -242,6 +241,16 @@ export class BerlinScene extends Phaser.Scene {
    */
   get runTimerGated(): boolean {
     return this.tutorialGatingTimer;
+  }
+
+  /**
+   * Runs once, on the gesture that started the run. The jump has already been
+   * requested on pointerdown, so this adds no second impulse.
+   */
+  private completeStartupGesture(): void {
+    if (!this.startupFullscreenPending && this.game.device.input.touch) return;
+    this.startupFullscreenPending = false;
+    requestGameFullscreen(this);
   }
 
   private touchInputBlocked(): boolean {
@@ -276,10 +285,13 @@ export class BerlinScene extends Phaser.Scene {
       this.progress.state = 'running';
       // Cue spacing is planned from where the run actually begins.
       this.tutorial.planFromStart(this.player.x);
+      // Touch waits for the matching pointerup (browsers reject fullscreen
+      // from an incomplete gesture); a key press is already a whole gesture.
+      if (this.game.device.input.touch) this.startupFullscreenPending = true;
+      else this.completeStartupGesture();
       // Removes the hint and the fullscreen button together.
       this.intro.destroy();
       this.introHint = undefined;
-      this.introFullscreen = undefined;
       this.hud.flash(BERLIN_SECTIONS[0].label, 900);
       // One buffered impulse, so the input that starts the run also jumps and
       // no second press is needed. The buffer is cleared on consumption, so it
@@ -340,6 +352,17 @@ export class BerlinScene extends Phaser.Scene {
 
   private finish(): void {
     if (this.finishTriggered || this.progress.state !== 'running') return;
+    if (import.meta.env.DEV) {
+      console.debug('[Berlin → Rhythm] finish', {
+        fullscreen: this.scale.isFullscreen,
+        scenePaused: this.scene.isPaused(),
+        physicsPaused: this.physics.world.isPaused,
+        parentSize: {
+          width: this.scale.parentSize.width,
+          height: this.scale.parentSize.height,
+        },
+      });
+    }
     this.finishTriggered = true;
     this.progress.state = 'won';
     this.progress.score = this.scoreSystem.finish(this.progress.seconds);
@@ -350,9 +373,10 @@ export class BerlinScene extends Phaser.Scene {
       `YOU MADE IT\nTIME BONUS  ${this.scoreSystem.breakdown.timeBonus}\nFINAL SCORE  ${this.progress.score}`,
       1800,
     );
-    this.time.delayedCall(2200, () =>
-      this.scene.start('RhythmScene', { score: this.progress.score }),
-    );
+    this.time.delayedCall(2200, () => {
+      if (import.meta.env.DEV) console.debug('[Berlin → Rhythm] starting RhythmScene');
+      this.scene.start('RhythmScene', { score: this.progress.score });
+    });
   }
 
   private repositionOverlays(): void {

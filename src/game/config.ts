@@ -8,6 +8,10 @@ import { RhythmScene } from './scenes/RhythmScene';
 export const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
+  // Explicit target: without it Phaser creates its own wrapper div and moves
+  // the canvas into it, so the element it goes fullscreen with is not the one
+  // ScaleManager measures for parentSize. Naming #game keeps both the same.
+  fullscreenTarget: 'game',
   // Phaser.Scale.EXPAND recomputes size from these base dimensions on every
   // resize: it picks whichever axis has the smaller (parentSize / base) scale
   // factor to hold fixed and expands the other to fill the viewport. Using

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import '../style.css';
 import { config } from './config';
+import { installFullscreenLifecycle } from './responsive/FullscreenController';
 import { setupFullscreenResize } from './responsive/FullscreenResize';
 
 const game = new Phaser.Game(config);
@@ -10,3 +11,4 @@ const game = new Phaser.Game(config);
 if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game = game;
 
 setupFullscreenResize(game);
+installFullscreenLifecycle(game);

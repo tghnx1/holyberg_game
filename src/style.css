@@ -33,7 +33,9 @@ canvas {
 }
 
 .orientation-overlay {
-  position: fixed;
+  /* Absolute, not fixed: it now lives inside #game (the fullscreen target),
+     which is itself position: fixed and covers the viewport. */
+  position: absolute;
   inset: 0;
   z-index: 10000;
   display: flex;

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getFullscreenHost } from './FullscreenController';
 import { getViewportInfo } from './ResponsiveLayout';
 import type { ViewportInfo } from './ViewportInfo';
 
@@ -21,6 +22,20 @@ export class OrientationController {
 
   refresh(): void {
     const viewport = getViewportInfo(this.scene.scale);
+    if (import.meta.env.DEV) {
+      console.debug('[Orientation]', {
+        scene: this.scene.scene.key,
+        width: viewport.physicalWidth,
+        height: viewport.physicalHeight,
+        portrait: viewport.portrait,
+        fullscreen: this.scene.scale.isFullscreen,
+        scenePaused: this.scene.scene.isPaused(),
+      });
+    }
+    // A zero or absent measurement is not an orientation. Acting on one would
+    // latch the scene paused on the frame it was created, and recovery would
+    // depend on a later RESIZE that may never arrive.
+    if (viewport.physicalWidth <= 0 || viewport.physicalHeight <= 0) return;
     this.callbacks.onLayout?.(viewport);
     if (viewport.portrait === this.portrait) return;
     this.portrait = viewport.portrait;
@@ -42,7 +57,10 @@ export class OrientationController {
     subtitle.className = 'orientation-subtitle';
     subtitle.textContent = 'HOLYBERG PLAYS BEST IN LANDSCAPE';
     overlay.append(phone, title, subtitle);
-    document.body.append(overlay);
+    // Inside the fullscreen host, not document.body: only the fullscreen
+    // element's subtree renders, so a sibling overlay would be invisible and
+    // the pause would look like a frozen canvas.
+    getFullscreenHost().append(overlay);
     this.overlay = overlay;
   }
 
@@ -59,9 +77,3 @@ export class OrientationController {
   }
 }
 
-export function addFullscreenButton(scene: Phaser.Scene): Phaser.GameObjects.Text | undefined {
-  if (!scene.scale.fullscreen.available) return undefined;
-  const button = scene.add.text(0, 0, 'FULLSCREEN', { fontFamily: 'Space Mono', fontSize: '15px', color: '#ffdd57', backgroundColor: '#23132f', padding: { x: 12, y: 8 } }).setOrigin(0.5).setInteractive();
-  button.on('pointerdown', () => { if (scene.scale.isFullscreen) scene.scale.stopFullscreen(); else scene.scale.startFullscreen(); });
-  return button;
-}

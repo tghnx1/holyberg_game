@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
+import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { parseChart } from '../rhythm/ChartLoader';
@@ -53,9 +54,26 @@ export class RhythmScene extends Phaser.Scene {
 
   constructor() { super('RhythmScene'); }
   init(data: { score?: number }): void { this.berlinScore = data.score ?? 0; }
-  preload(): void { this.load.json('holyberg-demo-chart', 'charts/demo.json'); }
+  preload(): void {
+    if (import.meta.env.DEV) console.debug('[RhythmScene] preload');
+    this.load.json('holyberg-demo-chart', 'charts/demo.json');
+    // Surfaced rather than swallowed: a missing chart shows up as an empty
+    // scene, which is indistinguishable from a freeze.
+    this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      console.error(`[RhythmScene] failed to load ${file.key} from ${file.url}`);
+    });
+  }
 
   create(): void {
+    if (import.meta.env.DEV) {
+      console.debug('[RhythmScene] create', {
+        fullscreen: this.scale.isFullscreen,
+        parentSize: {
+          width: this.scale.parentSize.width,
+          height: this.scale.parentSize.height,
+        },
+      });
+    }
     this.chart = parseChart(this.cache.json.get('holyberg-demo-chart'));
     this.scoreState = initialScoreState();
     this.completionGate = new CompletionGate();
@@ -76,6 +94,7 @@ export class RhythmScene extends Phaser.Scene {
       onResume: () => { void this.beat.resume().then((resumed) => { if (resumed) this.clock.resume(); }); },
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
+    attachFullscreenExitControl(this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
   }
 
