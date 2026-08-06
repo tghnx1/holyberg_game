@@ -64,7 +64,10 @@ function levelEditorSavePlugin(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // GitHub Pages serves this repository at /holyberg_game/. Keep local
+  // development at / so phone testing through the Vite dev server is unchanged.
+  base: command === 'build' ? '/holyberg_game/' : '/',
   plugins: [levelEditorSavePlugin()],
   test: { environment: 'node', include: ['tests/**/*.test.ts'] },
-});
+}));
