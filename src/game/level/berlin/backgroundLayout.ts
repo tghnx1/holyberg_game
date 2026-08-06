@@ -38,7 +38,7 @@ export const backgroundLayout = {
     left: {
       key: 'berlin-train-left',
       startX: 1000,
-      initialDelayMs: 8000,
+      initialDelayMs: 10000,
       repeat: 0,
       repeatDelayMs: 0,
       speed: RUN_SPEED + 120,

@@ -65,6 +65,35 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Attached first so an exit route exists even if the build below fails.
+    attachFullscreenExitControl(this);
+    try {
+      this.build();
+    } catch (error) {
+      // A throw in here used to leave the previous scene's last frame on the
+      // canvas with no way to tell what happened, which reads as a freeze.
+      this.showFatalError(error);
+    }
+  }
+
+  private showFatalError(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[RhythmScene] failed to start', error);
+    const camera = this.cameras.main;
+    camera.setBackgroundColor('#12060c');
+    this.add
+      .text(camera.width / 2, camera.height / 2, `RHYTHM STAGE FAILED TO LOAD\n\n${message}`, {
+        fontFamily: 'Space Mono',
+        fontSize: '18px',
+        color: '#ff8a8a',
+        align: 'center',
+        wordWrap: { width: camera.width - 80 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0);
+  }
+
+  private build(): void {
     if (import.meta.env.DEV) {
       console.debug('[RhythmScene] create', {
         fullscreen: this.scale.isFullscreen,
@@ -94,7 +123,6 @@ export class RhythmScene extends Phaser.Scene {
       onResume: () => { void this.beat.resume().then((resumed) => { if (resumed) this.clock.resume(); }); },
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
-    attachFullscreenExitControl(this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
   }
 
