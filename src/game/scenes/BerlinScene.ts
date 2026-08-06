@@ -22,7 +22,7 @@ import {
   type PendingActivation,
 } from '../level/berlin/LevelBuilder';
 import type { BerlinEntity, CollectibleConfig } from '../level/berlin/types';
-import { buildBerlinWorld } from '../level/berlinLevel';
+import { buildBerlinWorld, type BuiltBerlinWorld } from '../level/berlinLevel';
 import { createSceneLayers, type SceneLayers } from '../level/sceneLayers';
 import { addFullscreenButton, OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
@@ -43,6 +43,8 @@ export class BerlinScene extends Phaser.Scene {
   private invulnerable = false;
   private touchDuckHeld = false;
   private finishTriggered = false;
+  private trainsStarted = false;
+  private world!: BuiltBerlinWorld;
   private layers!: SceneLayers;
   private level!: BuiltBerlinLevel;
   private pendingActivations: PendingActivation[] = [];
@@ -60,11 +62,12 @@ export class BerlinScene extends Phaser.Scene {
   create(): void {
     this.progress = { state: 'intro', seconds: START_TIME, score: 0, hasUsb: false };
     this.finishTriggered = false;
+    this.trainsStarted = false;
     this.physics.world.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT);
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, DESIGN_HEIGHT).setBackgroundColor('#2a1742');
     this.layers = createSceneLayers(this);
     if (import.meta.env.DEV) console.debug('[BerlinScene] before buildBerlinWorld');
-    buildBerlinWorld(this, this.layers);
+    this.world = buildBerlinWorld(this, this.layers);
     if (import.meta.env.DEV) console.debug('[BerlinScene] after buildBerlinWorld');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before Player creation');
     this.player = new Player(this, 230);
@@ -399,6 +402,12 @@ export class BerlinScene extends Phaser.Scene {
     if (this.progress.state !== 'running') return;
     this.setDuck(this.duckKey.isDown || this.keys.down.isDown || this.touchDuckHeld);
     this.player.run(this.time.now);
+    // The trains are built paused so they don't run past an idle player;
+    // the first frame the player actually moves releases them.
+    if (!this.trainsStarted && (this.player.body as Phaser.Physics.Arcade.Body).velocity.x > 0) {
+      this.trainsStarted = true;
+      this.world.startTrains();
+    }
     if (import.meta.env.DEV) {
       const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
       if (playerBody.bottom > DESIGN_HEIGHT) {

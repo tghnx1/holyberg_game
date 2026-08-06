@@ -2,9 +2,6 @@ import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH, RUN_SPEED, WORLD_WIDTH } from '../.
 
 export { DESIGN_WIDTH, DESIGN_HEIGHT };
 
-/** World X where the first (and only) railway section begins. */
-export const FIRST_RAILWAY_START_X = 0;
-
 interface BackgroundImageLayout {
   key: string;
   /** World/local Y the image's bottom edge (origin 0,1) sits on. */
@@ -44,23 +41,30 @@ export const backgroundLayout = {
       initialDelayMs: 8000,
       repeat: 0,
       repeatDelayMs: 0,
-      speed: RUN_SPEED + 50,
+      speed: RUN_SPEED + 120,
     },
 
+    // One pass from startX, then it keeps re-entering from the far end of
+    // the level and sweeping left again, so it stays ahead of the player
+    // instead of looping back into ground already covered.
     right: {
       key: 'berlin-train-right',
       startX: 7300,
       initialDelayMs: 0,
       repeat: -1,
       repeatDelayMs: 0,
+      loopStartX: WORLD_WIDTH,
     },
   },
+  // Narrower than the level and centred on it, so it leaves an equal margin
+  // at each end rather than starting at a fixed offset. Its scroll factor is
+  // below 1, so it drifts past slower than the ground.
   railwaySection: {
     key: 'berlin-railway',
-    startX: FIRST_RAILWAY_START_X,
-    sectionWidth: DESIGN_WIDTH,
+    width: 14000,
     baselineY: 642,
     targetHeight: 650,
+    scrollFactorX: 0.2,
     depth: Depth.MID_BACKGROUND,
   },
   // Three separate house cutouts drawn at their natural texture size (no
@@ -70,7 +74,11 @@ export const backgroundLayout = {
   houses: {
     baselineY: 675,
     depth: Depth.MID_BACKGROUND,
-    /** Uniform shrink applied to every house; 0.5 renders them half size. */
+    /**
+     * Sizes the first house in `items`; the rest are scaled to match its
+     * rendered height, so differing source resolutions don't change how big
+     * a house comes out.
+     */
     scale: 0.26,
     items: [
       { name: 'house-1', key: 'berlin-house-1', anchor: 'left' as const, x: -300 },

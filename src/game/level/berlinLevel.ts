@@ -100,7 +100,12 @@ function createBackgroundImage(
   return image;
 }
 
-export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void {
+export interface BuiltBerlinWorld {
+  /** Starts both train tweens; safe to call more than once. */
+  startTrains: () => void;
+}
+
+export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): BuiltBerlinWorld {
   const rectangle = (
     layer: Phaser.GameObjects.Layer,
     x: number,
@@ -136,15 +141,16 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   city.setScrollFactor(cityScrollFactor, 0);
   debugTargets.push({ name: 'city', object: city });
 
-  // The railway and both trains are world-aligned (default scrollFactor 1,
-  // no parallax lag), positioned relative to FIRST_RAILWAY_START_X so the
-  // whole section can be relocated by changing that one constant.
-  const sectionStartX = backgroundLayout.railwaySection.sectionWidth / 5;
+  // The railway is centred on the level: its own width leaves an equal
+  // margin at each end. Widening or narrowing it in backgroundLayout keeps
+  // it centred without touching a separate start-x constant.
+  const railwayLayout = backgroundLayout.railwaySection;
+  const railwayStartX = (WORLD_WIDTH - railwayLayout.width) / 2 - 400;
   const railway = scene.add
-    .image(sectionStartX, backgroundLayout.railwaySection.baselineY, backgroundLayout.railwaySection.key)
+    .image(railwayStartX, railwayLayout.baselineY, railwayLayout.key)
     .setOrigin(0, 1);
-  railway.setDisplaySize(WORLD_WIDTH, backgroundLayout.railwaySection.targetHeight);
-  railway.setScrollFactor(1, 0);
+  railway.setDisplaySize(railwayLayout.width, railwayLayout.targetHeight);
+  railway.setScrollFactor(railwayLayout.scrollFactorX, 0);
   debugTargets.push({ name: 'railway', object: railway });
 
   // Two trains crossing the first railway section, both keeping their
@@ -160,7 +166,18 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     repeatDelayMs: number;
     /** Overrides backgroundLayout.trains.speed for this train only. */
     speed?: number;
+    /**
+     * When set, the first pass runs once from `startX` and every later pass
+     * re-enters from here instead — e.g. the far end of the level. `repeat`
+     * then applies to those later passes.
+     */
+    loopStartX?: number;
   }
+
+  // Trains are built paused and held at their start x; BerlinScene calls
+  // startTrains() the first time the player moves. initialDelayMs stays the
+  // tween's `delay`, so it only begins counting from that moment.
+  const trainTweens: Phaser.Tweens.Tween[] = [];
 
   const addTrain = (
     layout: TrainLayout,
@@ -174,20 +191,39 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
     debugTargets.push({ name, object: train });
 
     const endX = resolveEndX(train.displayWidth);
+    const speed = layout.speed ?? backgroundLayout.trains.speed;
 
     // Duration comes from the distance the train actually covers, so the
-    // train holds backgroundLayout.trains.speed regardless of sprite width
-    // or how far apart start and end are.
-    scene.tweens.add({
-      targets: train,
-      x: endX,
-      duration:
-        (Math.abs(endX - layout.startX) / (layout.speed ?? backgroundLayout.trains.speed)) * 1000,
-      ease: backgroundLayout.trains.ease,
-      delay: layout.initialDelayMs,
-      repeat: layout.repeat,
-      repeatDelay: layout.repeatDelayMs,
-    });
+    // train holds its speed regardless of sprite width or how far apart
+    // start and end are.
+    const passFrom = (fromX: number, repeat: number, delay: number) =>
+      scene.tweens.add({
+        targets: train,
+        x: { from: fromX, to: endX },
+        duration: (Math.abs(endX - fromX) / speed) * 1000,
+        ease: backgroundLayout.trains.ease,
+        delay,
+        repeat,
+        repeatDelay: layout.repeatDelayMs,
+        paused: true,
+      });
+
+    // With loopStartX the run is two tweens: one pass from startX, then a
+    // separate tween that keeps re-entering from loopStartX. Only the first
+    // is registered with startTrains(); the second is chained off it.
+    const loopPass =
+      layout.loopStartX === undefined
+        ? undefined
+        : passFrom(layout.loopStartX, layout.repeat, layout.repeatDelayMs);
+
+    const firstPass = passFrom(
+      layout.startX,
+      loopPass ? 0 : layout.repeat,
+      layout.initialDelayMs,
+    );
+    if (loopPass) firstPass.on('complete', () => loopPass.play());
+
+    trainTweens.push(firstPass);
 
     return train;
   };
@@ -202,19 +238,26 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   // Runs left-to-right, ending once it reaches the far edge of the level.
   const trainLeft = addTrain(backgroundLayout.trains.left, 'train-left', () => WORLD_WIDTH);
 
-  // Mid-background houses: three separate cutouts at their natural texture
-  // size, world-aligned (scrollFactor 1) like the railway. Each one is
-  // bottom-anchored to the shared baseline; `anchor` decides whether its x
-  // is the left or the right edge.
+  // Mid-background houses: separate cutouts, world-aligned (scrollFactor 1)
+  // like the railway. Each one is bottom-anchored to the shared baseline;
+  // `anchor` decides whether its x is the left or the right edge.
   const houses = backgroundLayout.houses.items.map((item) => {
     const house = scene.add
       .image(item.x, backgroundLayout.houses.baselineY, item.key)
       .setOrigin(item.anchor === 'right' ? 1 : 0, 1);
-    house.setScale(backgroundLayout.houses.scale);
     house.setScrollFactor(1, 0);
     debugTargets.push({ name: item.name, object: house });
     return house;
   });
+
+  // The first house is the reference: `scale` sizes it, and every other
+  // house is scaled to match that rendered height. Source textures can then
+  // differ in pixel size without the houses coming out different sizes.
+  const referenceHouse = houses[0];
+  if (referenceHouse) {
+    const referenceHeight = referenceHouse.height * backgroundLayout.houses.scale;
+    for (const house of houses) house.setScale(referenceHeight / house.height);
+  }
 
   const backgroundObjects = {
     sky,
@@ -286,4 +329,12 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): void
   if (isBackgroundDebugEnabled()) {
     attachBackgroundDebug(scene, debugTargets);
   }
+
+  return {
+    startTrains: () => {
+      for (const tween of trainTweens) {
+        if (tween.paused) tween.play();
+      }
+    },
+  };
 }
