@@ -71,7 +71,7 @@ export class OrientationController {
     subtitle.className = 'orientation-subtitle';
 
     if (mode === 'instagram') {
-      title.innerHTML = 'HOLYBERG<br>OPEN IN SAFARI OR CHROME<br>TO PLAY IN LANDSCAPE';
+      title.innerHTML = 'OPEN IN BROWSER<br>TO PLAY IN LANDSCAPE';
       subtitle.textContent = 'Tap ⋯ and choose “Open in browser”';
     } else {
       const phone = document.createElement('div');
