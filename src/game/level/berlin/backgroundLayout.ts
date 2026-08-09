@@ -6,9 +6,36 @@ interface BackgroundImageLayout {
   key: string;
   /** World/local Y the image's bottom edge (origin 0,1) sits on. */
   baselineY: number;
-  /** Uniform-scaled display height; width follows the texture's aspect ratio. */
+  /** Stable world display height, independent of the loaded raster tier. */
   targetHeight: number;
+  /** Authoritative source-art ratio; optimized raster rounding must not alter it. */
+  aspectRatio: number;
   depth: number;
+}
+
+/**
+ * REFERENCE COMPOSITION: the current iPhone 13 landscape rendering.
+ *
+ * These are world-layout values, not asset-resolution values. Loading a
+ * 2048, 3072 or 4096 pixel texture must never change them.
+ */
+export const REFERENCE_SKY_WIDTH = DESIGN_WIDTH * 1.3;
+export const REFERENCE_HOUSE_TARGET_HEIGHT = 1365 * 0.551619;
+export const REFERENCE_HOUSE_ASPECT_RATIO = 4096 / 1365;
+export const REFERENCE_HOUSE_TARGET_WIDTH =
+  REFERENCE_HOUSE_TARGET_HEIGHT * REFERENCE_HOUSE_ASPECT_RATIO;
+
+export function getSkyDisplayWidth(logicalCameraWidth: number): number {
+  // Preserve the authored 1664-wide iPhone composition. Wider cameras may
+  // stretch only the viewport-fixed sky; ceil prevents a fractional edge gap.
+  return Math.max(REFERENCE_SKY_WIDTH, Math.ceil(logicalCameraWidth));
+}
+
+export function getDisplaySize(
+  targetHeight: number,
+  authoritativeAspectRatio: number,
+): { width: number; height: number } {
+  return { width: targetHeight * authoritativeAspectRatio, height: targetHeight };
 }
 
 export const backgroundLayout = {
@@ -16,13 +43,14 @@ export const backgroundLayout = {
     key: 'berlin-sky',
     baselineY: DESIGN_HEIGHT,
     targetHeight: DESIGN_HEIGHT,
-    targetWidth: DESIGN_WIDTH * 1.3,
+    targetWidth: REFERENCE_SKY_WIDTH,
     depth: Depth.SKY,
   },
   city: {
     key: 'berlin-city',
     baselineY: 443,
     targetHeight: 640,
+    aspectRatio: 2172 / 724,
     depth: Depth.MID_BACKGROUND,
   } satisfies BackgroundImageLayout,
   trains: {
@@ -64,6 +92,7 @@ export const backgroundLayout = {
     width: 14000,
     baselineY: 642,
     targetHeight: 650,
+    textureAspectRatio: 2048 / 1420,
     scrollFactorX: 0.2,
     depth: Depth.MID_BACKGROUND,
   },
@@ -74,15 +103,10 @@ export const backgroundLayout = {
   houses: {
     baselineY: 675,
     depth: Depth.MID_BACKGROUND,
-    /**
-     * Sizes the first house in `items`; the rest are scaled to match its
-     * rendered height, so differing source resolutions don't change how big
-     * a house comes out. Tied to the source resolution: the textures were
-     * downsampled to 4096px wide for mobile texture limits, and this value
-     * was raised from 0.26 to keep the rendered size identical. Re-exporting
-     * a house at a different height means recomputing it.
-     */
-    scale: 0.551619,
+    // Explicit world dimensions preserve the current 4096x1365 @ 0.551619
+    // composition even when a selected WebP tier has rounded pixel dimensions.
+    targetHeight: REFERENCE_HOUSE_TARGET_HEIGHT,
+    aspectRatio: REFERENCE_HOUSE_ASPECT_RATIO,
     items: [
       { name: 'house-1', key: 'berlin-house-1', anchor: 'left' as const, x: -300 },
       { name: 'house-2', key: 'berlin-house-2', anchor: 'left' as const, x: WORLD_WIDTH / 2 },

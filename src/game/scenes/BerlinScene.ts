@@ -188,6 +188,9 @@ export class BerlinScene extends Phaser.Scene {
       },
       onLayout: (viewport) => {
         this.safeMargin = viewport.safeMargin;
+        // Scale.EXPAND has already produced the new logical game width here.
+        // Only the fixed sky grows; world objects and camera zoom stay fixed.
+        this.world.resizeViewport(this.scale.gameSize.width);
         this.hud.applyLayout(viewport);
         this.tutorial.applyLayout(viewport);
         this.repositionOverlays();

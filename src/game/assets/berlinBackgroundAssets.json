@@ -1,0 +1,51 @@
+{
+  "profiles": {
+    "mobile": {
+      "maxDimension": 2048,
+      "quality": 84,
+      "alphaQuality": 100
+    },
+    "medium": {
+      "maxDimension": 3072,
+      "quality": 88,
+      "alphaQuality": 100
+    },
+    "desktop": {
+      "maxDimension": 4096,
+      "quality": 92,
+      "alphaQuality": 100
+    }
+  },
+  "assets": [
+    {
+      "name": "sky",
+      "textureKey": "berlin-sky",
+      "source": "assets/backgrounds/sky.png"
+    },
+    {
+      "name": "city",
+      "textureKey": "berlin-city",
+      "source": "assets/backgrounds/city.jpg"
+    },
+    {
+      "name": "railway",
+      "textureKey": "berlin-railway",
+      "source": "assets/backgrounds/railway.png"
+    },
+    {
+      "name": "house-1",
+      "textureKey": "berlin-house-1",
+      "source": "assets/backgrounds/house-1.png"
+    },
+    {
+      "name": "house-2",
+      "textureKey": "berlin-house-2",
+      "source": "assets/backgrounds/house-2.png"
+    },
+    {
+      "name": "house-3",
+      "textureKey": "berlin-house-3",
+      "source": "assets/backgrounds/house-3.png"
+    }
+  ]
+}

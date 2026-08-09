@@ -4,19 +4,27 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "generate:backgrounds": "node scripts/generate-berlin-background-assets.mjs",
+    "verify:backgrounds": "node scripts/verify-berlin-background-assets.mjs",
+    "predev": "npm run generate:backgrounds",
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "npm run generate:backgrounds",
     "build": "tsc -b && vite build",
+    "postbuild": "npm run verify:backgrounds",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run"
   },
-  "dependencies": { "phaser": "^3.90.0" },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@types/node": "^24.1.0",
     "eslint": "^9.32.0",
     "prettier": "^3.6.2",
+    "sharp": "0.35.3",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.38.0",
     "vite": "^7.0.6",

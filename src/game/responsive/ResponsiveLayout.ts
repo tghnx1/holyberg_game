@@ -9,6 +9,24 @@ export function calculateSafeMargin(compact: boolean): number { return compact ?
 export function calculateHudScale(compact: boolean): number { return compact ? 0.82 : 1; }
 export function clampTouchControlSize(value: number): number { return Math.min(MAX_TOUCH_TARGET, Math.max(MIN_TOUCH_TARGET, value)); }
 
+/**
+ * Mirrors Scale.EXPAND's base-size calculation without changing Phaser's
+ * runtime scaling. Landscape viewports keep a 720-unit logical height and
+ * reveal more or less world horizontally as their aspect ratio changes.
+ */
+export function calculateExpandedLogicalSize(
+  physicalWidth: number,
+  physicalHeight: number,
+  baseWidth = DESIGN_HEIGHT,
+  baseHeight = DESIGN_HEIGHT,
+): { width: number; height: number } {
+  if (physicalWidth <= 0 || physicalHeight <= 0) {
+    return { width: baseWidth, height: baseHeight };
+  }
+  const scale = Math.min(physicalWidth / baseWidth, physicalHeight / baseHeight);
+  return { width: physicalWidth / scale, height: physicalHeight / scale };
+}
+
 export function createViewportInfo(width: number, height: number, touchOriented = false): ViewportInfo {
   const compactLandscape = isCompactLandscape(width, height);
   return {

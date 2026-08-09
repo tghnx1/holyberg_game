@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DESIGN_WIDTH, GROUND_Y, WORLD_WIDTH } from '../constants';
 import { GROUND_SEGMENTS } from './berlin/berlinLevelConfig';
-import { backgroundLayout } from './berlin/backgroundLayout';
+import { backgroundLayout, getDisplaySize, getSkyDisplayWidth } from './berlin/backgroundLayout';
 import { attachBackgroundDebug, isBackgroundDebugEnabled, type DebugTarget } from './berlin/backgroundDebug';
 import type { SceneLayers } from './sceneLayers';
 
@@ -65,16 +65,19 @@ function addRectangle(options: RectangleOptions): Phaser.GameObjects.Rectangle {
 /** Creates a full-height-scaled, bottom-anchored (origin 0,1) background image. */
 function createBackgroundImage(
   scene: Phaser.Scene,
-  layout: { key: string; baselineY: number; targetHeight: number },
+  layout: { key: string; baselineY: number; targetHeight: number; aspectRatio: number },
 ): Phaser.GameObjects.Image {
+  const display = getDisplaySize(layout.targetHeight, layout.aspectRatio);
   const image = scene.add.image(0, layout.baselineY, layout.key).setOrigin(0, 1);
-  image.setScale(layout.targetHeight / image.height);
+  image.setDisplaySize(display.width, display.height);
   return image;
 }
 
 export interface BuiltBerlinWorld {
   /** Starts both train tweens; safe to call more than once. */
   startTrains: () => void;
+  /** Reflows only viewport scenery; gameplay/world geometry is untouched. */
+  resizeViewport: (logicalCameraWidth: number) => void;
 }
 
 export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): BuiltBerlinWorld {
@@ -96,7 +99,10 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
   const sky = scene.add
     .image(0, backgroundLayout.sky.baselineY, backgroundLayout.sky.key)
     .setOrigin(0, 1)
-    .setDisplaySize(backgroundLayout.sky.targetWidth, backgroundLayout.sky.targetHeight)
+    .setDisplaySize(
+      getSkyDisplayWidth(scene.scale.gameSize.width),
+      backgroundLayout.sky.targetHeight,
+    )
     .setScrollFactor(0);
   debugTargets.push({ name: 'sky', object: sky });
 
@@ -137,12 +143,13 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
       railwayLayout.key,
     )
     .setOrigin(0, 1);
-  // Uniform scale derived from the texture's own height, so the tile fills
-  // targetHeight exactly and the horizontal scale matches it.
-  const railwayTextureHeight = scene.textures.get(railwayLayout.key).getSourceImage().height;
-  const railwayScale = railwayLayout.targetHeight / railwayTextureHeight;
-  railway.tileScaleX = railwayScale;
-  railway.tileScaleY = railwayScale;
+  // The selected WebP may have rounded raster dimensions. Scale each texture
+  // axis to the authoritative source-art ratio so every quality tier repeats
+  // at exactly the same world size.
+  const railwayTexture = scene.textures.get(railwayLayout.key).getSourceImage();
+  const railwayTileDisplayWidth = railwayLayout.targetHeight * railwayLayout.textureAspectRatio;
+  railway.tileScaleX = railwayTileDisplayWidth / railwayTexture.width;
+  railway.tileScaleY = railwayLayout.targetHeight / railwayTexture.height;
   railway.setScrollFactor(railwayLayout.scrollFactorX, 0);
   debugTargets.push({ name: 'railway', object: railway });
 
@@ -243,14 +250,13 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
     return house;
   });
 
-  // The first house is the reference: `scale` sizes it, and every other
-  // house is scaled to match that rendered height. Source textures can then
-  // differ in pixel size without the houses coming out different sizes.
-  const referenceHouse = houses[0];
-  if (referenceHouse) {
-    const referenceHeight = referenceHouse.height * backgroundLayout.houses.scale;
-    for (const house of houses) house.setScale(referenceHeight / house.height);
-  }
+  // Asset resolution != world display size. Explicit canonical dimensions
+  // keep anchors, spacing and apparent size identical across every tier.
+  const houseDisplay = getDisplaySize(
+    backgroundLayout.houses.targetHeight,
+    backgroundLayout.houses.aspectRatio,
+  );
+  for (const house of houses) house.setDisplaySize(houseDisplay.width, houseDisplay.height);
 
   const backgroundObjects = {
     sky,
@@ -296,6 +302,12 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
       for (const tween of trainTweens) {
         if (tween.paused) tween.play();
       }
+    },
+    resizeViewport: (logicalCameraWidth) => {
+      sky.setDisplaySize(
+        getSkyDisplayWidth(logicalCameraWidth),
+        backgroundLayout.sky.targetHeight,
+      );
     },
   };
 }

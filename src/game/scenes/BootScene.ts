@@ -1,4 +1,27 @@
 import Phaser from 'phaser';
+import {
+  getAssetQualityProfile,
+  getBerlinBackgroundAssetUrls,
+} from '../responsive/AssetQuality';
+
+function getMaxTextureSize(game: Phaser.Game): number | undefined {
+  const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
+  const gl = renderer.gl;
+  if (!gl) return undefined;
+  const value: unknown = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+  return typeof value === 'number' ? value : undefined;
+}
+
+function getViewportDimensions(scale: Phaser.Scale.ScaleManager): {
+  width: number;
+  height: number;
+} {
+  const viewport = window.visualViewport;
+  return {
+    width: viewport?.width ?? scale.parentSize.width ?? window.innerWidth,
+    height: viewport?.height ?? scale.parentSize.height ?? window.innerHeight,
+  };
+}
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -6,14 +29,21 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.image('berlin-sky', 'assets/backgrounds/sky.png');
-    this.load.image('berlin-city', 'assets/backgrounds/city.jpg');
-    this.load.image('berlin-railway', 'assets/backgrounds/railway.png');
+    const viewport = getViewportDimensions(this.scale);
+    const qualityProfile = getAssetQualityProfile({
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      touchCapable: this.game.device.input.touch,
+      coarsePointer: window.matchMedia?.('(pointer: coarse)').matches ?? false,
+      maxTextureSize: getMaxTextureSize(this.game),
+    });
+    for (const asset of getBerlinBackgroundAssetUrls(qualityProfile)) {
+      this.load.image(asset.key, asset.url);
+    }
+    if (import.meta.env.DEV) console.debug('[BootScene] Berlin asset profile', qualityProfile);
+
     this.load.image('berlin-train-right', 'assets/backgrounds/train-right.png');
     this.load.image('berlin-train-left', 'assets/backgrounds/train-left.png');
-    this.load.image('berlin-house-1', 'assets/backgrounds/house-1.png');
-    this.load.image('berlin-house-2', 'assets/backgrounds/house-2.png');
-    this.load.image('berlin-house-3', 'assets/backgrounds/house-3.png');
   }
 
   create(): void {
