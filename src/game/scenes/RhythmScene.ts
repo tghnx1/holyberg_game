@@ -13,6 +13,7 @@ import { NoteManager } from '../rhythm/NoteManager';
 import { ProceduralBeat } from '../rhythm/ProceduralBeat';
 import { RhythmClock } from '../rhythm/RhythmClock';
 import { RhythmHighway } from '../rhythm/RhythmHighway';
+import { resetRhythmRunState } from '../rhythm/RhythmRunState';
 import { getHighwayGeometryAtY, getJudgementPadGeometry, getLaneBoundaries } from '../rhythm/PerspectiveMath';
 import { getTouchArea, mapLogicalPointerToLane } from '../rhythm/TouchLaneMapper';
 import { TutorialProgress } from '../rhythm/TutorialProgress';
@@ -52,9 +53,29 @@ export class RhythmScene extends Phaser.Scene {
   private readonly inputGuard = new LaneInputGuard();
   private readonly antiMash = new AntiMashSystem();
   private debugPointer = { x: 0, y: 0, lane: null as Lane | null };
+  /** InputManager pointers are global and must be added only once per scene instance. */
+  private touchPointersAdded = false;
 
   constructor() { super('RhythmScene'); }
-  init(data: { score?: number }): void { this.berlinScore = data.score ?? 0; }
+  init(data: { score?: number }): void {
+    this.berlinScore = data.score ?? 0;
+    this.resetForNewRun();
+  }
+
+  private resetForNewRun(): void {
+    const reset = resetRhythmRunState(this.inputGuard, this.antiMash);
+    this.playing = reset.playing;
+    this.starting = reset.starting;
+    this.finished = reset.finished;
+    this.lastBeat = reset.lastBeat;
+    this.tutorialReady = reset.tutorialReady;
+    this.tutorial = reset.tutorial;
+    this.tutorialNote = reset.tutorialNote;
+    this.tutorialPrompt = reset.tutorialPrompt;
+    this.touchLabels = [];
+    this.touchDebugVisible = false;
+    this.debugPointer = { x: 0, y: 0, lane: null };
+  }
   preload(): void {
     this.load.json('holyberg-demo-chart', 'charts/demo.json');
     // Surfaced rather than swallowed: a missing chart shows up as an empty
@@ -231,7 +252,10 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   private bindTouchInput(): void {
-    this.input.addPointer(3);
+    if (!this.touchPointersAdded) {
+      this.input.addPointer(3);
+      this.touchPointersAdded = true;
+    }
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.starting && !this.tutorial && !this.playing) return;
       const area = getTouchArea(DESIGN_WIDTH / 2, HIT_LINE_HALF_WIDTH);
@@ -367,7 +391,12 @@ export class RhythmScene extends Phaser.Scene {
     this.playing = false;
     this.clock?.stop(); this.beat?.stop();
     this.time.removeAllEvents();
+    this.input.removeAllListeners();
     this.input.keyboard?.removeAllListeners();
+    this.tutorial = undefined;
+    this.tutorialNote = undefined;
+    this.tutorialPrompt = undefined;
+    this.touchLabels.length = 0;
   }
 
   update(): void {
