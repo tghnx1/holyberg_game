@@ -47,9 +47,9 @@ export async function submitLeaderboardScore(
   if (!isValidLeaderboardScore(input.score)) throw new Error('Invalid score');
 
   const verificationStatus = await verify(instagram);
-  if (verificationStatus === 'invalid') throw new Error('INSTAGRAM ACCOUNT NOT FOUND');
+  const storedVerificationStatus = verificationStatus === 'verified' ? 'verified' : 'unverified';
 
-  const entry = await store.upsertBest(instagram, input.score, verificationStatus);
+  const entry = await store.upsertBest(instagram, input.score, storedVerificationStatus);
   const snapshot = await getLeaderboard(store, entry.bestScore);
   return {
     instagram: entry.instagram,

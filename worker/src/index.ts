@@ -148,16 +148,29 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       return json(request, { error: 'Invalid JSON body' }, 400);
     }
     try {
-      return json(
-        request,
-        await submitLeaderboardScore(
-          store,
-          { instagram: body.instagram, score: body.score },
-          verifyInstagramProfile,
-        ),
+      const response = await submitLeaderboardScore(
+        store,
+        {
+          instagram: body.instagram,
+          score: body.score,
+        },
+        verifyInstagramProfile,
       );
+      console.debug('[Leaderboard][score]', {
+        instagram: response.instagram,
+        bestScore: response.bestScore,
+        rank: response.rank,
+        instagramStatus: response.instagramStatus,
+        top10Count: response.top10.length,
+      });
+      return json(request, response);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Request failed';
+      console.debug('[Leaderboard][score][error]', {
+        instagram: body.instagram,
+        score: body.score,
+        message,
+      });
       return json(request, { error: message }, 400);
     }
   }

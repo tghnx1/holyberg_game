@@ -22,14 +22,15 @@ export class ProceduralBeat {
     }
   }
 
-  start(): void {
-    if (!this.context || this.context.state !== 'running') return;
+  start(): boolean {
+    if (!this.context || this.context.state !== 'running') return false;
     this.master = this.context.createGain();
     this.master.gain.value = 0.16;
     this.master.connect(this.context.destination);
     this.originSeconds = this.context.currentTime + 0.04;
     this.running = true;
     this.scheduleBeat();
+    return true;
   }
 
   get currentTimeMs(): number {

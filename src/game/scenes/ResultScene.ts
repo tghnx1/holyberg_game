@@ -298,6 +298,13 @@ export class ResultScene extends Phaser.Scene {
   private async updateStoredScore(): Promise<void> {
     if (!this.storedInstagram || this.submitting) return;
 
+    if (import.meta.env.DEV) {
+      console.debug('[Leaderboard][debug] auto-update start', {
+        instagram: this.storedInstagram,
+        totalScore: this.totalScore,
+        source: 'stored-instagram',
+      });
+    }
     this.submitting = true;
     this.retryAction.setVisible(false);
     this.leaderboardStatus.setText('UPDATING YOUR BEST SCORE…');
@@ -311,6 +318,14 @@ export class ResultScene extends Phaser.Scene {
 
     if (update.status === 'success') {
       const response = update.snapshot;
+      if (import.meta.env.DEV) {
+        console.debug('[Leaderboard][debug] auto-update success', {
+          instagram: response.instagram,
+          bestScore: response.bestScore,
+          rank: response.rank,
+          top10Count: response.top10.length,
+        });
+      }
       this.claimed = response;
       this.renderTop10(response.top10);
       this.renderClaimedPlayerRow(response.instagram, response.bestScore, response.rank);
@@ -319,6 +334,13 @@ export class ResultScene extends Phaser.Scene {
       return;
     }
 
+    if (import.meta.env.DEV) {
+      console.debug('[Leaderboard][debug] auto-update failed', {
+        instagram: update.instagram,
+        localScore: update.localScore,
+        error: update.error,
+      });
+    }
     console.warn('[Leaderboard] automatic best-score update failed', update.error);
     this.leaderboardText.setText('TOP 10 TEMPORARILY UNAVAILABLE');
     this.playerRowText.setText(
@@ -334,12 +356,26 @@ export class ResultScene extends Phaser.Scene {
     const instagram = await this.showClaimModal('');
     if (!instagram || !this.scene.isActive()) return;
 
+    if (import.meta.env.DEV) {
+      console.debug('[Leaderboard][debug] manual claim submit', {
+        instagram,
+        totalScore: this.totalScore,
+      });
+    }
     this.submitting = true;
     this.claimButton.setText('SUBMITTING…').setAlpha(0.65);
     this.leaderboardStatus.setText('CHECKING PROFILE AND SAVING BEST SCORE…');
     try {
       const response = await claimLeaderboardScore(instagram, this.totalScore);
       if (!this.scene.isActive()) return;
+      if (import.meta.env.DEV) {
+        console.debug('[Leaderboard][debug] manual claim success', {
+          instagram: response.instagram,
+          bestScore: response.bestScore,
+          rank: response.rank,
+          top10Count: response.top10.length,
+        });
+      }
       this.claimed = response;
       if (!saveStoredInstagram(window.localStorage, response.instagram)) {
         console.warn('[Leaderboard] Instagram username could not be saved locally');
@@ -353,6 +389,12 @@ export class ResultScene extends Phaser.Scene {
       this.showReplayOptions(true);
     } catch (error) {
       if (!this.scene.isActive()) return;
+      if (import.meta.env.DEV) {
+        console.debug('[Leaderboard][debug] manual claim failed', {
+          instagram,
+          error,
+        });
+      }
       const message = error instanceof Error ? error.message : 'Could not claim score';
       this.leaderboardStatus.setText(message.toUpperCase());
       this.claimButton

@@ -92,7 +92,13 @@ describe('Instagram verification submission behavior', () => {
         { instagram: 'missing_profile', score: 8_750 },
         async () => 'invalid',
       ),
-    ).rejects.toThrow('INSTAGRAM ACCOUNT NOT FOUND');
-    expect(await store.getAll()).toHaveLength(0);
+    ).resolves.toMatchObject({
+      instagramStatus: 'unverified',
+      instagram: 'missing_profile',
+      bestScore: 8_750,
+    });
+    expect(await store.getAll()).toEqual([
+      { instagram: 'missing_profile', bestScore: 8_750, verificationStatus: 'unverified' },
+    ]);
   });
 });

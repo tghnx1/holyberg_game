@@ -48,6 +48,7 @@ export class RhythmScene extends Phaser.Scene {
   private touchDebug!: Phaser.GameObjects.Graphics;
   private touchDebugText!: Phaser.GameObjects.Text;
   private touchDebugVisible = false;
+  private audioUnlocked = false;
   private completionGate!: CompletionGate;
   private chartEndTimeMs = 0;
   private readonly inputGuard = new LaneInputGuard();
@@ -75,6 +76,7 @@ export class RhythmScene extends Phaser.Scene {
     this.touchLabels = [];
     this.touchDebugVisible = false;
     this.debugPointer = { x: 0, y: 0, lane: null };
+    this.audioUnlocked = false;
   }
   preload(): void {
     this.load.json('holyberg-demo-chart', 'charts/demo.json');
@@ -187,7 +189,11 @@ export class RhythmScene extends Phaser.Scene {
     const text = this.add.text(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, 'GET ON THE DECKS\n\nPRESS SPACE OR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
     let start = (): void => undefined;
     start = createRhythmStartHandler({
-      unlockAudio: () => this.beat.unlock(),
+      unlockAudio: async () => {
+        const unlocked = await this.beat.unlock();
+        this.audioUnlocked = unlocked;
+        return unlocked;
+      },
       cleanupListeners: () => {
         this.input.off('pointerdown', start);
         this.input.keyboard?.off('keydown-SPACE', start);
@@ -212,7 +218,9 @@ export class RhythmScene extends Phaser.Scene {
     ['3', '2', '1', 'DROP'].forEach((step, index) => this.time.delayedCall(index * 650, () => text.setText(step)));
     this.time.delayedCall(2600, () => {
       background.destroy(); text.destroy();
-      this.beat.start(); this.clock.start(); this.playing = true;
+      const audioRunning = this.beat.start();
+      this.clock.start(!(audioRunning || this.audioUnlocked));
+      this.playing = true;
     });
   }
 
