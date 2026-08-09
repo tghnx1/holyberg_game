@@ -11,6 +11,8 @@
     "prebuild": "npm run generate:backgrounds",
     "build": "tsc -b && vite build",
     "postbuild": "npm run verify:backgrounds",
+    "worker:migrate": "wrangler d1 migrations apply holyberg-leaderboard --remote",
+    "worker:deploy": "wrangler deploy",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "format": "prettier --write .",
