@@ -14,7 +14,7 @@ import {
   GROUND_SEGMENTS,
 } from '../level/berlin/berlinLevelConfig';
 import { applyCollectibleReward } from '../level/berlin/berlinRules';
-import { resolveIntroStart } from '../level/berlin/controlsTutorial';
+import { canAcceptTutorialJumpInput, resolveIntroStart } from '../level/berlin/controlsTutorial';
 import {
   isCollectible,
   LevelBuilder,
@@ -302,7 +302,10 @@ export class BerlinScene extends Phaser.Scene {
       // can never spend both jumps.
       const start = resolveIntroStart(this.tutorial.state);
       if (start.jump) this.player.requestJump(this.time.now);
-    } else if (this.progress.state === 'running') this.player.requestJump(this.time.now);
+    } else if (this.progress.state === 'running') {
+      if (!canAcceptTutorialJumpInput(this.tutorial.state)) return;
+      this.player.requestJump(this.time.now);
+    }
   }
 
   private setDuck(pressed: boolean): void {

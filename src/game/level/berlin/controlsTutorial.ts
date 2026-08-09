@@ -125,6 +125,16 @@ export function shouldShowJumpCue(state: TutorialState): boolean {
 }
 
 /**
+ * Normal gameplay jump input is only allowed once the tutorial is ready for
+ * it. The intro start jump is handled separately by the scene and remains a
+ * special exception.
+ */
+export function canAcceptTutorialJumpInput(state: TutorialState): boolean {
+  if (state.stage === 'jump') return state.jumpCueVisible;
+  return state.stage === 'doubleJump' || state.stage === 'duck' || state.stage === 'complete';
+}
+
+/**
  * Advances past the jump stage only once a real impulse was applied *while the
  * cue was on screen*. The input that starts the run also jumps, and that one
  * must not silently satisfy a lesson the player has not been shown yet.

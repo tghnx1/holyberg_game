@@ -6,6 +6,7 @@ import {
   DUCK_TRIGGER_LEAD,
   JUMP_CUE_DELAY_MS,
   MIN_CUE_DELAY_MS,
+  canAcceptTutorialJumpInput,
   planCueDelays,
   duckTriggerX,
   isTimerGated,
@@ -55,6 +56,21 @@ describe('controls tutorial stages', () => {
     expect(resolveIntroStart(createTutorialState(true))).toEqual({ startRun: true, jump: true });
   });
 
+  it('blocks normal jump input before the jump cue appears', () => {
+    const state = createTutorialState(true);
+    expect(canAcceptTutorialJumpInput(state)).toBe(false);
+    state.stage = 'jump';
+    state.jumpCueVisible = false;
+    expect(canAcceptTutorialJumpInput(state)).toBe(false);
+  });
+
+  it('allows normal jump input once the cue is visible', () => {
+    const state = createTutorialState(true);
+    state.stage = 'jump';
+    state.jumpCueVisible = true;
+    expect(canAcceptTutorialJumpInput(state)).toBe(true);
+  });
+
   it('shows the jump cue only after the delay, and ignores the start jump', () => {
     const state = createTutorialState(true);
     // The input that starts the run jumps immediately; the cue is not up yet,
@@ -73,6 +89,23 @@ describe('controls tutorial stages', () => {
     expect(registerJump(state, true)).toBe(true);
     expect(state.stage).toBe('doubleJump');
     expect(state.sinceJumpMs).toBe(-1);
+  });
+
+  it('only advances to double jump on the first real jump of the airtime', () => {
+    const state = createTutorialState(true);
+    tickTutorial(state, JUMP_CUE_DELAY_MS);
+    state.jumpCueVisible = true;
+    expect(registerJump(state, true)).toBe(true);
+    expect(state.stage).toBe('doubleJump');
+
+    const consumed = createTutorialState(true);
+    tickTutorial(consumed, JUMP_CUE_DELAY_MS);
+    consumed.jumpCueVisible = true;
+    consumed.stage = 'jump';
+    expect(registerJump(consumed, true)).toBe(true);
+    consumed.stage = 'doubleJump';
+    expect(registerDoubleJump(consumed, true, 2)).toBe(true);
+    expect(consumed.stage).toBe('duck');
   });
 
   it('requires the second impulse of one airtime for the double jump', () => {
