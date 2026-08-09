@@ -2,6 +2,12 @@ import Phaser from 'phaser';
 import { DESIGN_WIDTH } from '../constants';
 import { claimLeaderboardScore, fetchLeaderboard } from '../leaderboard/api';
 import {
+  readStoredInstagram,
+  saveStoredInstagram,
+  shouldShowClaimUi,
+  updateSavedScore,
+} from '../leaderboard/claimFlow';
+import {
   isValidInstagramUsername,
   normalizeInstagram,
   type LeaderboardEntry,
@@ -11,7 +17,6 @@ import { OrientationController } from '../responsive/OrientationController';
 import { combineScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
 import type { RhythmResult } from '../rhythm/types';
 
-const INSTAGRAM_STORAGE_KEY = 'holyberg-leaderboard-instagram';
 const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
 
 export class ResultScene extends Phaser.Scene {
@@ -26,9 +31,11 @@ export class ResultScene extends Phaser.Scene {
   private shareButton!: Phaser.GameObjects.Text;
   private replayButton!: Phaser.GameObjects.Text;
   private restartAction!: Phaser.GameObjects.Text;
+  private retryAction!: Phaser.GameObjects.Text;
   private modal?: HTMLDivElement;
   private claimed?: { instagram: string; bestScore: number; rank: number };
   private playerRank?: number;
+  private storedInstagram = '';
   private submitting = false;
   private skipped = false;
 
@@ -40,6 +47,7 @@ export class ResultScene extends Phaser.Scene {
     this.result = data;
     this.claimed = undefined;
     this.playerRank = undefined;
+    this.storedInstagram = '';
     this.submitting = false;
     this.skipped = false;
   }
@@ -49,16 +57,11 @@ export class ResultScene extends Phaser.Scene {
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#090611');
     for (let index = 0; index < 12; index += 1) {
-      this.add.rectangle(
-        100 + index * 100,
-        650,
-        65,
-        180 + (index % 4) * 60,
-        0x22112e,
-      );
+      this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, 0x22112e);
     }
 
     this.totalScore = combineScores(this.result.berlinScore, this.result.score);
+    this.storedInstagram = readStoredInstagram(window.localStorage);
     const grade = getPerformanceGrade(this.result.accuracy);
     this.add
       .text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', {
@@ -96,9 +99,8 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private createLeaderboardPanel(): void {
-    this.add
-      .rectangle(902, 380, 620, 570, 0x120a1b, 0.94)
-      .setStrokeStyle(4, 0xff477e, 0.9);
+    const showClaimUi = shouldShowClaimUi(this.storedInstagram);
+    this.add.rectangle(902, 380, 620, 570, 0x120a1b, 0.94).setStrokeStyle(4, 0xff477e, 0.9);
     this.add
       .text(902, 116, 'LEADERBOARD', {
         fontFamily: 'Archivo Black',
@@ -112,16 +114,23 @@ export class ResultScene extends Phaser.Scene {
       color: '#ffffff',
       lineSpacing: 5,
     });
-    this.playerRowText = this.add.text(625, 425, `—   CLAIM YOUR SPOT       ${this.totalScore}`, {
-      fontFamily: 'Space Mono',
-      fontSize: '18px',
-      fontStyle: 'bold',
-      color: '#ff9f43',
-      backgroundColor: '#2b1238',
-      padding: { x: 10, y: 8 },
-    });
+    this.playerRowText = this.add.text(
+      625,
+      425,
+      showClaimUi
+        ? `—   CLAIM YOUR SPOT       ${this.totalScore}`
+        : this.formatPlayerRow(undefined, this.storedInstagram, this.totalScore),
+      {
+        fontFamily: 'Space Mono',
+        fontSize: '18px',
+        fontStyle: 'bold',
+        color: '#ff9f43',
+        backgroundColor: '#2b1238',
+        padding: { x: 10, y: 8 },
+      },
+    );
     this.leaderboardStatus = this.add
-      .text(902, 471, 'CALCULATING YOUR POSITION…', {
+      .text(902, 471, showClaimUi ? 'CALCULATING YOUR POSITION…' : 'UPDATING YOUR BEST SCORE…', {
         fontFamily: 'Space Mono',
         fontSize: '16px',
         fontStyle: 'bold',
@@ -130,9 +139,8 @@ export class ResultScene extends Phaser.Scene {
         wordWrap: { width: 540 },
       })
       .setOrigin(0.5, 0);
-    const storedInstagram = this.getStoredInstagram();
     this.instagramInput = this.add
-      .text(902, 523, storedInstagram ? `[@${storedInstagram}]` : '[@____________]', {
+      .text(902, 523, '[@____________]', {
         fontFamily: 'Space Mono',
         fontSize: '18px',
         color: '#ffffff',
@@ -140,15 +148,18 @@ export class ResultScene extends Phaser.Scene {
         padding: { x: 18, y: 9 },
       })
       .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: true })
+      .setVisible(showClaimUi);
     this.instagramInput.on('pointerdown', () => {
       void this.claimScore();
     });
 
     this.claimButton = this.createButton(902, 573, 'CLAIM YOUR SPOT', () => {
       void this.claimScore();
-    });
-    this.skipAction = this.createTextAction(902, 619, 'Skip', () => this.skipClaim());
+    }).setVisible(showClaimUi);
+    this.skipAction = this.createTextAction(902, 619, 'Skip', () => this.skipClaim()).setVisible(
+      showClaimUi,
+    );
 
     this.shareButton = this.createButton(902, 533, 'SHARE YOUR SCORE', () => {
       void this.shareScore();
@@ -163,10 +174,19 @@ export class ResultScene extends Phaser.Scene {
       .setVisible(false);
     this.restartAction = this.createTextAction(902, 642, 'RESTART FULL GAME', () => {
       this.scene.start('BerlinScene');
+    }).setVisible(!showClaimUi);
+    this.retryAction = this.createTextAction(902, 511, 'RETRY SCORE UPDATE', () => {
+      void this.updateStoredScore();
     }).setVisible(false);
+    if (!showClaimUi) this.replayButton.setVisible(true);
   }
 
-  private createButton(x: number, y: number, label: string, action: () => void): Phaser.GameObjects.Text {
+  private createButton(
+    x: number,
+    y: number,
+    label: string,
+    action: () => void,
+  ): Phaser.GameObjects.Text {
     const button = this.add
       .text(x, y, label, {
         fontFamily: 'Space Mono',
@@ -205,6 +225,11 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private async loadLeaderboard(): Promise<void> {
+    if (this.storedInstagram) {
+      await this.updateStoredScore();
+      return;
+    }
+
     try {
       const snapshot = await fetchLeaderboard(this.totalScore);
       if (!this.scene.isActive()) return;
@@ -243,31 +268,15 @@ export class ResultScene extends Phaser.Scene {
     this.leaderboardStatus.setText(
       rank === undefined ? 'YOUR SCORE IS READY TO CLAIM' : `YOUR SCORE IS #${rank}`,
     );
-    this.claimButton.setText(
-      rank === undefined ? 'CLAIM YOUR SPOT' : `CLAIM YOUR #${rank} SPOT`,
-    );
+    this.claimButton.setText(rank === undefined ? 'CLAIM YOUR SPOT' : `CLAIM YOUR #${rank} SPOT`);
   }
 
   private renderClaimedPlayerRow(instagram: string, bestScore: number, rank: number): void {
-    this.playerRowText.setText(
-      `${String(rank).padStart(2)}  @${instagram.slice(0, 18).padEnd(18)} ${String(bestScore).padStart(6)}`,
-    );
+    this.playerRowText.setText(this.formatPlayerRow(rank, instagram, bestScore));
   }
 
-  private getStoredInstagram(): string {
-    try {
-      return window.localStorage.getItem(INSTAGRAM_STORAGE_KEY) ?? '';
-    } catch {
-      return '';
-    }
-  }
-
-  private saveInstagram(instagram: string): void {
-    try {
-      window.localStorage.setItem(INSTAGRAM_STORAGE_KEY, instagram);
-    } catch {
-      console.warn('[Leaderboard] Instagram username could not be saved locally');
-    }
+  private formatPlayerRow(rank: number | undefined, instagram: string, score: number): string {
+    return `${rank === undefined ? '—' : String(rank).padStart(2)}  @${instagram.slice(0, 18).padEnd(18)} ${String(score).padStart(6)}`;
   }
 
   private skipClaim(): void {
@@ -286,9 +295,43 @@ export class ResultScene extends Phaser.Scene {
     this.restartAction.setVisible(true);
   }
 
+  private async updateStoredScore(): Promise<void> {
+    if (!this.storedInstagram || this.submitting) return;
+
+    this.submitting = true;
+    this.retryAction.setVisible(false);
+    this.leaderboardStatus.setText('UPDATING YOUR BEST SCORE…');
+    const update = await updateSavedScore(
+      this.storedInstagram,
+      this.totalScore,
+      claimLeaderboardScore,
+    );
+    this.submitting = false;
+    if (!this.scene.isActive()) return;
+
+    if (update.status === 'success') {
+      const response = update.snapshot;
+      this.claimed = response;
+      this.renderTop10(response.top10);
+      this.renderClaimedPlayerRow(response.instagram, response.bestScore, response.rank);
+      this.leaderboardStatus.setText(`YOU'RE #${response.rank}`);
+      this.showReplayOptions(true);
+      return;
+    }
+
+    console.warn('[Leaderboard] automatic best-score update failed', update.error);
+    this.leaderboardText.setText('TOP 10 TEMPORARILY UNAVAILABLE');
+    this.playerRowText.setText(
+      this.formatPlayerRow(undefined, update.instagram, update.localScore),
+    );
+    this.leaderboardStatus.setText("COULDN'T UPDATE YOUR BEST SCORE");
+    this.retryAction.setVisible(true);
+    this.showReplayOptions(false);
+  }
+
   private async claimScore(): Promise<void> {
     if (this.submitting || this.claimed) return;
-    const instagram = await this.showClaimModal(this.getStoredInstagram());
+    const instagram = await this.showClaimModal('');
     if (!instagram || !this.scene.isActive()) return;
 
     this.submitting = true;
@@ -298,7 +341,9 @@ export class ResultScene extends Phaser.Scene {
       const response = await claimLeaderboardScore(instagram, this.totalScore);
       if (!this.scene.isActive()) return;
       this.claimed = response;
-      this.saveInstagram(response.instagram);
+      if (!saveStoredInstagram(window.localStorage, response.instagram)) {
+        console.warn('[Leaderboard] Instagram username could not be saved locally');
+      }
       this.renderTop10(response.top10);
       this.renderClaimedPlayerRow(response.instagram, response.bestScore, response.rank);
       this.claimButton.setVisible(false);
@@ -312,9 +357,7 @@ export class ResultScene extends Phaser.Scene {
       this.leaderboardStatus.setText(message.toUpperCase());
       this.claimButton
         .setText(
-          this.playerRank === undefined
-            ? 'CLAIM YOUR SPOT'
-            : `CLAIM YOUR #${this.playerRank} SPOT`,
+          this.playerRank === undefined ? 'CLAIM YOUR SPOT' : `CLAIM YOUR #${this.playerRank} SPOT`,
         )
         .setAlpha(1);
     } finally {

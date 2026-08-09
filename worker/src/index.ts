@@ -4,8 +4,8 @@ import {
   submitLeaderboardScore,
   type LeaderboardStore,
   type StoredLeaderboardEntry,
-  type VerificationStatus,
 } from './leaderboardService';
+import { verifyInstagramProfile } from './instagramVerification';
 
 interface D1Result<T> {
   results?: T[];
@@ -125,40 +125,6 @@ function json(request: Request, body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: corsHeaders(request) });
 }
 
-async function verifyInstagramProfile(username: string): Promise<VerificationStatus> {
-  try {
-    const response = await fetch(`https://www.instagram.com/${encodeURIComponent(username)}/`, {
-      redirect: 'follow',
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent':
-          'Mozilla/5.0 (compatible; HolybergLeaderboard/1.0; +https://tghnx1.github.io/holyberg_game/)',
-      },
-    });
-
-    if (response.status === 404) return 'invalid';
-    if (response.status === 429 || response.status >= 500) return 'unverified';
-    const body = await response.text();
-    const unavailable = [
-      "sorry, this page isn't available",
-      'page not found',
-      'the link you followed may be broken',
-    ].some((marker) => body.toLowerCase().includes(marker));
-    if (unavailable) return 'invalid';
-
-    const escapedUsername = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const profileMarker = new RegExp(
-      `(?:instagram: @${escapedUsername}|"username"\\s*:\\s*"${escapedUsername}")`,
-      'i',
-    );
-    return response.ok && profileMarker.test(body) ? 'verified' : 'unverified';
-  } catch {
-    // Instagram commonly challenges server-side requests. Ambiguity must not
-    // reject a potentially real player.
-    return 'unverified';
-  }
-}
-
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const store = new D1LeaderboardStore(env.DB);
@@ -192,7 +158,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Request failed';
-      return json(request, { error: message }, message.includes('not found') ? 404 : 400);
+      return json(request, { error: message }, 400);
     }
   }
 

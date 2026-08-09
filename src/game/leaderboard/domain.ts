@@ -14,7 +14,7 @@ export interface ClaimedLeaderboardSnapshot extends LeaderboardSnapshot {
   instagram: string;
   bestScore: number;
   rank: number;
-  verificationStatus?: 'verified' | 'unverified';
+  instagramStatus: 'verified' | 'unverified';
 }
 
 /**
