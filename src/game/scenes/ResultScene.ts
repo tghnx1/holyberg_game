@@ -129,11 +129,10 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private createReplayControls(): void {
-    const playAgain = () => this.scene.start('RhythmScene', { score: this.result.berlinScore });
     const berlinRun = () => this.scene.start('BerlinScene');
-    this.createButton(252, DESIGN_HEIGHT - 48, 'PLAY SET AGAIN', playAgain).setFontSize(15);
-    this.createButton(440, DESIGN_HEIGHT - 48, 'BERLIN RUN', berlinRun).setFontSize(15);
-    this.input.keyboard?.once('keydown-SPACE', playAgain);
+    this.createButton(346, DESIGN_HEIGHT - 48, 'PLAY AGAIN — BERLIN RUN', berlinRun).setFontSize(
+      15,
+    );
     this.input.keyboard?.once('keydown-R', berlinRun);
   }
 

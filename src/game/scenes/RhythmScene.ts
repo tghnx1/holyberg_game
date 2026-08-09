@@ -17,6 +17,7 @@ import { getHighwayGeometryAtY, getJudgementPadGeometry, getLaneBoundaries } fro
 import { getTouchArea, mapLogicalPointerToLane } from '../rhythm/TouchLaneMapper';
 import { TutorialProgress } from '../rhythm/TutorialProgress';
 import { applyJudgement, calculateAccuracy, getAwardedPoints, getMultiplier, initialScoreState } from '../rhythm/ScoreSystem';
+import { createRhythmStartHandler } from '../rhythm/StartGate';
 import type { Lane, RhythmChart, ScoreState } from '../rhythm/types';
 
 export class RhythmScene extends Phaser.Scene {
@@ -163,17 +164,24 @@ export class RhythmScene extends Phaser.Scene {
   private createStartOverlay(): void {
     const background = this.add.rectangle(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, 760, 280, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setDepth(RhythmDepth.UI).setInteractive();
     const text = this.add.text(DESIGN_WIDTH / 2, DESIGN_HEIGHT / 2, 'GET ON THE DECKS\n\nPRESS SPACE OR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-    const start = async () => {
-      if (this.starting) return;
-      this.starting = true;
-      const unlocked = await this.beat.unlock();
-      if (!unlocked) { this.starting = false; text.setText('GET ON THE DECKS\n\nTAP TO ENABLE AUDIO'); return; }
-      background.disableInteractive();
-      this.input.off('pointerdown', start);
-      this.input.keyboard?.off('keydown-SPACE', start);
-      background.destroy(); text.destroy();
-      this.startTutorial();
-    };
+    let start = (): void => undefined;
+    start = createRhythmStartHandler({
+      unlockAudio: () => this.beat.unlock(),
+      cleanupListeners: () => {
+        this.input.off('pointerdown', start);
+        this.input.keyboard?.off('keydown-SPACE', start);
+      },
+      startTutorial: () => {
+        this.starting = true;
+        background.disableInteractive();
+        background.destroy();
+        text.destroy();
+        this.startTutorial();
+      },
+      onAudioUnlockFailure: (error) => {
+        if (import.meta.env.DEV) console.warn('[RhythmScene] audio unlock failed', error);
+      },
+    });
     this.input.on('pointerdown', start);
     this.input.keyboard?.on('keydown-SPACE', start);
   }
