@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
+import { DESIGN_WIDTH } from '../constants';
 import { claimLeaderboardScore, fetchLeaderboard } from '../leaderboard/api';
 import {
   isValidInstagramUsername,
@@ -20,11 +20,17 @@ export class ResultScene extends Phaser.Scene {
   private leaderboardText!: Phaser.GameObjects.Text;
   private playerRowText!: Phaser.GameObjects.Text;
   private leaderboardStatus!: Phaser.GameObjects.Text;
+  private instagramInput!: Phaser.GameObjects.Text;
   private claimButton!: Phaser.GameObjects.Text;
+  private skipAction!: Phaser.GameObjects.Text;
   private shareButton!: Phaser.GameObjects.Text;
+  private replayButton!: Phaser.GameObjects.Text;
+  private restartAction!: Phaser.GameObjects.Text;
   private modal?: HTMLDivElement;
   private claimed?: { instagram: string; bestScore: number; rank: number };
+  private playerRank?: number;
   private submitting = false;
+  private skipped = false;
 
   constructor() {
     super('ResultScene');
@@ -32,6 +38,10 @@ export class ResultScene extends Phaser.Scene {
 
   init(data: RhythmResult): void {
     this.result = data;
+    this.claimed = undefined;
+    this.playerRank = undefined;
+    this.submitting = false;
+    this.skipped = false;
   }
 
   create(): void {
@@ -81,29 +91,28 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0, 0);
 
     this.createLeaderboardPanel();
-    this.createReplayControls();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeClaimModal());
     void this.loadLeaderboard();
   }
 
   private createLeaderboardPanel(): void {
     this.add
-      .rectangle(902, 365, 620, 490, 0x120a1b, 0.94)
+      .rectangle(902, 380, 620, 570, 0x120a1b, 0.94)
       .setStrokeStyle(4, 0xff477e, 0.9);
     this.add
-      .text(902, 140, 'LEADERBOARD', {
+      .text(902, 116, 'LEADERBOARD', {
         fontFamily: 'Archivo Black',
         fontSize: '32px',
         color: '#ffdf57',
       })
       .setOrigin(0.5);
-    this.leaderboardText = this.add.text(625, 181, 'LOADING TOP 10…', {
+    this.leaderboardText = this.add.text(625, 154, 'LOADING TOP 10…', {
       fontFamily: 'Space Mono',
       fontSize: '17px',
       color: '#ffffff',
       lineSpacing: 5,
     });
-    this.playerRowText = this.add.text(625, 453, `—   CLAIM YOUR SCORE      ${this.totalScore}`, {
+    this.playerRowText = this.add.text(625, 425, `—   CLAIM YOUR SPOT       ${this.totalScore}`, {
       fontFamily: 'Space Mono',
       fontSize: '18px',
       fontStyle: 'bold',
@@ -112,28 +121,49 @@ export class ResultScene extends Phaser.Scene {
       padding: { x: 10, y: 8 },
     });
     this.leaderboardStatus = this.add
-      .text(902, 500, '', {
+      .text(902, 471, 'CALCULATING YOUR POSITION…', {
         fontFamily: 'Space Mono',
-        fontSize: '14px',
-        color: '#ffb0bf',
+        fontSize: '16px',
+        fontStyle: 'bold',
+        color: '#ffffff',
         align: 'center',
         wordWrap: { width: 540 },
       })
       .setOrigin(0.5, 0);
-    this.claimButton = this.createButton(902, 566, 'CLAIM YOUR SCORE', () => {
+    const storedInstagram = this.getStoredInstagram();
+    this.instagramInput = this.add
+      .text(902, 523, storedInstagram ? `[@${storedInstagram}]` : '[@____________]', {
+        fontFamily: 'Space Mono',
+        fontSize: '18px',
+        color: '#ffffff',
+        backgroundColor: '#090611',
+        padding: { x: 18, y: 9 },
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    this.instagramInput.on('pointerdown', () => {
       void this.claimScore();
     });
-    this.shareButton = this.createButton(902, 618, 'SHARE YOUR SCORE', () => {
+
+    this.claimButton = this.createButton(902, 573, 'CLAIM YOUR SPOT', () => {
+      void this.claimScore();
+    });
+    this.skipAction = this.createTextAction(902, 619, 'Skip', () => this.skipClaim());
+
+    this.shareButton = this.createButton(902, 533, 'SHARE YOUR SCORE', () => {
       void this.shareScore();
     }).setVisible(false);
-  }
-
-  private createReplayControls(): void {
-    const berlinRun = () => this.scene.start('BerlinScene');
-    this.createButton(346, DESIGN_HEIGHT - 48, 'PLAY AGAIN — BERLIN RUN', berlinRun).setFontSize(
-      15,
-    );
-    this.input.keyboard?.once('keydown-R', berlinRun);
+    this.replayButton = this.createButton(902, 590, 'REPLAY THIS LEVEL', () => {
+      this.scene.start('RhythmScene', { score: this.result.berlinScore });
+    })
+      .setFontSize(18)
+      .setBackgroundColor('#ff477e')
+      .setColor('#ffffff')
+      .setPadding(20, 10)
+      .setVisible(false);
+    this.restartAction = this.createTextAction(902, 642, 'RESTART FULL GAME', () => {
+      this.scene.start('BerlinScene');
+    }).setVisible(false);
   }
 
   private createButton(x: number, y: number, label: string, action: () => void): Phaser.GameObjects.Text {
@@ -154,19 +184,38 @@ export class ResultScene extends Phaser.Scene {
     return button;
   }
 
+  private createTextAction(
+    x: number,
+    y: number,
+    label: string,
+    action: () => void,
+  ): Phaser.GameObjects.Text {
+    const actionText = this.add
+      .text(x, y, label, {
+        fontFamily: 'Space Mono',
+        fontSize: '14px',
+        color: '#ffb0bf',
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    actionText.on('pointerdown', action);
+    actionText.on('pointerover', () => actionText.setColor('#ffffff'));
+    actionText.on('pointerout', () => actionText.setColor('#ffb0bf'));
+    return actionText;
+  }
+
   private async loadLeaderboard(): Promise<void> {
     try {
       const snapshot = await fetchLeaderboard(this.totalScore);
       if (!this.scene.isActive()) return;
       this.renderTop10(snapshot.top10);
       this.renderVirtualPlayerRow(snapshot.rank);
-      this.leaderboardStatus.setText('');
     } catch (error) {
       if (!this.scene.isActive()) return;
       console.warn('[Leaderboard] could not load', error);
       this.leaderboardText.setText('TOP 10 TEMPORARILY UNAVAILABLE');
       this.renderVirtualPlayerRow();
-      this.leaderboardStatus.setText('YOUR FINAL SCORE IS SAFE ON THIS SCREEN. TRY CLAIMING AGAIN.');
+      if (!this.skipped) this.leaderboardStatus.setText('YOUR SCORE IS READY TO CLAIM');
     }
   }
 
@@ -186,8 +235,16 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private renderVirtualPlayerRow(rank?: number): void {
+    this.playerRank = rank;
     this.playerRowText.setText(
-      `${rank === undefined ? '—' : String(rank).padStart(2)}  CLAIM YOUR SCORE      ${this.totalScore}`,
+      `${rank === undefined ? '—' : String(rank).padStart(2)}  CLAIM YOUR SPOT       ${this.totalScore}`,
+    );
+    if (this.skipped) return;
+    this.leaderboardStatus.setText(
+      rank === undefined ? 'YOUR SCORE IS READY TO CLAIM' : `YOUR SCORE IS #${rank}`,
+    );
+    this.claimButton.setText(
+      rank === undefined ? 'CLAIM YOUR SPOT' : `CLAIM YOUR #${rank} SPOT`,
     );
   }
 
@@ -213,6 +270,22 @@ export class ResultScene extends Phaser.Scene {
     }
   }
 
+  private skipClaim(): void {
+    if (this.submitting || this.claimed) return;
+    this.skipped = true;
+    this.claimButton.setVisible(false);
+    this.instagramInput.setVisible(false);
+    this.skipAction.setVisible(false);
+    this.leaderboardStatus.setText('SCORE NOT CLAIMED');
+    this.showReplayOptions(false);
+  }
+
+  private showReplayOptions(claimed: boolean): void {
+    this.shareButton.setVisible(claimed);
+    this.replayButton.setVisible(true);
+    this.restartAction.setVisible(true);
+  }
+
   private async claimScore(): Promise<void> {
     if (this.submitting || this.claimed) return;
     const instagram = await this.showClaimModal(this.getStoredInstagram());
@@ -229,17 +302,21 @@ export class ResultScene extends Phaser.Scene {
       this.renderTop10(response.top10);
       this.renderClaimedPlayerRow(response.instagram, response.bestScore, response.rank);
       this.claimButton.setVisible(false);
-      this.shareButton.setVisible(true);
-      this.leaderboardStatus.setText(
-        response.bestScore > this.totalScore
-          ? `YOUR EXISTING BEST SCORE ${response.bestScore} STILL COUNTS.`
-          : 'SCORE CLAIMED.',
-      );
+      this.instagramInput.setVisible(false);
+      this.skipAction.setVisible(false);
+      this.leaderboardStatus.setText(`YOU'RE #${response.rank}`);
+      this.showReplayOptions(true);
     } catch (error) {
       if (!this.scene.isActive()) return;
       const message = error instanceof Error ? error.message : 'Could not claim score';
       this.leaderboardStatus.setText(message.toUpperCase());
-      this.claimButton.setText('TRY CLAIM AGAIN').setAlpha(1);
+      this.claimButton
+        .setText(
+          this.playerRank === undefined
+            ? 'CLAIM YOUR SPOT'
+            : `CLAIM YOUR #${this.playerRank} SPOT`,
+        )
+        .setAlpha(1);
     } finally {
       this.submitting = false;
     }
@@ -250,15 +327,16 @@ export class ResultScene extends Phaser.Scene {
     return new Promise((resolve) => {
       const modal = document.createElement('div');
       modal.className = 'leaderboard-claim-overlay';
+      const rankLabel = this.playerRank === undefined ? '' : ` #${this.playerRank}`;
       modal.innerHTML = `
         <form class="leaderboard-claim-dialog">
-          <div class="leaderboard-claim-title">CLAIM YOUR SCORE</div>
+          <div class="leaderboard-claim-title">CLAIM YOUR${rankLabel} SPOT</div>
           <label for="holyberg-instagram">INSTAGRAM USERNAME</label>
           <input id="holyberg-instagram" name="instagram" maxlength="100" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="@holyberg_">
           <div class="leaderboard-claim-error" aria-live="polite"></div>
           <div class="leaderboard-claim-actions">
             <button type="button" data-action="cancel">CANCEL</button>
-            <button type="submit">CLAIM</button>
+            <button type="submit">CLAIM SPOT</button>
           </div>
         </form>`;
       document.getElementById('game')?.appendChild(modal);
