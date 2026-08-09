@@ -162,6 +162,7 @@ export class BerlinScene extends Phaser.Scene {
           if (hold) this.player.requestAirHold();
           else this.player.releaseAirHold();
         },
+        resetPlayerPosition: (x) => this.player.setX(x),
         onComplete: () => {
           this.tutorialGatingTimer = false;
         },

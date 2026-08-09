@@ -22,10 +22,12 @@ const TINT_ALPHA = 0.22;
 const PULSE_MS = 620;
 
 interface TutorialCallbacks {
-  /** Freezes and unfreezes the player's forward motion for the duck prompt. */
+  /** Kept for compatibility with tutorial hosts that coordinate input state. */
   setPlayerFrozen: (frozen: boolean) => void;
-  /** Suspends the player mid-air while the double-jump cue is up. */
+  /** Suspends the player at the jump apex until the second jump input. */
   setAirHold: (hold: boolean) => void;
+  /** Restores the start of the duck run-up after an incomplete hold. */
+  resetPlayerPosition: (x: number) => void;
   /** Fired once, when both stages are done. */
   onComplete: () => void;
 }
@@ -53,6 +55,7 @@ export class ControlsTutorialSystem {
   private viewport?: ViewportInfo;
   private readonly touch: boolean;
   private disposed = false;
+  private duckPromptStartX = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -125,7 +128,7 @@ export class ControlsTutorialSystem {
 
   /**
    * Called every frame while the run is active. Each cue freezes the player
-   * until its action is performed. `crouching` must be the player's real
+   * until its action is performed, then releases movement. `crouching` must be the player's real
    * crouch state, not the raw input, so a prompt only clears when the
    * character is actually ducking.
    */
@@ -143,24 +146,21 @@ export class ControlsTutorialSystem {
     // jump that starts the run cannot satisfy a lesson never shown.
     if (shouldShowJumpCue(this.state)) {
       this.state.jumpCueVisible = true;
-      // Held still like the duck cue: the player has to perform the action to
-      // move on, and cannot drift into obstacles while reading the prompt.
       this.callbacks.setPlayerFrozen(true);
       this.paint('jump', '↑', this.touch ? 'TAP RIGHT\nJUMP' : 'SPACE / ↑\nJUMP');
     }
 
-    // First impulse: stay frozen and airborne, and immediately ask for the
-    // second one. That is the only moment the lesson can be demonstrated.
+    // After the first impulse, immediately ask for the second one while the
+    // player is released into the normal run.
     if (registerJump(this.state, jumpedThisFrame)) {
-      // Hangs at the apex so the cue can be read and answered in the air.
       this.callbacks.setAirHold(true);
+      this.callbacks.setPlayerFrozen(false);
       this.paint('jump', '↑↑', this.touch ? 'TAP AGAIN\nDOUBLE JUMP' : 'PRESS AGAIN\nDOUBLE JUMP');
       return;
     }
 
     if (registerDoubleJump(this.state, jumpedThisFrame, jumpsThisAirtime)) {
       this.callbacks.setAirHold(false);
-      this.callbacks.setPlayerFrozen(false);
       this.hidePrompt();
       this.showBanner('NICE!', 700);
       return;
@@ -168,6 +168,7 @@ export class ControlsTutorialSystem {
 
     if (shouldStartDuckPrompt(this.state, playerX, this.triggerX)) {
       this.state.duckPromptActive = true;
+      this.duckPromptStartX = playerX;
       this.callbacks.setPlayerFrozen(true);
       this.paint('duck', '↓', this.touch ? 'HOLD LEFT\nDUCK' : 'HOLD S / ↓\nDUCK');
     }
@@ -175,11 +176,15 @@ export class ControlsTutorialSystem {
     if (this.state.duckPromptActive) {
       // Pressed-looking zone and a downward drift while the hold is building.
       this.tint.setFillStyle(0x53ffe0, crouching ? TINT_ALPHA * 2 : TINT_ALPHA);
+      if (crouching && this.state.duckHeldMs === 0) this.callbacks.setPlayerFrozen(false);
       if (updateDuckHold(this.state, crouching, deltaMs)) {
         this.callbacks.setPlayerFrozen(false);
         this.hidePrompt();
         this.showBanner('GOT IT!', 700);
         this.finish();
+      } else if (!crouching) {
+        this.callbacks.setPlayerFrozen(true);
+        this.callbacks.resetPlayerPosition(this.duckPromptStartX);
       }
     }
   }
@@ -293,4 +298,3 @@ export class ControlsTutorialSystem {
     this.banner.destroy();
   }
 }
-

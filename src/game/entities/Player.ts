@@ -79,7 +79,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       body.setAllowGravity(false);
       this.setVelocityY(0);
     }
-    if (this.airHolding) this.setVelocityY(0);
+    if (this.airHolding) {
+      this.setVelocityX(0);
+      this.setVelocityY(0);
+    }
     this.animationState = this.crouched
       ? 'crouch'
       : grounded
