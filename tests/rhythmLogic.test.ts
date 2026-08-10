@@ -39,13 +39,7 @@ describe('rhythm logic', () => {
     expect(combineScores(500, 1200)).toBe(1700);
   });
   it('filters malformed and out-of-duration notes', () => {
-    expect(filterChartNotes([{ timeMs: 200, action: 'holdFx' }, { timeMs: -1, action: 'tapLeft' }, { timeMs: 10, action: 'spin' }, null])).toEqual([{ timeMs: 200, action: 'holdFx' }]);
-    expect(parseChart({ durationMs: 1000, notes: [{ timeMs: 1001, action: 'tapLeft' }, { timeMs: 999, action: 'tapRight' }] }).notes).toEqual([{ timeMs: 999, action: 'tapRight' }]);
-  });
-  it('keeps legacy lane charts compatible while exposing DJ actions', () => {
-    expect(filterChartNotes([{ timeMs: 100, lane: 0 }, { timeMs: 200, lane: 3 }])).toEqual([
-      { timeMs: 100, action: 'tapLeft' },
-      { timeMs: 200, action: 'swipeRight' },
-    ]);
+    expect(filterChartNotes([{ timeMs: 200, lane: 2 }, { timeMs: -1, lane: 0 }, { timeMs: 10, lane: 8 }, null])).toEqual([{ timeMs: 200, lane: 2 }]);
+    expect(parseChart({ durationMs: 1000, notes: [{ timeMs: 1001, lane: 0 }, { timeMs: 999, lane: 1 }] }).notes).toEqual([{ timeMs: 999, lane: 1 }]);
   });
 });

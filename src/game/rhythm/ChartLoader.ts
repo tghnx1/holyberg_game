@@ -1,5 +1,4 @@
-import { RHYTHM_ACTIONS } from './types';
-import type { ChartNote, RhythmAction, RhythmChart } from './types';
+import type { ChartNote, Lane, RhythmChart } from './types';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -9,17 +8,17 @@ export function filterChartNotes(value: unknown): ChartNote[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((note): note is Record<string, unknown> => isRecord(note))
-    .filter((note) => typeof note.timeMs === 'number' && Number.isFinite(note.timeMs) && note.timeMs >= 0)
-    .map((note) => {
-      const legacyActions: RhythmAction[] = ['tapLeft', 'tapRight', 'swipeLeft', 'swipeRight'];
-      const action = typeof note.action === 'string' && RHYTHM_ACTIONS.includes(note.action as RhythmAction)
-        ? note.action as RhythmAction
-        : Number.isInteger(note.lane) && typeof note.lane === 'number' && note.lane >= 0 && note.lane <= 3
-          ? legacyActions[note.lane]
-          : undefined;
-      return action ? { timeMs: note.timeMs as number, action } : null;
-    })
-    .filter((note): note is ChartNote => note !== null)
+    .filter(
+      (note) =>
+        typeof note.timeMs === 'number' &&
+        Number.isFinite(note.timeMs) &&
+        note.timeMs >= 0 &&
+        Number.isInteger(note.lane) &&
+        typeof note.lane === 'number' &&
+        note.lane >= 0 &&
+        note.lane <= 3,
+    )
+    .map((note) => ({ timeMs: note.timeMs as number, lane: note.lane as Lane }))
     .sort((a, b) => a.timeMs - b.timeMs);
 }
 

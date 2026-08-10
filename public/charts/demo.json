@@ -1,21 +1,23 @@
 {
-  "title": "HOLYBERG DJ MIX",
+  "title": "HOLYBERG Demo",
   "bpm": 124,
   "offsetMs": 500,
   "durationMs": 35000,
   "audioKey": "demo-track",
   "notes": [
-    {"timeMs":2000,"action":"tapLeft"},{"timeMs":2484,"action":"tapRight"},{"timeMs":2968,"action":"tapLeft"},{"timeMs":3452,"action":"tapRight"},
-    {"timeMs":3936,"action":"tapLeft"},{"timeMs":4420,"action":"tapRight"},{"timeMs":4904,"action":"tapLeft"},{"timeMs":5388,"action":"tapRight"},
-    {"timeMs":5872,"action":"tapLeft"},{"timeMs":6356,"action":"tapLeft"},{"timeMs":6840,"action":"tapRight"},{"timeMs":7324,"action":"tapRight"},
-    {"timeMs":7808,"action":"tapLeft"},{"timeMs":8292,"action":"tapRight"},{"timeMs":8776,"action":"tapLeft"},{"timeMs":9260,"action":"tapRight"},
-    {"timeMs":9744,"action":"tapLeft"},{"timeMs":10228,"action":"tapRight"},{"timeMs":10712,"action":"tapLeft"},{"timeMs":11196,"action":"tapRight"},
-    {"timeMs":11680,"action":"tapLeft"},{"timeMs":12164,"action":"tapRight"},{"timeMs":12648,"action":"tapLeft"},{"timeMs":13132,"action":"tapRight"},
-    {"timeMs":13616,"action":"tapLeft"},{"timeMs":14100,"action":"tapRight"},{"timeMs":14584,"action":"tapLeft"},{"timeMs":15068,"action":"tapRight"},
-    {"timeMs":15552,"action":"swipeRight"},{"timeMs":16520,"action":"tapLeft"},{"timeMs":17004,"action":"tapRight"},{"timeMs":17972,"action":"tapLeft"},
-    {"timeMs":18456,"action":"swipeLeft"},{"timeMs":19424,"action":"tapRight"},{"timeMs":20392,"action":"holdFx"},{"timeMs":21360,"action":"tapLeft"},
-    {"timeMs":21844,"action":"tapRight"},{"timeMs":22812,"action":"swipeRight"},{"timeMs":23780,"action":"tapLeft"},{"timeMs":24264,"action":"tapRight"},
-    {"timeMs":25232,"action":"holdFx"},{"timeMs":26200,"action":"tapLeft"},{"timeMs":26684,"action":"tapRight"},{"timeMs":27652,"action":"swipeLeft"},
-    {"timeMs":28620,"action":"tapLeft"},{"timeMs":29104,"action":"tapRight"},{"timeMs":30072,"action":"holdFx"},{"timeMs":31040,"action":"swipeRight"}
+    {"timeMs":2000,"lane":0},{"timeMs":2484,"lane":1},{"timeMs":2968,"lane":2},{"timeMs":3452,"lane":3},
+    {"timeMs":3936,"lane":0},{"timeMs":4420,"lane":2},{"timeMs":4904,"lane":1},{"timeMs":5388,"lane":3},
+    {"timeMs":5872,"lane":0},{"timeMs":6356,"lane":1},{"timeMs":6840,"lane":2},{"timeMs":7324,"lane":3},
+    {"timeMs":7808,"lane":3},{"timeMs":8292,"lane":2},{"timeMs":8776,"lane":1},{"timeMs":9260,"lane":0},
+    {"timeMs":9744,"lane":0},{"timeMs":10228,"lane":2},{"timeMs":10712,"lane":1},{"timeMs":11196,"lane":3},
+    {"timeMs":11680,"lane":0},{"timeMs":12164,"lane":1},{"timeMs":12648,"lane":2},{"timeMs":13132,"lane":3},
+    {"timeMs":13616,"lane":0},{"timeMs":14100,"lane":3},{"timeMs":14584,"lane":1},{"timeMs":15068,"lane":2},
+    {"timeMs":15552,"lane":0},{"timeMs":16036,"lane":1},{"timeMs":16520,"lane":2},{"timeMs":17004,"lane":3},
+    {"timeMs":17972,"lane":0},{"timeMs":18456,"lane":2},{"timeMs":18940,"lane":1},{"timeMs":19424,"lane":3},
+    {"timeMs":20392,"lane":0},{"timeMs":20876,"lane":1},{"timeMs":21360,"lane":2},{"timeMs":21844,"lane":3},
+    {"timeMs":22812,"lane":3},{"timeMs":23296,"lane":2},{"timeMs":23780,"lane":1},{"timeMs":24264,"lane":0},
+    {"timeMs":25232,"lane":0},{"timeMs":25716,"lane":1},{"timeMs":26200,"lane":2},{"timeMs":26684,"lane":3},
+    {"timeMs":27652,"lane":0},{"timeMs":28136,"lane":2},{"timeMs":28620,"lane":1},{"timeMs":29104,"lane":3},
+    {"timeMs":30072,"lane":0},{"timeMs":30556,"lane":1},{"timeMs":31040,"lane":2},{"timeMs":31524,"lane":3}
   ]
 }

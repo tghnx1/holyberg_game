@@ -1,32 +1,25 @@
 import Phaser from 'phaser';
+import { DESIGN_WIDTH } from '../constants';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { parseChart } from '../rhythm/ChartLoader';
+import { GLOBAL_INPUT_OFFSET_MS, HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RhythmDepth } from '../rhythm/constants';
+import { BEGINNER_GRACE_MS, HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y } from '../rhythm/constants';
 import { CompletionGate, getChartEndTimeMs, shouldCompleteChart } from '../rhythm/CompletionSystem';
-import { DjActionManager } from '../rhythm/DjActionManager';
-import { DjRhythmStrip } from '../rhythm/DjRhythmStrip';
-import { beginDjGesture, finishDjGesture, getHeldAction, getHoldProgress, updateDjGesture } from '../rhythm/DjGesture';
-import type { DjGestureSession } from '../rhythm/DjGesture';
-import { DJ_GAMEPLAY_TOP_Y, getDjMixLayout } from '../rhythm/DjMixLayout';
-import { AntiMashSystem, applyBadTap } from '../rhythm/InputPenaltySystem';
 import { judgeTiming } from '../rhythm/JudgementSystem';
+import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../rhythm/InputPenaltySystem';
+import { NoteManager } from '../rhythm/NoteManager';
 import { ProceduralBeat } from '../rhythm/ProceduralBeat';
 import { RhythmClock } from '../rhythm/RhythmClock';
+import { RhythmHighway } from '../rhythm/RhythmHighway';
 import { resetRhythmRunState } from '../rhythm/RhythmRunState';
+import { getHighwayGeometryAtY, getJudgementPadGeometry, getLaneBoundaries } from '../rhythm/PerspectiveMath';
+import { getTouchArea, mapLogicalPointerToLane } from '../rhythm/TouchLaneMapper';
+import { TutorialProgress } from '../rhythm/TutorialProgress';
 import { applyJudgement, calculateAccuracy, getAwardedPoints, getMultiplier, initialScoreState } from '../rhythm/ScoreSystem';
 import { createRhythmStartHandler } from '../rhythm/StartGate';
-import { TutorialProgress } from '../rhythm/TutorialProgress';
-import { BEGINNER_GRACE_MS, GLOBAL_INPUT_OFFSET_MS, RhythmDepth } from '../rhythm/constants';
-import type { Judgement, RhythmAction, RhythmChart, ScoreState } from '../rhythm/types';
-
-const ACTION_COLOR: Record<RhythmAction, number> = {
-  tapLeft: 0xff8a3d,
-  tapRight: 0x9d6cff,
-  swipeLeft: 0xff477e,
-  swipeRight: 0xff477e,
-  holdFx: 0xffdd57,
-};
+import type { Lane, RhythmChart, ScoreState } from '../rhythm/types';
 
 export class RhythmScene extends Phaser.Scene {
   private berlinScore = 0;
@@ -34,34 +27,39 @@ export class RhythmScene extends Phaser.Scene {
   private scoreState!: ScoreState;
   private beat!: ProceduralBeat;
   private clock!: RhythmClock;
-  private actions!: DjActionManager;
-  private strip!: DjRhythmStrip;
+  private notes!: NoteManager;
+  private highway!: RhythmHighway;
   private playing = false;
+  private starting = false;
   private finished = false;
   private lastBeat = -1;
   private scoreText!: Phaser.GameObjects.Text;
   private comboText!: Phaser.GameObjects.Text;
   private energyText!: Phaser.GameObjects.Text;
-  private progressTrack!: Phaser.GameObjects.Rectangle;
   private progressBar!: Phaser.GameObjects.Rectangle;
   private judgementText!: Phaser.GameObjects.Text;
-  private clubRoot!: Phaser.GameObjects.Container;
-  private actionRoot!: Phaser.GameObjects.Container;
-  private tutorialRoot!: Phaser.GameObjects.Container;
   private stageFlash!: Phaser.GameObjects.Rectangle;
-  private clubDim!: Phaser.GameObjects.Rectangle;
+  private clubRoot!: Phaser.GameObjects.Container;
+  private tutorialRoot!: Phaser.GameObjects.Container;
+  private feedbackRoot!: Phaser.GameObjects.Container;
+  private progressTrack!: Phaser.GameObjects.Rectangle;
+  private touchInstruction?: Phaser.GameObjects.Text;
   private activeOverlay?: Phaser.GameObjects.Container;
+  private touchLabels: Phaser.GameObjects.Text[] = [];
   private tutorial?: TutorialProgress;
   private tutorialReady = false;
   private tutorialNote?: Phaser.GameObjects.Container;
   private tutorialPrompt?: Phaser.GameObjects.Text;
-  private tutorialHint?: Phaser.GameObjects.Text;
+  private hitHere!: Phaser.GameObjects.Text;
+  private touchDebug!: Phaser.GameObjects.Graphics;
+  private touchDebugText!: Phaser.GameObjects.Text;
+  private touchDebugVisible = false;
   private audioUnlocked = false;
   private completionGate!: CompletionGate;
   private chartEndTimeMs = 0;
-  private readonly inputGuard = { reset: () => this.gestures.clear() };
+  private readonly inputGuard = new LaneInputGuard();
   private readonly antiMash = new AntiMashSystem();
-  private readonly gestures = new Map<number, DjGestureSession>();
+  private debugPointer = { x: 0, y: 0, lane: null as Lane | null };
   /** InputManager pointers are global and must be added only once per scene instance. */
   private touchPointersAdded = false;
 
@@ -70,7 +68,6 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   constructor() { super('RhythmScene'); }
-
   init(data: { score?: number }): void {
     this.berlinScore = data.score ?? 0;
     this.resetForNewRun();
@@ -79,29 +76,35 @@ export class RhythmScene extends Phaser.Scene {
   private resetForNewRun(): void {
     const reset = resetRhythmRunState(this.inputGuard, this.antiMash);
     this.playing = reset.playing;
+    this.starting = reset.starting;
     this.finished = reset.finished;
     this.lastBeat = reset.lastBeat;
     this.tutorialReady = reset.tutorialReady;
     this.tutorial = reset.tutorial;
     this.tutorialNote = reset.tutorialNote;
     this.tutorialPrompt = reset.tutorialPrompt;
-    this.tutorialHint = undefined;
+    this.touchLabels = [];
+    this.touchDebugVisible = false;
+    this.debugPointer = { x: 0, y: 0, lane: null };
     this.audioUnlocked = false;
-    this.activeOverlay = undefined;
   }
-
   preload(): void {
     this.load.json('holyberg-demo-chart', 'charts/demo.json');
+    // Surfaced rather than swallowed: a missing chart shows up as an empty
+    // scene, which is indistinguishable from a freeze.
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       console.error(`[RhythmScene] failed to load ${file.key} from ${file.url}`);
     });
   }
 
   create(): void {
+    // Attached first so an exit route exists even if the build below fails.
     attachFullscreenExitControl(this);
     try {
       this.build();
     } catch (error) {
+      // A throw in here used to leave the previous scene's last frame on the
+      // canvas with no way to tell what happened, which reads as a freeze.
       this.showFatalError(error);
     }
   }
@@ -111,9 +114,16 @@ export class RhythmScene extends Phaser.Scene {
     console.error('[RhythmScene] failed to start', error);
     const camera = this.cameras.main;
     camera.setBackgroundColor('#12060c');
-    this.add.text(camera.width / 2, camera.height / 2, `RHYTHM STAGE FAILED TO LOAD\n\n${message}`, {
-      fontFamily: 'Space Mono', fontSize: '18px', color: '#ff8a8a', align: 'center', wordWrap: { width: camera.width - 80 },
-    }).setOrigin(0.5).setScrollFactor(0);
+    this.add
+      .text(camera.width / 2, camera.height / 2, `RHYTHM STAGE FAILED TO LOAD\n\n${message}`, {
+        fontFamily: 'Space Mono',
+        fontSize: '18px',
+        color: '#ff8a8a',
+        align: 'center',
+        wordWrap: { width: camera.width - 80 },
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0);
   }
 
   private build(): void {
@@ -125,15 +135,17 @@ export class RhythmScene extends Phaser.Scene {
     this.clock = new RhythmClock(this.beat);
     this.cameras.main.setBackgroundColor('#07040d');
     this.createClub();
-    this.strip = new DjRhythmStrip(this);
-    this.strip.refreshGeometry(this.centerX);
-    this.actionRoot = this.add.container(0, 0).setDepth(RhythmDepth.NOTES);
-    this.tutorialRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.UI);
-    this.actions = new DjActionManager(this, this.chart.notes, this.actionRoot);
-    this.actions.setCenterX(this.centerX);
+    this.highway = new RhythmHighway(this);
+    this.highway.refreshGeometry(this.centerX);
+    this.tutorialRoot = this.add.container(this.centerX, 0);
+    this.highway.root.add(this.tutorialRoot);
+    this.feedbackRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
+    this.createTouchControls();
     this.createHud();
-    this.bindKeyboardInput();
-    this.bindPointerInput();
+    this.bindLaneInput();
+    this.bindTouchInput();
+    this.notes = new NoteManager(this, this.chart.notes, this.highway.root);
+    this.notes.setCenterX(this.centerX);
     this.createStartOverlay();
     new OrientationController(this, {
       onPause: () => { this.clock.pause(); void this.beat.pause(); },
@@ -144,41 +156,40 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   private createClub(): void {
+    const referenceCenterX = DESIGN_WIDTH / 2;
     this.clubRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.CLUB_BACKGROUND);
-    this.clubRoot.add(this.add.rectangle(0, 274, 1120, 548, 0x0b0712, 1));
-    this.stageFlash = this.add.rectangle(0, 274, 1100, 548, 0x8f2677, 0);
-    this.clubDim = this.add.rectangle(0, 274, 1120, 548, 0x020106, 0);
+    this.stageFlash = this.add.rectangle(0, 230, 900, 350, 0x8f2677, 0);
     this.clubRoot.add(this.stageFlash);
-
-    const texture = this.add.graphics();
-    texture.lineStyle(1, 0x6f3a78, 0.13);
-    for (let y = 38; y < 546; y += 34) texture.lineBetween(-550, y, 550, y);
-    for (let x = -540; x <= 540; x += 54) texture.lineBetween(x, 20, x, 546);
-    this.clubRoot.add(texture);
-
+    this.clubRoot.add(this.add.rectangle(0, 190, 420, 100, 0x21112c));
+    this.clubRoot.add(this.add.rectangle(0, 215, 230, 64, 0x0b0811).setStrokeStyle(4, 0xff477e));
+    for (const referenceX of [145, 1135]) {
+      const x = referenceX - referenceCenterX;
+      this.clubRoot.add(this.add.rectangle(x, 285, 125, 340, 0x0b0711).setStrokeStyle(4, 0x24192c));
+      for (const y of [205, 320]) this.clubRoot.add(this.add.circle(x, y, 42, 0x120c19).setStrokeStyle(3, 0x2c2034, 0.55));
+    }
     const beams = this.add.graphics();
-    beams.fillStyle(0x9d6cff, 0.13).fillTriangle(-470, 20, -180, 545, -20, 545);
-    beams.fillStyle(0xff477e, 0.12).fillTriangle(470, 20, 20, 545, 230, 545);
-    beams.fillStyle(0xffdd57, 0.07).fillTriangle(0, 0, -100, 540, 100, 540);
+    beams.fillStyle(0x9d6cff, 0.09).fillTriangle(360 - referenceCenterX, 100, 530 - referenceCenterX, 590, 650 - referenceCenterX, 590);
+    beams.fillStyle(0xff477e, 0.08).fillTriangle(920 - referenceCenterX, 100, 630 - referenceCenterX, 590, 780 - referenceCenterX, 590);
     this.clubRoot.add(beams);
-
-    for (const x of [-440, 440]) {
-      this.clubRoot.add(this.add.rectangle(x, 270, 118, 370, 0x09060f).setStrokeStyle(4, 0x281a31));
-      this.clubRoot.add(this.add.circle(x, 185, 38, 0x15101c).setStrokeStyle(3, 0x40304a, 0.7));
-      this.clubRoot.add(this.add.circle(x, 285, 46, 0x15101c).setStrokeStyle(3, 0x40304a, 0.7));
-    }
-
-    this.clubRoot.add(this.add.circle(0, 196, 37, 0x18101e).setStrokeStyle(5, 0xffdd57, 0.55));
-    this.clubRoot.add(this.add.rectangle(0, 270, 84, 105, 0x160d1d));
-    this.clubRoot.add(this.add.rectangle(0, 342, 430, 92, 0x171020).setStrokeStyle(4, 0xff477e, 0.55));
-    this.clubRoot.add(this.add.text(0, 340, 'HOLYBERG', { fontFamily: 'Archivo Black', fontSize: '31px', color: '#ffdd57' }).setOrigin(0.5));
-
-    for (let index = 0; index < 22; index += 1) {
-      const crowd = this.add.ellipse(-535 + index * 51, 525, 55, 76 + (index % 4) * 12, 0x160b20);
+    for (let index = 0; index < 16; index += 1) {
+      const crowd = this.add.ellipse(35 + index * 82 - referenceCenterX, 690, 72, 95 + (index % 3) * 18, 0x130b1c);
       this.clubRoot.add(crowd);
-      this.tweens.add({ targets: crowd, y: `-=${5 + (index % 4) * 2}`, yoyo: true, repeat: -1, duration: 390 + index * 13 });
+      this.tweens.add({ targets: crowd, y: `-=${7 + (index % 3) * 3}`, yoyo: true, repeat: -1, duration: 420 + index * 17 });
     }
-    this.clubRoot.add(this.clubDim);
+  }
+
+  private createTouchControls(): void {
+    for (let lane = 0; lane < 4; lane += 1) {
+      const x = getJudgementPadGeometry(lane as Lane, this.centerX).centerX;
+      const symbol = ['●', '■', '▲', '◆'][lane];
+      const label = this.add.text(x, 642, `${symbol}\n${LANE_LABELS[lane]}`, { fontFamily: 'Space Mono', fontSize: '34px', fontStyle: 'bold', color: '#ffffff', stroke: '#10091d', strokeThickness: 6, align: 'center', lineSpacing: 2 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
+      this.highway.root.add(label);
+      this.touchLabels.push(label);
+    }
+    this.hitHere = this.add.text(this.centerX, HIT_LINE_Y - 24, 'HIT HERE', { fontFamily: 'Space Mono', fontSize: '16px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#301536', padding: { x: 9, y: 4 } }).setOrigin(0.5, 1).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
+    if (this.game.device.input.touch) this.touchInstruction = this.add.text(this.centerX, 705, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI);
+    this.touchDebug = this.add.graphics().setDepth(RhythmDepth.UI + 1);
+    this.touchDebugText = this.add.text(18, 130, '', { fontFamily: 'Space Mono', fontSize: '15px', color: '#56ffff', backgroundColor: '#090611cc', padding: { x: 8, y: 6 } }).setDepth(RhythmDepth.UI + 1).setVisible(false);
   }
 
   private createHud(): void {
@@ -187,16 +198,16 @@ export class RhythmScene extends Phaser.Scene {
     this.add.text(22, 48, `BERLIN  ${this.berlinScore}`, style).setDepth(RhythmDepth.UI);
     this.scoreText = this.add.text(22, 76, '', style).setDepth(RhythmDepth.UI);
     this.comboText = this.add.text(this.centerX, 38, '', { ...style, align: 'center' }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-    this.energyText = this.add.text(this.cameras.main.width - 22, 20, '', { ...style, align: 'right' }).setOrigin(1, 0).setDepth(RhythmDepth.UI);
+    this.energyText = this.add.text(DESIGN_WIDTH - 22, 20, '', { ...style, align: 'right' }).setOrigin(1, 0).setDepth(RhythmDepth.UI);
     this.progressTrack = this.add.rectangle(this.centerX, 12, 500, 7, 0x2a1836).setDepth(RhythmDepth.UI);
     this.progressBar = this.add.rectangle(this.centerX - 250, 12, 0, 7, 0xffdd57).setOrigin(0, 0.5).setDepth(RhythmDepth.UI);
-    this.judgementText = this.add.text(this.centerX, 510, '', { fontFamily: 'Archivo Black', fontSize: '42px', color: '#fff', stroke: '#541864', strokeThickness: 7 }).setOrigin(0.5).setAlpha(0).setDepth(RhythmDepth.UI);
+    this.judgementText = this.add.text(this.centerX, HIT_LINE_Y - 82, '', { fontFamily: 'Archivo Black', fontSize: '46px', color: '#fff', stroke: '#541864', strokeThickness: 7 }).setOrigin(0.5).setAlpha(0).setDepth(RhythmDepth.UI);
     this.updateHud();
   }
 
   private createStartOverlay(): void {
-    const background = this.add.rectangle(0, this.cameras.main.height / 2, 760, 250, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
-    const text = this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nTAP OR PRESS SPACE', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5);
+    const background = this.add.rectangle(0, this.cameras.main.height / 2, 760, 280, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
+    const text = this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE OR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5);
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     let start = (): void => undefined;
@@ -211,6 +222,7 @@ export class RhythmScene extends Phaser.Scene {
         this.input.keyboard?.off('keydown-SPACE', start);
       },
       startTutorial: () => {
+        this.starting = true;
         background.disableInteractive();
         overlay.destroy(true);
         if (this.activeOverlay === overlay) this.activeOverlay = undefined;
@@ -222,96 +234,6 @@ export class RhythmScene extends Phaser.Scene {
     });
     this.input.on('pointerdown', start);
     this.input.keyboard?.on('keydown-SPACE', start);
-  }
-
-  private bindKeyboardInput(): void {
-    const bindings: Array<[string, RhythmAction]> = [
-      ['A', 'tapLeft'], ['LEFT', 'tapLeft'], ['D', 'tapRight'], ['RIGHT', 'tapRight'],
-      ['Q', 'swipeLeft'], ['E', 'swipeRight'], ['F', 'holdFx'], ['SPACE', 'holdFx'],
-    ];
-    for (const [key, action] of bindings) this.input.keyboard?.on(`keydown-${key}`, () => this.acceptAction(action));
-  }
-
-  private bindPointerInput(): void {
-    if (!this.touchPointersAdded) {
-      this.input.addPointer(3);
-      this.touchPointersAdded = true;
-    }
-    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if ((!this.tutorial && !this.playing) || pointer.y < DJ_GAMEPLAY_TOP_Y) return;
-      this.gestures.set(pointer.id, beginDjGesture(pointer.x, pointer.y, this.time.now));
-    });
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      const gesture = this.gestures.get(pointer.id);
-      if (!gesture) return;
-      const action = updateDjGesture(gesture, pointer.x, pointer.y);
-      if (!action) return;
-      gesture.resolved = true;
-      this.acceptAction(action);
-    });
-    const finishPointer = (pointer: Phaser.Input.Pointer): void => {
-      const gesture = this.gestures.get(pointer.id);
-      if (!gesture) return;
-      const action = finishDjGesture(gesture, pointer.x, pointer.y, this.time.now, this.centerX);
-      if (action) this.acceptAction(action);
-      this.gestures.delete(pointer.id);
-      this.updateHoldMeter();
-    };
-    this.input.on('pointerup', finishPointer);
-    this.input.on('pointerupoutside', finishPointer);
-  }
-
-  private startTutorial(): void {
-    this.tutorial = new TutorialProgress();
-    this.showTutorialCue();
-  }
-
-  private showTutorialCue(): void {
-    const action = this.tutorial?.currentAction;
-    if (!action) {
-      this.destroyTutorialCue();
-      this.scoreState = initialScoreState();
-      this.antiMash.reset();
-      this.updateHud();
-      const background = this.add.rectangle(0, this.cameras.main.height / 2, 500, 210, 0x090611, 0.9);
-      const text = this.add.text(0, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5);
-      const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
-      this.activeOverlay = overlay;
-      this.runCountdown(overlay, background, text);
-      return;
-    }
-
-    this.destroyTutorialCue();
-    this.tutorialReady = false;
-    const prompt = action === 'tapLeft' ? 'TAP LEFT' : action === 'tapRight' ? 'TAP RIGHT' : action === 'holdFx' ? 'HOLD FOR FX' : 'SWIPE TO MIX';
-    const hint = action === 'tapLeft' || action === 'tapRight' ? 'TAP ANYWHERE ON THIS HALF' : action === 'holdFx' ? 'PRESS AND HOLD' : 'SLIDE YOUR FINGER SIDEWAYS';
-    this.tutorialPrompt = this.add.text(this.centerX, 118, prompt, { fontFamily: 'Archivo Black', fontSize: '43px', color: '#ffffff', stroke: '#34103e', strokeThickness: 9 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-    this.tutorialHint = this.add.text(this.centerX, 164, hint, { fontFamily: 'Space Mono', fontSize: '16px', fontStyle: 'bold', color: '#ffdd57' }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-
-    const layout = getDjMixLayout(0);
-    const cueX = action === 'tapLeft' ? layout.leftMarkerX : action === 'tapRight' ? layout.rightMarkerX : 0;
-    const cueLabel = action === 'tapLeft' ? 'LEFT' : action === 'tapRight' ? 'RIGHT' : action === 'holdFx' ? 'HOLD' : '←   SWIPE   →';
-    const cueWidth = action === 'tapLeft' || action === 'tapRight' ? 126 : 300;
-    const shape = this.add.rectangle(0, 0, cueWidth, 76, ACTION_COLOR[action], 0.96).setStrokeStyle(5, 0xffffff, 0.9);
-    const label = this.add.text(0, 0, cueLabel, { fontFamily: 'Archivo Black', fontSize: '25px', color: '#100818' }).setOrigin(0.5);
-    this.tutorialNote = this.add.container(cueX, layout.stripCenterY, [shape, label]);
-    this.tutorialRoot.add(this.tutorialNote);
-    if (action === 'swipeRight') {
-      this.tweens.add({ targets: this.tutorialNote, x: `+=${120}`, yoyo: true, repeat: -1, duration: 550, ease: 'Sine.inOut' });
-    } else {
-      this.tweens.add({ targets: this.tutorialNote, scale: 1.1, yoyo: true, repeat: -1, duration: 470, ease: 'Sine.inOut' });
-    }
-    this.time.delayedCall(420, () => { this.tutorialReady = true; });
-  }
-
-  private destroyTutorialCue(): void {
-    if (this.tutorialNote) this.tweens.killTweensOf(this.tutorialNote);
-    this.tutorialNote?.destroy(true);
-    this.tutorialPrompt?.destroy();
-    this.tutorialHint?.destroy();
-    this.tutorialNote = undefined;
-    this.tutorialPrompt = undefined;
-    this.tutorialHint = undefined;
   }
 
   private runCountdown(overlay: Phaser.GameObjects.Container, background: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text): void {
@@ -326,64 +248,125 @@ export class RhythmScene extends Phaser.Scene {
     });
   }
 
-  private acceptAction(action: RhythmAction): void {
-    if (!this.tutorial && !this.playing) return;
-    this.strip.flashAction(action, ACTION_COLOR[action]);
+  private startTutorial(): void {
+    this.tutorial = new TutorialProgress();
+    this.showTutorialNote();
+  }
+
+  private showTutorialNote(): void {
+    const lane = this.tutorial?.currentLane;
+    if (lane === null || lane === undefined) {
+      this.hitHere.destroy();
+      this.scoreState = initialScoreState();
+      this.inputGuard.reset();
+      this.antiMash.reset();
+      this.updateHud();
+      const background = this.add.rectangle(0, this.cameras.main.height / 2, 500, 220, 0x090611, 0.9);
+      const text = this.add.text(0, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5);
+      const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
+      this.activeOverlay = overlay;
+      this.runCountdown(overlay, background, text);
+      return;
+    }
+    this.tutorialReady = false;
+    const colorNames = ['ORANGE', 'PINK', 'PURPLE', 'YELLOW'];
+    this.tutorialPrompt?.destroy();
+    this.tutorialPrompt = this.add.text(this.centerX, 300, `TAP ${colorNames[lane]}`, { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffffff', stroke: '#34103e', strokeThickness: 8 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
+    const shape = lane === 0 ? this.add.circle(0, 0, 32, LANE_COLORS[lane]) : lane === 1 ? this.add.rectangle(0, 0, 62, 62, LANE_COLORS[lane]) : lane === 2 ? this.add.triangle(0, 0, 0, 62, 31, 0, 62, 62, LANE_COLORS[lane]) : this.add.rectangle(0, 0, 50, 50, LANE_COLORS[lane]).setAngle(45);
+    const symbol = this.add.text(0, 0, ['●', '■', '▲', '◆'][lane], { fontFamily: 'Arial', fontSize: '28px', color: '#130a1d' }).setOrigin(0.5);
+    this.tutorialNote = this.add.container([-0.75, -0.25, 0.25, 0.75][lane] * HORIZON_HALF_WIDTH, HORIZON_Y, [shape, symbol]).setScale(0.2).setDepth(RhythmDepth.NOTES);
+    this.tutorialRoot.add(this.tutorialNote);
+    this.tweens.add({ targets: this.tutorialNote, x: [-0.75, -0.25, 0.25, 0.75][lane] * HIT_LINE_HALF_WIDTH, y: HIT_LINE_Y, scale: 1.2, duration: 1500, ease: 'Cubic.in', onComplete: () => { this.tutorialReady = true; } });
+  }
+
+  private bindLaneInput(): void {
+    const bindings: Array<[string, Lane]> = [['D', 0], ['F', 1], ['J', 2], ['K', 3], ['LEFT', 0], ['DOWN', 1], ['UP', 2], ['RIGHT', 3]];
+    for (const [key, lane] of bindings) this.input.keyboard?.on(`keydown-${key}`, () => this.pressLane(lane));
+    if (import.meta.env.DEV) this.input.keyboard?.on('keydown-T', () => { this.touchDebugVisible = !this.touchDebugVisible; this.drawTouchDebug(); });
+  }
+
+  private bindTouchInput(): void {
+    if (!this.touchPointersAdded) {
+      this.input.addPointer(3);
+      this.touchPointersAdded = true;
+    }
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.starting && !this.tutorial && !this.playing) return;
+      const area = getTouchArea(this.centerX, HIT_LINE_HALF_WIDTH);
+      const lane = mapLogicalPointerToLane(pointer.x, pointer.y, area);
+      this.debugPointer = { x: pointer.x, y: pointer.y, lane };
+      this.drawTouchDebug();
+      if (lane !== null && this.inputGuard.beginPointer(pointer.id, lane, this.time.now)) this.pressLane(lane, true);
+    });
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.inputGuard.endPointer(pointer.id));
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      const area = getTouchArea(this.centerX, HIT_LINE_HALF_WIDTH);
+      this.debugPointer = { x: pointer.x, y: pointer.y, lane: mapLogicalPointerToLane(pointer.x, pointer.y, area) };
+      this.drawTouchDebug();
+    });
+  }
+
+  private pressLane(lane: Lane, inputGuarded = false): void {
+    if (!inputGuarded && !this.inputGuard.allowLane(lane, this.time.now)) return;
+    this.showPressFeedback(lane);
     if (this.tutorial && !this.tutorial.complete) {
-      const expected = this.tutorial.currentAction;
-      const tutorialAction = expected === 'swipeRight' && (action === 'swipeLeft' || action === 'swipeRight') ? expected : action;
-      if (this.tutorialReady && this.tutorial.hit(tutorialAction)) this.showTutorialCue();
+      if (this.tutorialReady && this.tutorial.hit(lane)) {
+        this.tutorialNote?.destroy(); this.tutorialPrompt?.destroy();
+        this.showTutorialNote();
+      }
       return;
     }
     if (!this.playing || this.finished) return;
     const inputTime = this.clock.currentTimeMs + GLOBAL_INPUT_OFFSET_MS;
-    const note = this.actions.nearestPending(action, inputTime);
+    const note = this.notes.nearestPending(lane, inputTime);
     const judgement = note ? judgeTiming(inputTime - note.timeMs) : null;
-    if (!note || !judgement) {
-      this.registerBadAction();
-      return;
-    }
-    this.actions.resolve(note, 'hit');
-    this.registerJudgement(judgement, action, !this.antiMash.isLocked(this.clock.currentTimeMs));
+    if (!note || !judgement) { this.registerBadTap(lane); return; }
+    this.notes.resolve(note, 'hit');
+    this.registerJudgement(judgement, lane, !this.antiMash.isLocked(this.clock.currentTimeMs));
   }
 
-  private registerBadAction(): void {
+  private registerBadTap(lane: Lane): void {
     const now = this.clock.currentTimeMs;
     this.scoreState = applyBadTap(this.scoreState);
     this.updateHud();
-    this.showJudgementText('BAD MOVE -40', '#ff334f', 25);
-    if (this.antiMash.recordBadTap(now)) this.showJudgementText('SLOW DOWN', '#ff334f', 30, 620);
+    this.highway.flashLane(lane, 0xff334f, false);
+    this.judgementText.setText('BAD TAP -40').setFontSize(25).setY(HIT_LINE_Y - 50).setColor('#ff334f').setAlpha(1).setScale(1);
+    this.tweens.killTweensOf(this.judgementText);
+    this.tweens.add({ targets: this.judgementText, alpha: 0, duration: 300 });
+    if (this.antiMash.recordBadTap(now)) {
+      this.judgementText.setText('STOP MASHING').setFontSize(30).setColor('#ff334f').setAlpha(1);
+      this.tweens.add({ targets: this.judgementText, alpha: 0, delay: 550, duration: 250 });
+    }
   }
 
-  private registerJudgement(judgement: Judgement, action?: RhythmAction, scoringEnabled = true): void {
+  private showPressFeedback(lane: Lane): void {
+    this.highway.flashLane(lane, LANE_COLORS[lane], false);
+    const horizon = getLaneBoundaries(0, 0);
+    const hit = getLaneBoundaries(1, 0);
+    const flash = this.add.graphics().fillStyle(LANE_COLORS[lane], 0.22).fillPoints([
+      new Phaser.Geom.Point(horizon[lane], HORIZON_Y),
+      new Phaser.Geom.Point(horizon[lane + 1], HORIZON_Y),
+      new Phaser.Geom.Point(hit[lane + 1], HIT_LINE_Y),
+      new Phaser.Geom.Point(hit[lane], HIT_LINE_Y),
+    ], true);
+    const rippleX = (hit[lane] + hit[lane + 1]) / 2;
+    const ripple = this.add.circle(rippleX, HIT_LINE_Y, 18, LANE_COLORS[lane], 0).setStrokeStyle(5, LANE_COLORS[lane], 0.9).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
+    this.feedbackRoot.add([flash, ripple]);
+    this.tweens.add({ targets: [flash, ripple], alpha: 0, duration: 180, onComplete: () => { flash.destroy(); ripple.destroy(); } });
+    this.tweens.add({ targets: ripple, scale: 2.2, duration: 180 });
+  }
+
+  private registerJudgement(judgement: 'PERFECT' | 'EXCELLENT' | 'GOOD' | 'MISS', lane?: Lane, scoringEnabled = true): void {
     const awardedPoints = scoringEnabled ? getAwardedPoints(this.scoreState, judgement) : 0;
     const protectEnergy = judgement === 'MISS' && this.clock.currentTimeMs < BEGINNER_GRACE_MS;
     this.scoreState = applyJudgement(this.scoreState, judgement, protectEnergy, scoringEnabled);
-    if (action) this.strip.flashAction(action, judgement === 'PERFECT' ? 0xffffff : ACTION_COLOR[action]);
+    if (lane !== undefined) this.highway.flashLane(lane, judgement === 'PERFECT' ? 0xffffff : LANE_COLORS[lane], judgement === 'PERFECT');
+    if (judgement === 'MISS') this.cameras.main.shake(100, 0.004);
     const feedback = judgement === 'MISS' ? 'MISS' : `${judgement}\n+${awardedPoints}`;
-    const color = judgement === 'PERFECT' ? '#ffffff' : judgement === 'EXCELLENT' ? '#ffdd57' : judgement === 'GOOD' ? '#ff8a3d' : '#ff3f5e';
-    this.showJudgementText(feedback, color, judgement === 'MISS' ? 27 : judgement === 'PERFECT' ? 42 : judgement === 'EXCELLENT' ? 37 : 32);
-    this.reactClub(judgement);
-    this.updateHud();
-  }
-
-  private showJudgementText(text: string, color: string, fontSize: number, delay = 0): void {
-    this.judgementText.setText(text).setFontSize(fontSize).setColor(color).setAlpha(1).setScale(text.startsWith('PERFECT') ? 1.18 : 1);
+    this.judgementText.setText(feedback).setFontSize(judgement === 'MISS' ? 28 : judgement === 'PERFECT' ? 46 : judgement === 'EXCELLENT' ? 40 : 34).setY(HIT_LINE_Y - (judgement === 'MISS' ? 52 : 92)).setColor(judgement === 'PERFECT' ? '#ffffff' : judgement === 'EXCELLENT' ? '#ffdd57' : judgement === 'GOOD' ? '#ff8a3d' : '#ff3f5e').setAlpha(1).setScale(judgement === 'PERFECT' ? 1.2 : 1);
     this.tweens.killTweensOf(this.judgementText);
-    this.tweens.add({ targets: this.judgementText, alpha: 0, scale: 1, delay, duration: 300 });
-  }
-
-  private reactClub(judgement: Judgement): void {
-    if (judgement === 'MISS') {
-      this.clubDim.setAlpha(0.42);
-      this.tweens.add({ targets: this.clubDim, alpha: 0, duration: 240 });
-      this.cameras.main.shake(90, 0.003);
-      return;
-    }
-    const strong = judgement === 'PERFECT' || this.scoreState.combo >= 10;
-    this.stageFlash.setFillStyle(strong ? 0xff477e : 0x9d6cff).setAlpha(strong ? 0.38 : 0.18);
-    this.tweens.add({ targets: this.stageFlash, alpha: 0, duration: strong ? 230 : 150 });
-    this.strip.pulse(strong);
+    this.tweens.add({ targets: this.judgementText, alpha: 0, scale: 1, duration: 330 });
+    this.updateHud();
   }
 
   private updateHud(): void {
@@ -392,46 +375,65 @@ export class RhythmScene extends Phaser.Scene {
     this.energyText.setText(`CROWD ENERGY\n${this.scoreState.energy}%`);
   }
 
-  private updateHoldGestures(): void {
-    let maxProgress = 0;
-    for (const gesture of this.gestures.values()) {
-      maxProgress = Math.max(maxProgress, getHoldProgress(gesture, this.time.now));
-      if (!getHeldAction(gesture, this.time.now)) continue;
-      gesture.resolved = true;
-      this.acceptAction('holdFx');
-    }
-    this.strip.setHoldProgress(maxProgress);
-  }
-
-  private updateHoldMeter(): void {
-    let maxProgress = 0;
-    for (const gesture of this.gestures.values()) maxProgress = Math.max(maxProgress, getHoldProgress(gesture, this.time.now));
-    this.strip.setHoldProgress(maxProgress);
-  }
-
   private applyResponsiveLayout(viewport: ViewportInfo): void {
     const centerX = this.centerX;
     this.clubRoot.setX(centerX);
-    this.strip.refreshGeometry(centerX);
-    this.actions.setCenterX(centerX);
+    this.highway.refreshGeometry(centerX);
+    this.notes.setCenterX(centerX);
     this.tutorialRoot.setX(centerX);
+    this.feedbackRoot.setX(centerX);
+    this.hitHere?.setX(centerX);
+    this.touchInstruction?.setX(centerX);
     this.progressTrack.setX(centerX);
     this.progressBar.setX(centerX - 250);
-    this.comboText.setX(centerX).setScale(viewport.hudScale);
-    this.energyText.setX(this.cameras.main.width - 22).setScale(viewport.hudScale);
-    this.scoreText.setScale(viewport.hudScale);
-    this.judgementText.setX(centerX).setScale(viewport.hudScale);
     this.activeOverlay?.setX(centerX);
     this.tutorialPrompt?.setX(centerX);
-    this.tutorialHint?.setX(centerX);
+    this.scoreText.setScale(viewport.hudScale);
+    this.comboText.setPosition(centerX, this.comboText.y).setScale(viewport.hudScale);
+    this.energyText.setX(this.cameras.main.width - 22).setScale(viewport.hudScale);
+    this.judgementText.setPosition(centerX, this.judgementText.y).setScale(viewport.hudScale);
+    const controlScale = viewport.compactLandscape ? 0.82 : 1;
+    for (let lane = 0; lane < this.touchLabels.length; lane += 1) {
+      const geometry = getJudgementPadGeometry(lane as Lane, centerX);
+      this.touchLabels[lane].setPosition(geometry.centerX, geometry.centerY).setScale(controlScale);
+    }
+    this.drawTouchDebug();
+  }
+
+  private drawTouchDebug(): void {
+    this.touchDebug.clear();
+    this.touchDebugText.setVisible(this.touchDebugVisible);
+    if (!this.touchDebugVisible) return;
+    const area = getTouchArea(this.centerX, HIT_LINE_HALF_WIDTH);
+    const touchTop = getHighwayGeometryAtY(area.top, this.centerX);
+    const touchBottom = getHighwayGeometryAtY(area.bottom, this.centerX);
+    this.touchDebug.lineStyle(3, 0x56ffff, 0.9);
+    for (let lane = 0; lane < 4; lane += 1) this.touchDebug.strokePoints([
+      new Phaser.Geom.Point(touchTop.boundaries[lane], area.top),
+      new Phaser.Geom.Point(touchTop.boundaries[lane + 1], area.top),
+      new Phaser.Geom.Point(touchBottom.boundaries[lane + 1], area.bottom),
+      new Phaser.Geom.Point(touchBottom.boundaries[lane], area.bottom),
+    ], true);
+    const horizon = getLaneBoundaries(0, this.centerX);
+    const hit = getLaneBoundaries(1, this.centerX);
+    this.touchDebug.lineStyle(2, 0xff55ff, 0.95);
+    for (let boundary = 0; boundary < 5; boundary += 1) this.touchDebug.lineBetween(horizon[boundary], HORIZON_Y, hit[boundary], HIT_LINE_Y);
+    this.touchDebug.lineStyle(2, 0x55ff88, 0.95);
+    for (let lane = 0; lane < 4; lane += 1) {
+      const centerTop = (horizon[lane] + horizon[lane + 1]) / 2;
+      const centerBottom = (hit[lane] + hit[lane + 1]) / 2;
+      this.touchDebug.lineBetween(centerTop, HORIZON_Y, centerBottom, 720);
+      const pad = getJudgementPadGeometry(lane as Lane, this.centerX);
+      const points = [] as Phaser.Geom.Point[];
+      for (let index = 0; index < pad.points.length; index += 2) points.push(new Phaser.Geom.Point(pad.centerX + pad.points[index], pad.centerY + pad.points[index + 1]));
+      this.touchDebug.strokePoints(points, true);
+    }
+    this.touchDebugText.setText(`POINTER  ${Math.round(this.debugPointer.x)}, ${Math.round(this.debugPointer.y)}\nLANE     ${this.debugPointer.lane ?? '—'}`);
   }
 
   private endLevel(): void {
     if (this.finished) return;
-    this.finished = true;
-    this.playing = false;
-    this.clock.stop();
-    this.beat.stop();
+    this.finished = true; this.playing = false; this.clock.stop(); this.beat.stop();
     const completeText = this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5);
     const overlay = this.add.container(this.centerX, 0, [completeText]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
@@ -444,32 +446,29 @@ export class RhythmScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.playing = false;
-    this.clock?.stop();
-    this.beat?.stop();
+    this.clock?.stop(); this.beat?.stop();
     this.time.removeAllEvents();
     this.input.removeAllListeners();
     this.input.keyboard?.removeAllListeners();
-    this.gestures.clear();
     this.tutorial = undefined;
     this.tutorialNote = undefined;
     this.tutorialPrompt = undefined;
-    this.tutorialHint = undefined;
+    this.touchLabels.length = 0;
   }
 
   update(): void {
-    if (this.tutorial || this.playing) this.updateHoldGestures();
     if (!this.playing || this.finished) return;
     const time = this.clock.currentTimeMs;
-    const missed = this.actions.update(time);
+    const missed = this.notes.update(time);
     for (let index = 0; index < missed.length; index += 1) this.registerJudgement('MISS');
     this.progressBar.displayWidth = 500 * Phaser.Math.Clamp(time / this.chart.durationMs, 0, 1);
     const beatIndex = Math.floor(time / (60000 / this.chart.bpm));
     if (beatIndex !== this.lastBeat) {
-      this.lastBeat = beatIndex;
-      const strong = beatIndex % 4 === 0 || this.scoreState.combo >= 10;
-      this.stageFlash.setAlpha(strong ? 0.2 : 0.08);
+      this.lastBeat = beatIndex; this.highway.pulse();
+      this.stageFlash.setAlpha(beatIndex % 4 === 0 ? 0.22 : 0.1);
       this.tweens.add({ targets: this.stageFlash, alpha: 0, duration: 170 });
-      this.strip.pulse(strong);
+      this.cameras.main.zoomTo(beatIndex % 4 === 0 ? 1.008 : 1.003, 55, 'Sine.easeOut', true);
+      this.time.delayedCall(70, () => this.cameras.main.zoomTo(1, 100));
     }
     this.completionGate.tryComplete(shouldCompleteChart(time, this.chartEndTimeMs), () => this.endLevel());
   }

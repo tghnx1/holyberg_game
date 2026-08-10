@@ -1,12 +1,12 @@
-import type { RhythmAction } from './types';
+import type { Lane } from './types';
 
 export class TutorialProgress {
   private index = 0;
-  private readonly actions: readonly RhythmAction[] = ['tapLeft', 'tapRight', 'swipeRight', 'holdFx'];
-  get currentAction(): RhythmAction | null { return this.actions[this.index] ?? null; }
-  get complete(): boolean { return this.index >= this.actions.length; }
-  hit(action: RhythmAction): boolean {
-    if (action !== this.currentAction) return false;
+  private readonly lanes: readonly Lane[] = [0, 1, 2, 3];
+  get currentLane(): Lane | null { return this.lanes[this.index] ?? null; }
+  get complete(): boolean { return this.index >= this.lanes.length; }
+  hit(lane: Lane): boolean {
+    if (lane !== this.currentLane) return false;
     this.index += 1;
     return true;
   }

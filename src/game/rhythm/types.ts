@@ -1,12 +1,10 @@
 export type Lane = 0 | 1 | 2 | 3;
-export const RHYTHM_ACTIONS = ['tapLeft', 'tapRight', 'swipeLeft', 'swipeRight', 'holdFx'] as const;
-export type RhythmAction = (typeof RHYTHM_ACTIONS)[number];
 export type Judgement = 'PERFECT' | 'EXCELLENT' | 'GOOD' | 'MISS';
 export type NoteState = 'pending' | 'hit' | 'missed';
 
 export interface ChartNote {
   timeMs: number;
-  action: RhythmAction;
+  lane: Lane;
 }
 
 export interface RhythmChart {
