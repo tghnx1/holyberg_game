@@ -6,16 +6,18 @@ import { TutorialProgress } from '../src/game/rhythm/TutorialProgress';
 import { getHighwayGeometryAtY } from '../src/game/rhythm/PerspectiveMath';
 
 describe('rhythm touch onboarding', () => {
+  const centerX = 640;
+
   it('maps pointer X coordinates and exact boundaries to four lanes', () => {
-    const area = getTouchArea(640, 400);
-    const boundaries = getHighwayGeometryAtY(600).boundaries;
+    const area = getTouchArea(centerX, 400);
+    const boundaries = getHighwayGeometryAtY(600, centerX).boundaries;
     expect(mapLogicalPointerToLane(boundaries[0], 600, area)).toBe(0);
     expect(mapLogicalPointerToLane(boundaries[1] - 0.01, 600, area)).toBe(0);
     expect(mapLogicalPointerToLane(boundaries[1], 600, area)).toBe(1);
     expect(mapLogicalPointerToLane(boundaries[2], 600, area)).toBe(2);
     expect(mapLogicalPointerToLane(boundaries[4], 600, area)).toBe(3);
     expect(mapLogicalPointerToLane(area.right + 1, 600, area)).toBeNull();
-    expect(mapLogicalPointerToLane(640, 400, area)).toBeNull();
+    expect(mapLogicalPointerToLane(centerX, 400, area)).toBeNull();
   });
 
   it('converts responsive physical X to logical canvas X', () => {

@@ -33,6 +33,8 @@ export class ResultScene extends Phaser.Scene {
   private restartAction!: Phaser.GameObjects.Text;
   private retryAction!: Phaser.GameObjects.Text;
   private modal?: HTMLDivElement;
+  private modalPromise?: Promise<string | null>;
+  private modalResolver?: (value: string | null) => void;
   private claimed?: { instagram: string; bestScore: number; rank: number };
   private playerRank?: number;
   private storedInstagram = '';
@@ -235,12 +237,14 @@ export class ResultScene extends Phaser.Scene {
       if (!this.scene.isActive()) return;
       this.renderTop10(snapshot.top10);
       this.renderVirtualPlayerRow(snapshot.rank);
+      void this.promptForClaimAndSubmit();
     } catch (error) {
       if (!this.scene.isActive()) return;
       console.warn('[Leaderboard] could not load', error);
       this.leaderboardText.setText('TOP 10 TEMPORARILY UNAVAILABLE');
       this.renderVirtualPlayerRow();
       if (!this.skipped) this.leaderboardStatus.setText('YOUR SCORE IS READY TO CLAIM');
+      void this.promptForClaimAndSubmit();
     }
   }
 
@@ -353,7 +357,65 @@ export class ResultScene extends Phaser.Scene {
 
   private async claimScore(): Promise<void> {
     if (this.submitting || this.claimed) return;
-    const instagram = await this.showClaimModal('');
+    await this.promptForClaimAndSubmit();
+  }
+
+  private openClaimModal(initialValue = ''): Promise<string | null> {
+    if (this.modalPromise) return this.modalPromise;
+    this.removeClaimModal();
+    this.modalPromise = new Promise((resolve) => {
+      this.modalResolver = resolve;
+      const modal = document.createElement('div');
+      modal.className = 'leaderboard-claim-overlay';
+      const rankLabel = this.playerRank === undefined ? '' : ` #${this.playerRank}`;
+      modal.innerHTML = `
+        <form class="leaderboard-claim-dialog">
+          <div class="leaderboard-claim-title">CLAIM YOUR${rankLabel} SPOT</div>
+          <label for="holyberg-instagram">INSTAGRAM USERNAME</label>
+          <input id="holyberg-instagram" name="instagram" maxlength="100" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="@holyberg_">
+          <div class="leaderboard-claim-error" aria-live="polite"></div>
+          <div class="leaderboard-claim-actions">
+            <button type="button" data-action="cancel">CANCEL</button>
+            <button type="submit">CLAIM SPOT</button>
+          </div>
+        </form>`;
+      document.getElementById('game')?.appendChild(modal);
+      this.modal = modal;
+      const form = modal.querySelector('form');
+      const input = modal.querySelector('input');
+      const error = modal.querySelector<HTMLElement>('.leaderboard-claim-error');
+      const finish = (value: string | null): void => {
+        this.removeClaimModal();
+        this.modalResolver?.(value);
+        this.modalResolver = undefined;
+        this.modalPromise = undefined;
+      };
+      modal.querySelector('[data-action="cancel"]')?.addEventListener('click', () => finish(null));
+      form?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const normalized = normalizeInstagram(input?.value ?? '');
+        if (!isValidInstagramUsername(normalized)) {
+          if (error) error.textContent = 'ENTER A VALID INSTAGRAM USERNAME';
+          return;
+        }
+        finish(normalized);
+      });
+      if (input instanceof HTMLInputElement) {
+        input.value = initialValue;
+        input.focus();
+        input.select();
+      }
+    });
+    return this.modalPromise;
+  }
+
+  private removeClaimModal(): void {
+    this.modal?.remove();
+    this.modal = undefined;
+  }
+
+  private async promptForClaimAndSubmit(): Promise<void> {
+    const instagram = await this.openClaimModal();
     if (!instagram || !this.scene.isActive()) return;
 
     if (import.meta.env.DEV) {
@@ -405,55 +467,6 @@ export class ResultScene extends Phaser.Scene {
     } finally {
       this.submitting = false;
     }
-  }
-
-  private showClaimModal(initialValue: string): Promise<string | null> {
-    this.removeClaimModal();
-    return new Promise((resolve) => {
-      const modal = document.createElement('div');
-      modal.className = 'leaderboard-claim-overlay';
-      const rankLabel = this.playerRank === undefined ? '' : ` #${this.playerRank}`;
-      modal.innerHTML = `
-        <form class="leaderboard-claim-dialog">
-          <div class="leaderboard-claim-title">CLAIM YOUR${rankLabel} SPOT</div>
-          <label for="holyberg-instagram">INSTAGRAM USERNAME</label>
-          <input id="holyberg-instagram" name="instagram" maxlength="100" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="@holyberg_">
-          <div class="leaderboard-claim-error" aria-live="polite"></div>
-          <div class="leaderboard-claim-actions">
-            <button type="button" data-action="cancel">CANCEL</button>
-            <button type="submit">CLAIM SPOT</button>
-          </div>
-        </form>`;
-      document.getElementById('game')?.appendChild(modal);
-      this.modal = modal;
-      const form = modal.querySelector('form');
-      const input = modal.querySelector('input');
-      const error = modal.querySelector<HTMLElement>('.leaderboard-claim-error');
-      const finish = (value: string | null): void => {
-        this.removeClaimModal();
-        resolve(value);
-      };
-      modal.querySelector('[data-action="cancel"]')?.addEventListener('click', () => finish(null));
-      form?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const normalized = normalizeInstagram(input?.value ?? '');
-        if (!isValidInstagramUsername(normalized)) {
-          if (error) error.textContent = 'ENTER A VALID INSTAGRAM USERNAME';
-          return;
-        }
-        finish(normalized);
-      });
-      if (input instanceof HTMLInputElement) {
-        input.value = initialValue;
-        input.focus();
-        input.select();
-      }
-    });
-  }
-
-  private removeClaimModal(): void {
-    this.modal?.remove();
-    this.modal = undefined;
   }
 
   private async shareScore(): Promise<void> {

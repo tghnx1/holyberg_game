@@ -9,12 +9,12 @@ export class RhythmHighway {
   readonly root: Phaser.GameObjects.Container;
   private readonly glow: Phaser.GameObjects.Graphics;
 
-  constructor(private readonly scene: Phaser.Scene) {
+  constructor(private readonly scene: Phaser.Scene, private readonly screenCenterX: number) {
     this.root = scene.add.container(0, 0).setScale(1, 1).setDepth(RhythmDepth.HIGHWAY);
     const graphics = scene.add.graphics();
     this.root.add(graphics);
-    const horizon = getLaneBoundariesAtY(HORIZON_Y);
-    const bottom = getLaneBoundariesAtY(PAD_BOTTOM_Y);
+    const horizon = getLaneBoundariesAtY(HORIZON_Y, screenCenterX);
+    const bottom = getLaneBoundariesAtY(PAD_BOTTOM_Y, screenCenterX);
     graphics.fillStyle(0x120a20, 0.94).fillPoints([
       new Phaser.Geom.Point(horizon[0], HORIZON_Y), new Phaser.Geom.Point(horizon[4], HORIZON_Y),
       new Phaser.Geom.Point(bottom[4], PAD_BOTTOM_Y), new Phaser.Geom.Point(bottom[0], PAD_BOTTOM_Y),
@@ -44,7 +44,7 @@ export class RhythmHighway {
 
   refreshGeometry(): void {
     for (const pad of this.lanePads) {
-      const geometry = getJudgementPadGeometry(pad.lane as 0 | 1 | 2 | 3);
+      const geometry = getJudgementPadGeometry(pad.lane as 0 | 1 | 2 | 3, this.screenCenterX);
       pad.container.setPosition(geometry.centerX, geometry.centerY).setScale(1, 1);
       this.drawPad(pad, LANE_COLORS[pad.lane], 0.65);
     }
@@ -52,7 +52,7 @@ export class RhythmHighway {
   }
 
   private drawHitLine(alpha: number): void {
-    const hit = getLaneBoundariesAtY(HIT_LINE_Y);
+    const hit = getLaneBoundariesAtY(HIT_LINE_Y, this.screenCenterX);
     this.glow.clear();
     this.glow.lineStyle(18, 0xffdf57, alpha * 0.22).lineBetween(hit[0], HIT_LINE_Y, hit[4], HIT_LINE_Y);
     this.glow.lineStyle(7, 0xffffff, alpha).lineBetween(hit[0], HIT_LINE_Y, hit[4], HIT_LINE_Y);
@@ -60,7 +60,7 @@ export class RhythmHighway {
 
   private createPads(): void {
     for (let lane = 0; lane < 4; lane += 1) {
-      const geometry = getJudgementPadGeometry(lane as 0 | 1 | 2 | 3);
+      const geometry = getJudgementPadGeometry(lane as 0 | 1 | 2 | 3, this.screenCenterX);
       const graphics = this.scene.add.graphics();
       const container = this.scene.add.container(geometry.centerX, geometry.centerY, [graphics]);
       this.root.add(container);
@@ -71,7 +71,7 @@ export class RhythmHighway {
   }
 
   private drawPad(pad: PadVisual, color: number, alpha: number): void {
-    const geometry = getJudgementPadGeometry(pad.lane as 0 | 1 | 2 | 3);
+    const geometry = getJudgementPadGeometry(pad.lane as 0 | 1 | 2 | 3, this.screenCenterX);
     const points: Phaser.Geom.Point[] = [];
     for (let index = 0; index < geometry.points.length; index += 2) points.push(new Phaser.Geom.Point(geometry.points[index], geometry.points[index + 1]));
     pad.graphics.clear().fillStyle(color, alpha).fillPoints(points, true).lineStyle(3, 0xffffff, 0.55).strokePoints(points, true);

@@ -9,7 +9,7 @@ export interface PerspectivePosition {
   halfWidth: number;
 }
 
-export function getLaneBoundaries(progress: number, screenCenterX = 640): [number, number, number, number, number] {
+export function getLaneBoundaries(progress: number, screenCenterX: number): [number, number, number, number, number] {
   const clamped = Math.min(1, Math.max(0, progress));
   const halfWidth = HORIZON_HALF_WIDTH + (HIT_LINE_HALF_WIDTH - HORIZON_HALF_WIDTH) * clamped;
   return [-1, -0.5, 0, 0.5, 1].map((position) => screenCenterX + position * halfWidth) as [number, number, number, number, number];
@@ -17,26 +17,26 @@ export function getLaneBoundaries(progress: number, screenCenterX = 640): [numbe
 
 export interface HighwayGeometry { y: number; boundaries: [number, number, number, number, number]; centres: [number, number, number, number]; left: number; right: number; }
 
-export function getLaneBoundariesAtY(y: number, screenCenterX = 640): [number, number, number, number, number] {
+export function getLaneBoundariesAtY(y: number, screenCenterX: number): [number, number, number, number, number] {
   const progress = (y - HORIZON_Y) / (HIT_LINE_Y - HORIZON_Y);
   const halfWidth = HORIZON_HALF_WIDTH + (HIT_LINE_HALF_WIDTH - HORIZON_HALF_WIDTH) * progress;
   return [-1, -0.5, 0, 0.5, 1].map((position) => screenCenterX + position * halfWidth) as [number, number, number, number, number];
 }
 
-export function getHighwayGeometryAtY(y: number, screenCenterX = 640): HighwayGeometry {
+export function getHighwayGeometryAtY(y: number, screenCenterX: number): HighwayGeometry {
   const boundaries = getLaneBoundariesAtY(y, screenCenterX);
   const centres = [0, 1, 2, 3].map((lane) => (boundaries[lane] + boundaries[lane + 1]) / 2) as [number, number, number, number];
   return { y, boundaries, centres, left: boundaries[0], right: boundaries[4] };
 }
 
-export function getLaneCenterX(lane: Lane, progress: number, screenCenterX = 640): number {
+export function getLaneCenterX(lane: Lane, progress: number, screenCenterX: number): number {
   const boundaries = getLaneBoundaries(progress, screenCenterX);
   return (boundaries[lane] + boundaries[lane + 1]) / 2;
 }
 
 export interface JudgementPadGeometry { centerX: number; centerY: number; points: number[]; left: number; right: number; }
 
-export function getJudgementPadGeometry(lane: Lane, screenCenterX = 640): JudgementPadGeometry {
+export function getJudgementPadGeometry(lane: Lane, screenCenterX: number): JudgementPadGeometry {
   const top = getLaneBoundariesAtY(PAD_TOP_Y, screenCenterX);
   const bottom = getLaneBoundariesAtY(PAD_BOTTOM_Y, screenCenterX);
   const topCenter = (top[lane] + top[lane + 1]) / 2;
@@ -49,7 +49,7 @@ export function getJudgementPadGeometry(lane: Lane, screenCenterX = 640): Judgem
 export function getPerspectivePosition(
   lane: Lane,
   progress: number,
-  screenCenterX = 640,
+  screenCenterX: number,
 ): PerspectivePosition {
   const clamped = Math.min(1, Math.max(0, progress));
   const eased = clamped * clamped * (3 - 2 * clamped);
@@ -63,4 +63,3 @@ export function getPerspectivePosition(
     halfWidth,
   };
 }
-
