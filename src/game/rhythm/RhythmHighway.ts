@@ -7,26 +7,16 @@ interface PadVisual { container: Phaser.GameObjects.Container; graphics: Phaser.
 export class RhythmHighway {
   readonly lanePads: PadVisual[] = [];
   readonly root: Phaser.GameObjects.Container;
+  private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly glow: Phaser.GameObjects.Graphics;
+  private screenCenterX = 0;
 
-  constructor(private readonly scene: Phaser.Scene, private readonly screenCenterX: number) {
+  constructor(private readonly scene: Phaser.Scene) {
     this.root = scene.add.container(0, 0).setScale(1, 1).setDepth(RhythmDepth.HIGHWAY);
-    const graphics = scene.add.graphics();
-    this.root.add(graphics);
-    const horizon = getLaneBoundariesAtY(HORIZON_Y, screenCenterX);
-    const bottom = getLaneBoundariesAtY(PAD_BOTTOM_Y, screenCenterX);
-    graphics.fillStyle(0x120a20, 0.94).fillPoints([
-      new Phaser.Geom.Point(horizon[0], HORIZON_Y), new Phaser.Geom.Point(horizon[4], HORIZON_Y),
-      new Phaser.Geom.Point(bottom[4], PAD_BOTTOM_Y), new Phaser.Geom.Point(bottom[0], PAD_BOTTOM_Y),
-    ], true);
-    graphics.lineStyle(5, 0xff477e, 0.75);
-    graphics.strokePoints([new Phaser.Geom.Point(horizon[0], HORIZON_Y), new Phaser.Geom.Point(bottom[0], PAD_BOTTOM_Y), new Phaser.Geom.Point(bottom[4], PAD_BOTTOM_Y), new Phaser.Geom.Point(horizon[4], HORIZON_Y)]);
-    for (let boundary = 1; boundary < 4; boundary += 1) {
-      graphics.lineStyle(2, 0xffffff, 0.28).lineBetween(horizon[boundary], HORIZON_Y, bottom[boundary], PAD_BOTTOM_Y);
-    }
+    this.graphics = scene.add.graphics();
+    this.root.add(this.graphics);
     this.glow = scene.add.graphics();
     this.root.add(this.glow);
-    this.drawHitLine(0.8);
     this.createPads();
   }
 
@@ -42,13 +32,33 @@ export class RhythmHighway {
     this.scene.tweens.addCounter({ from: 1, to: 0.8, duration: 130, onUpdate: (tween) => this.drawHitLine(tween.getValue() ?? 0.8) });
   }
 
-  refreshGeometry(): void {
+  refreshGeometry(screenCenterX: number): void {
+    this.screenCenterX = screenCenterX;
+    this.drawHighway();
     for (const pad of this.lanePads) {
       const geometry = getJudgementPadGeometry(pad.lane as 0 | 1 | 2 | 3, this.screenCenterX);
       pad.container.setPosition(geometry.centerX, geometry.centerY).setScale(1, 1);
       this.drawPad(pad, LANE_COLORS[pad.lane], 0.65);
     }
     this.drawHitLine(0.8);
+  }
+
+  private drawHighway(): void {
+    const horizon = getLaneBoundariesAtY(HORIZON_Y, this.screenCenterX);
+    const bottom = getLaneBoundariesAtY(PAD_BOTTOM_Y, this.screenCenterX);
+    this.graphics.clear();
+    this.graphics.fillStyle(0x120a20, 0.94).fillPoints([
+      new Phaser.Geom.Point(horizon[0], HORIZON_Y), new Phaser.Geom.Point(horizon[4], HORIZON_Y),
+      new Phaser.Geom.Point(bottom[4], PAD_BOTTOM_Y), new Phaser.Geom.Point(bottom[0], PAD_BOTTOM_Y),
+    ], true);
+    this.graphics.lineStyle(5, 0xff477e, 0.75);
+    this.graphics.strokePoints([
+      new Phaser.Geom.Point(horizon[0], HORIZON_Y), new Phaser.Geom.Point(bottom[0], PAD_BOTTOM_Y),
+      new Phaser.Geom.Point(bottom[4], PAD_BOTTOM_Y), new Phaser.Geom.Point(horizon[4], HORIZON_Y),
+    ]);
+    for (let boundary = 1; boundary < 4; boundary += 1) {
+      this.graphics.lineStyle(2, 0xffffff, 0.28).lineBetween(horizon[boundary], HORIZON_Y, bottom[boundary], PAD_BOTTOM_Y);
+    }
   }
 
   private drawHitLine(alpha: number): void {

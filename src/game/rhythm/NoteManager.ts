@@ -12,13 +12,19 @@ export interface ActiveNote extends ChartNote {
 export class NoteManager {
   private nextIndex = 0;
   readonly active: ActiveNote[] = [];
+  private screenCenterX = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly notes: readonly ChartNote[],
     private readonly parent?: Phaser.GameObjects.Container,
-    private readonly screenCenterX = 640,
   ) {}
+
+  setCenterX(screenCenterX: number): void {
+    const deltaX = screenCenterX - this.screenCenterX;
+    this.screenCenterX = screenCenterX;
+    for (const note of this.active) note.visual.x += deltaX;
+  }
 
   update(currentTimeMs: number): ChartNote[] {
     while (

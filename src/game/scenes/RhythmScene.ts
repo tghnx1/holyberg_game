@@ -39,6 +39,12 @@ export class RhythmScene extends Phaser.Scene {
   private progressBar!: Phaser.GameObjects.Rectangle;
   private judgementText!: Phaser.GameObjects.Text;
   private stageFlash!: Phaser.GameObjects.Rectangle;
+  private clubRoot!: Phaser.GameObjects.Container;
+  private tutorialRoot!: Phaser.GameObjects.Container;
+  private feedbackRoot!: Phaser.GameObjects.Container;
+  private progressTrack!: Phaser.GameObjects.Rectangle;
+  private touchInstruction?: Phaser.GameObjects.Text;
+  private activeOverlay?: Phaser.GameObjects.Container;
   private touchLabels: Phaser.GameObjects.Text[] = [];
   private tutorial?: TutorialProgress;
   private tutorialReady = false;
@@ -129,12 +135,17 @@ export class RhythmScene extends Phaser.Scene {
     this.clock = new RhythmClock(this.beat);
     this.cameras.main.setBackgroundColor('#07040d');
     this.createClub();
-    this.highway = new RhythmHighway(this, this.centerX);
+    this.highway = new RhythmHighway(this);
+    this.highway.refreshGeometry(this.centerX);
+    this.tutorialRoot = this.add.container(this.centerX, 0);
+    this.highway.root.add(this.tutorialRoot);
+    this.feedbackRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
     this.createTouchControls();
     this.createHud();
     this.bindLaneInput();
     this.bindTouchInput();
-    this.notes = new NoteManager(this, this.chart.notes, this.highway.root, this.centerX);
+    this.notes = new NoteManager(this, this.chart.notes, this.highway.root);
+    this.notes.setCenterX(this.centerX);
     this.createStartOverlay();
     new OrientationController(this, {
       onPause: () => { this.clock.pause(); void this.beat.pause(); },
@@ -145,18 +156,24 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   private createClub(): void {
-    this.stageFlash = this.add.rectangle(this.centerX, 230, 900, 350, 0x8f2677, 0).setDepth(RhythmDepth.CLUB_BACKGROUND);
-    this.add.rectangle(this.centerX, 190, 420, 100, 0x21112c).setDepth(RhythmDepth.CLUB_BACKGROUND);
-    this.add.rectangle(this.centerX, 215, 230, 64, 0x0b0811).setStrokeStyle(4, 0xff477e).setDepth(RhythmDepth.CLUB_BACKGROUND);
-    for (const x of [145, 1135]) {
-      this.add.rectangle(x, 285, 125, 340, 0x0b0711).setStrokeStyle(4, 0x24192c).setDepth(RhythmDepth.CLUB_BACKGROUND);
-      for (const y of [205, 320]) this.add.circle(x, y, 42, 0x120c19).setStrokeStyle(3, 0x2c2034, 0.55).setDepth(RhythmDepth.CLUB_BACKGROUND);
+    const referenceCenterX = DESIGN_WIDTH / 2;
+    this.clubRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.CLUB_BACKGROUND);
+    this.stageFlash = this.add.rectangle(0, 230, 900, 350, 0x8f2677, 0);
+    this.clubRoot.add(this.stageFlash);
+    this.clubRoot.add(this.add.rectangle(0, 190, 420, 100, 0x21112c));
+    this.clubRoot.add(this.add.rectangle(0, 215, 230, 64, 0x0b0811).setStrokeStyle(4, 0xff477e));
+    for (const referenceX of [145, 1135]) {
+      const x = referenceX - referenceCenterX;
+      this.clubRoot.add(this.add.rectangle(x, 285, 125, 340, 0x0b0711).setStrokeStyle(4, 0x24192c));
+      for (const y of [205, 320]) this.clubRoot.add(this.add.circle(x, y, 42, 0x120c19).setStrokeStyle(3, 0x2c2034, 0.55));
     }
-    const beams = this.add.graphics().setDepth(RhythmDepth.CLUB_BACKGROUND);
-    beams.fillStyle(0x9d6cff, 0.09).fillTriangle(360, 100, 530, 590, 650, 590);
-    beams.fillStyle(0xff477e, 0.08).fillTriangle(920, 100, 630, 590, 780, 590);
+    const beams = this.add.graphics();
+    beams.fillStyle(0x9d6cff, 0.09).fillTriangle(360 - referenceCenterX, 100, 530 - referenceCenterX, 590, 650 - referenceCenterX, 590);
+    beams.fillStyle(0xff477e, 0.08).fillTriangle(920 - referenceCenterX, 100, 630 - referenceCenterX, 590, 780 - referenceCenterX, 590);
+    this.clubRoot.add(beams);
     for (let index = 0; index < 16; index += 1) {
-      const crowd = this.add.ellipse(35 + index * 82, 690, 72, 95 + (index % 3) * 18, 0x130b1c).setDepth(RhythmDepth.HIGHWAY - 1);
+      const crowd = this.add.ellipse(35 + index * 82 - referenceCenterX, 690, 72, 95 + (index % 3) * 18, 0x130b1c);
+      this.clubRoot.add(crowd);
       this.tweens.add({ targets: crowd, y: `-=${7 + (index % 3) * 3}`, yoyo: true, repeat: -1, duration: 420 + index * 17 });
     }
   }
@@ -170,7 +187,7 @@ export class RhythmScene extends Phaser.Scene {
       this.touchLabels.push(label);
     }
     this.hitHere = this.add.text(this.centerX, HIT_LINE_Y - 24, 'HIT HERE', { fontFamily: 'Space Mono', fontSize: '16px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#301536', padding: { x: 9, y: 4 } }).setOrigin(0.5, 1).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
-    if (this.game.device.input.touch) this.add.text(this.centerX, 705, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI);
+    if (this.game.device.input.touch) this.touchInstruction = this.add.text(this.centerX, 705, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI);
     this.touchDebug = this.add.graphics().setDepth(RhythmDepth.UI + 1);
     this.touchDebugText = this.add.text(18, 130, '', { fontFamily: 'Space Mono', fontSize: '15px', color: '#56ffff', backgroundColor: '#090611cc', padding: { x: 8, y: 6 } }).setDepth(RhythmDepth.UI + 1).setVisible(false);
   }
@@ -182,15 +199,17 @@ export class RhythmScene extends Phaser.Scene {
     this.scoreText = this.add.text(22, 76, '', style).setDepth(RhythmDepth.UI);
     this.comboText = this.add.text(this.centerX, 38, '', { ...style, align: 'center' }).setOrigin(0.5).setDepth(RhythmDepth.UI);
     this.energyText = this.add.text(DESIGN_WIDTH - 22, 20, '', { ...style, align: 'right' }).setOrigin(1, 0).setDepth(RhythmDepth.UI);
-    this.add.rectangle(this.centerX, 12, 500, 7, 0x2a1836).setDepth(RhythmDepth.UI);
+    this.progressTrack = this.add.rectangle(this.centerX, 12, 500, 7, 0x2a1836).setDepth(RhythmDepth.UI);
     this.progressBar = this.add.rectangle(this.centerX - 250, 12, 0, 7, 0xffdd57).setOrigin(0, 0.5).setDepth(RhythmDepth.UI);
     this.judgementText = this.add.text(this.centerX, HIT_LINE_Y - 82, '', { fontFamily: 'Archivo Black', fontSize: '46px', color: '#fff', stroke: '#541864', strokeThickness: 7 }).setOrigin(0.5).setAlpha(0).setDepth(RhythmDepth.UI);
     this.updateHud();
   }
 
   private createStartOverlay(): void {
-    const background = this.add.rectangle(this.centerX, this.cameras.main.height / 2, 760, 280, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setDepth(RhythmDepth.UI).setInteractive();
-    const text = this.add.text(this.centerX, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE OR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
+    const background = this.add.rectangle(0, this.cameras.main.height / 2, 760, 280, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
+    const text = this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE OR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5);
+    const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
+    this.activeOverlay = overlay;
     let start = (): void => undefined;
     start = createRhythmStartHandler({
       unlockAudio: async () => {
@@ -205,8 +224,8 @@ export class RhythmScene extends Phaser.Scene {
       startTutorial: () => {
         this.starting = true;
         background.disableInteractive();
-        background.destroy();
-        text.destroy();
+        overlay.destroy(true);
+        if (this.activeOverlay === overlay) this.activeOverlay = undefined;
         this.startTutorial();
       },
       onAudioUnlockFailure: (error) => {
@@ -217,11 +236,12 @@ export class RhythmScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-SPACE', start);
   }
 
-  private runCountdown(background: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text): void {
+  private runCountdown(overlay: Phaser.GameObjects.Container, background: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text): void {
     background.setAlpha(0.84);
     ['3', '2', '1', 'DROP'].forEach((step, index) => this.time.delayedCall(index * 650, () => text.setText(step)));
     this.time.delayedCall(2600, () => {
-      background.destroy(); text.destroy();
+      overlay.destroy(true);
+      if (this.activeOverlay === overlay) this.activeOverlay = undefined;
       const audioRunning = this.beat.start();
       this.clock.start(!(audioRunning || this.audioUnlocked));
       this.playing = true;
@@ -241,9 +261,11 @@ export class RhythmScene extends Phaser.Scene {
       this.inputGuard.reset();
       this.antiMash.reset();
       this.updateHud();
-      const background = this.add.rectangle(this.centerX, this.cameras.main.height / 2, 500, 220, 0x090611, 0.9).setDepth(RhythmDepth.UI);
-      const text = this.add.text(this.centerX, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-      this.runCountdown(background, text);
+      const background = this.add.rectangle(0, this.cameras.main.height / 2, 500, 220, 0x090611, 0.9);
+      const text = this.add.text(0, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5);
+      const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
+      this.activeOverlay = overlay;
+      this.runCountdown(overlay, background, text);
       return;
     }
     this.tutorialReady = false;
@@ -252,9 +274,9 @@ export class RhythmScene extends Phaser.Scene {
     this.tutorialPrompt = this.add.text(this.centerX, 300, `TAP ${colorNames[lane]}`, { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffffff', stroke: '#34103e', strokeThickness: 8 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
     const shape = lane === 0 ? this.add.circle(0, 0, 32, LANE_COLORS[lane]) : lane === 1 ? this.add.rectangle(0, 0, 62, 62, LANE_COLORS[lane]) : lane === 2 ? this.add.triangle(0, 0, 0, 62, 31, 0, 62, 62, LANE_COLORS[lane]) : this.add.rectangle(0, 0, 50, 50, LANE_COLORS[lane]).setAngle(45);
     const symbol = this.add.text(0, 0, ['●', '■', '▲', '◆'][lane], { fontFamily: 'Arial', fontSize: '28px', color: '#130a1d' }).setOrigin(0.5);
-    this.tutorialNote = this.add.container(this.centerX + [-0.75, -0.25, 0.25, 0.75][lane] * HORIZON_HALF_WIDTH, HORIZON_Y, [shape, symbol]).setScale(0.2).setDepth(RhythmDepth.NOTES);
-    this.highway.root.add(this.tutorialNote);
-    this.tweens.add({ targets: this.tutorialNote, x: this.centerX + [-0.75, -0.25, 0.25, 0.75][lane] * HIT_LINE_HALF_WIDTH, y: HIT_LINE_Y, scale: 1.2, duration: 1500, ease: 'Cubic.in', onComplete: () => { this.tutorialReady = true; } });
+    this.tutorialNote = this.add.container([-0.75, -0.25, 0.25, 0.75][lane] * HORIZON_HALF_WIDTH, HORIZON_Y, [shape, symbol]).setScale(0.2).setDepth(RhythmDepth.NOTES);
+    this.tutorialRoot.add(this.tutorialNote);
+    this.tweens.add({ targets: this.tutorialNote, x: [-0.75, -0.25, 0.25, 0.75][lane] * HIT_LINE_HALF_WIDTH, y: HIT_LINE_Y, scale: 1.2, duration: 1500, ease: 'Cubic.in', onComplete: () => { this.tutorialReady = true; } });
   }
 
   private bindLaneInput(): void {
@@ -319,11 +341,17 @@ export class RhythmScene extends Phaser.Scene {
 
   private showPressFeedback(lane: Lane): void {
     this.highway.flashLane(lane, LANE_COLORS[lane], false);
-    const horizon = getLaneBoundaries(0, this.centerX);
-    const hit = getLaneBoundaries(1, this.centerX);
-    const flash = this.add.polygon(0, 0, [horizon[lane], HORIZON_Y, horizon[lane + 1], HORIZON_Y, hit[lane + 1], HIT_LINE_Y, hit[lane], HIT_LINE_Y], LANE_COLORS[lane], 0.22).setOrigin(0).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
+    const horizon = getLaneBoundaries(0, 0);
+    const hit = getLaneBoundaries(1, 0);
+    const flash = this.add.graphics().fillStyle(LANE_COLORS[lane], 0.22).fillPoints([
+      new Phaser.Geom.Point(horizon[lane], HORIZON_Y),
+      new Phaser.Geom.Point(horizon[lane + 1], HORIZON_Y),
+      new Phaser.Geom.Point(hit[lane + 1], HIT_LINE_Y),
+      new Phaser.Geom.Point(hit[lane], HIT_LINE_Y),
+    ], true);
     const rippleX = (hit[lane] + hit[lane + 1]) / 2;
     const ripple = this.add.circle(rippleX, HIT_LINE_Y, 18, LANE_COLORS[lane], 0).setStrokeStyle(5, LANE_COLORS[lane], 0.9).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
+    this.feedbackRoot.add([flash, ripple]);
     this.tweens.add({ targets: [flash, ripple], alpha: 0, duration: 180, onComplete: () => { flash.destroy(); ripple.destroy(); } });
     this.tweens.add({ targets: ripple, scale: 2.2, duration: 180 });
   }
@@ -349,10 +377,20 @@ export class RhythmScene extends Phaser.Scene {
 
   private applyResponsiveLayout(viewport: ViewportInfo): void {
     const centerX = this.centerX;
-    this.highway.refreshGeometry();
+    this.clubRoot.setX(centerX);
+    this.highway.refreshGeometry(centerX);
+    this.notes.setCenterX(centerX);
+    this.tutorialRoot.setX(centerX);
+    this.feedbackRoot.setX(centerX);
+    this.hitHere?.setX(centerX);
+    this.touchInstruction?.setX(centerX);
+    this.progressTrack.setX(centerX);
+    this.progressBar.setX(centerX - 250);
+    this.activeOverlay?.setX(centerX);
+    this.tutorialPrompt?.setX(centerX);
     this.scoreText.setScale(viewport.hudScale);
     this.comboText.setPosition(centerX, this.comboText.y).setScale(viewport.hudScale);
-    this.energyText.setScale(viewport.hudScale);
+    this.energyText.setX(this.cameras.main.width - 22).setScale(viewport.hudScale);
     this.judgementText.setPosition(centerX, this.judgementText.y).setScale(viewport.hudScale);
     const controlScale = viewport.compactLandscape ? 0.82 : 1;
     for (let lane = 0; lane < this.touchLabels.length; lane += 1) {
@@ -396,8 +434,14 @@ export class RhythmScene extends Phaser.Scene {
   private endLevel(): void {
     if (this.finished) return;
     this.finished = true; this.playing = false; this.clock.stop(); this.beat.stop();
-    const completeText = this.add.text(this.centerX, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-    this.time.delayedCall(1500, () => { completeText.destroy(); this.scene.start('ResultScene', { ...this.scoreState, berlinScore: this.berlinScore, accuracy: calculateAccuracy(this.scoreState), success: true }); });
+    const completeText = this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5);
+    const overlay = this.add.container(this.centerX, 0, [completeText]).setDepth(RhythmDepth.UI);
+    this.activeOverlay = overlay;
+    this.time.delayedCall(1500, () => {
+      overlay.destroy(true);
+      if (this.activeOverlay === overlay) this.activeOverlay = undefined;
+      this.scene.start('ResultScene', { ...this.scoreState, berlinScore: this.berlinScore, accuracy: calculateAccuracy(this.scoreState), success: true });
+    });
   }
 
   private cleanup(): void {

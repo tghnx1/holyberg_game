@@ -40,4 +40,22 @@ describe('rhythm highway perspective', () => {
     const baseline = getJudgementPadGeometry(2, centerX);
     [[1280, 720], [844, 390], [812, 375], [667, 375]].forEach(() => expect(getJudgementPadGeometry(2, centerX)).toEqual(baseline));
   });
+  it('translates every lane by the live viewport center without changing proportions', () => {
+    const oldCenter = 640;
+    const newCenter = 900;
+    const deltaX = newCenter - oldCenter;
+    for (const lane of [0, 1, 2, 3] as const) {
+      const oldNote = getPerspectivePosition(lane, 0.57, oldCenter);
+      const newNote = getPerspectivePosition(lane, 0.57, newCenter);
+      expect(newNote.x - oldNote.x).toBeCloseTo(deltaX);
+      expect(newNote.y).toBe(oldNote.y);
+      expect(newNote.scale).toBe(oldNote.scale);
+
+      const oldPad = getJudgementPadGeometry(lane, oldCenter);
+      const newPad = getJudgementPadGeometry(lane, newCenter);
+      expect(newPad.centerX - oldPad.centerX).toBeCloseTo(deltaX);
+      expect(newPad.centerY).toBe(oldPad.centerY);
+      newPad.points.forEach((point, index) => expect(point).toBeCloseTo(oldPad.points[index]));
+    }
+  });
 });
