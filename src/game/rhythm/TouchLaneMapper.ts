@@ -1,4 +1,5 @@
 import type { Lane } from './types';
+import { HIT_LINE_Y, PAD_BOTTOM_Y } from './constants';
 import { getHighwayGeometryAtY } from './PerspectiveMath';
 
 export interface TouchArea {
@@ -20,9 +21,9 @@ export function mapLogicalPointerToLane(x: number, y: number, area: TouchArea): 
   return null;
 }
 
-export function getTouchArea(centerX: number, _halfWidth?: number, logicalHeight = 720): TouchArea {
-  const top = logicalHeight * 0.75;
-  const bottom = logicalHeight;
+export function getTouchArea(centerX: number): TouchArea {
+  const top = HIT_LINE_Y;
+  const bottom = PAD_BOTTOM_Y;
   const topGeometry = getHighwayGeometryAtY(top, centerX);
   const bottomGeometry = getHighwayGeometryAtY(bottom, centerX);
   return { left: Math.min(topGeometry.left, bottomGeometry.left), right: Math.max(topGeometry.right, bottomGeometry.right), top, bottom };

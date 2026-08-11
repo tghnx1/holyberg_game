@@ -8,6 +8,8 @@ import {
   RHYTHM_HIGHWAY_HEIGHT,
   RHYTHM_HIGHWAY_LOCAL_CENTER_X,
   RHYTHM_HIGHWAY_WIDTH,
+  RHYTHM_MIXER_HEIGHT,
+  RHYTHM_MIXER_WIDTH,
 } from '../src/game/rhythm/RhythmAssetLayout';
 
 describe('rhythm highway perspective', () => {
@@ -69,11 +71,18 @@ describe('rhythm highway perspective', () => {
     const assetCenter = RHYTHM_HIGHWAY_LOCAL_CENTER_X;
     expect(getLaneBoundariesAtY(HORIZON_Y, assetCenter)).toEqual([375, 427.5, 480, 532.5, 585]);
     expect(getLaneBoundariesAtY(HIT_LINE_Y, assetCenter)).toEqual([90, 285, 480, 675, 870]);
-    const expectedPadTop = [83.21428571428572, 281.6071428571429, 480, 678.3928571428571, 876.7857142857142];
-    const expectedPadBottom = [22.142857142857167, 251.07142857142858, 480, 708.9285714285714, 937.8571428571429];
+    const expectedPadTop = [80.80645161290323, 280.4032258064516, 480, 679.5967741935484, 879.1935483870968];
+    const expectedPadBottom = [16.45161290322585, 248.22580645161293, 480, 711.7741935483871, 943.5483870967741];
     getLaneBoundariesAtY(PAD_TOP_Y, assetCenter).forEach((boundary, index) => expect(boundary).toBeCloseTo(expectedPadTop[index]));
     getLaneBoundariesAtY(PAD_BOTTOM_Y, assetCenter).forEach((boundary, index) => expect(boundary).toBeCloseTo(expectedPadBottom[index]));
     expect([RHYTHM_HIGHWAY_WIDTH, RHYTHM_HIGHWAY_HEIGHT]).toEqual([960, 720]);
+  });
+  it('reserves the bottom quarter for the DJ booth', () => {
+    expect(HIT_LINE_Y / 720).toBeGreaterThanOrEqual(0.6);
+    expect(HIT_LINE_Y / 720).toBeLessThanOrEqual(0.65);
+    expect(PAD_BOTTOM_Y / 720).toBeGreaterThanOrEqual(0.7);
+    expect(PAD_BOTTOM_Y / 720).toBeLessThanOrEqual(0.75);
+    expect(PAD_BOTTOM_Y).toBeLessThan(getRhythmAssetLayout(centerX).deckY);
   });
   it('keeps proportional mirrored decks centered and partially cropped', () => {
     const layout = getRhythmAssetLayout(centerX);
@@ -81,5 +90,16 @@ describe('rhythm highway perspective', () => {
     expect(layout.rightDeckX - centerX).toBe(centerX - layout.leftDeckX);
     expect(layout.deckY + RHYTHM_DECK_HEIGHT).toBeGreaterThan(720);
     expect(getRhythmAssetLayout(900).leftDeckX - layout.leftDeckX).toBe(260);
+  });
+  it('keeps the mixer compact, centered, and 40-50% visible', () => {
+    const layout = getRhythmAssetLayout(centerX);
+    const fCenter = getJudgementPadGeometry(1, centerX).centerX;
+    const jCenter = getJudgementPadGeometry(2, centerX).centerX;
+    const visibleRatio = (720 - layout.mixerY) / RHYTHM_MIXER_HEIGHT;
+    expect(layout.mixerX).toBe(centerX);
+    expect(RHYTHM_MIXER_WIDTH).toBeLessThan(jCenter - fCenter);
+    expect(visibleRatio).toBeGreaterThanOrEqual(0.4);
+    expect(visibleRatio).toBeLessThanOrEqual(0.5);
+    expect(getRhythmAssetLayout(900).mixerX).toBe(900);
   });
 });

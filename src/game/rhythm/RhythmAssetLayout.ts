@@ -8,7 +8,11 @@ export const RHYTHM_HIGHWAY_LOCAL_CENTER_X = RHYTHM_HIGHWAY_WIDTH / 2;
 export const RHYTHM_DECK_WIDTH = 340;
 export const RHYTHM_DECK_HEIGHT = 196;
 export const RHYTHM_DECK_CENTER_OFFSET_X = 310;
-export const RHYTHM_DECK_TOP_Y = 540;
+export const RHYTHM_DECK_TOP_Y = 564;
+
+export const RHYTHM_MIXER_WIDTH = 176;
+export const RHYTHM_MIXER_HEIGHT = 210;
+export const RHYTHM_MIXER_TOP_Y = 620;
 
 export interface RhythmAssetLayout {
   highwayX: number;
@@ -16,6 +20,8 @@ export interface RhythmAssetLayout {
   leftDeckX: number;
   rightDeckX: number;
   deckY: number;
+  mixerX: number;
+  mixerY: number;
 }
 
 export function getRhythmAssetLayout(centerX: number): RhythmAssetLayout {
@@ -25,5 +31,7 @@ export function getRhythmAssetLayout(centerX: number): RhythmAssetLayout {
     leftDeckX: centerX - RHYTHM_DECK_CENTER_OFFSET_X,
     rightDeckX: centerX + RHYTHM_DECK_CENTER_OFFSET_X,
     deckY: RHYTHM_DECK_TOP_Y,
+    mixerX: centerX,
+    mixerY: RHYTHM_MIXER_TOP_Y,
   };
 }

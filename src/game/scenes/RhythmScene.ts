@@ -5,7 +5,7 @@ import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { parseChart } from '../rhythm/ChartLoader';
 import { GLOBAL_INPUT_OFFSET_MS, HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RhythmDepth } from '../rhythm/constants';
-import { BEGINNER_GRACE_MS, HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y } from '../rhythm/constants';
+import { BEGINNER_GRACE_MS, HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y, PAD_BOTTOM_Y } from '../rhythm/constants';
 import { CompletionGate, getChartEndTimeMs, shouldCompleteChart } from '../rhythm/CompletionSystem';
 import { judgeTiming } from '../rhythm/JudgementSystem';
 import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../rhythm/InputPenaltySystem';
@@ -13,6 +13,7 @@ import { NoteManager } from '../rhythm/NoteManager';
 import { ProceduralBeat } from '../rhythm/ProceduralBeat';
 import { RhythmClock } from '../rhythm/RhythmClock';
 import { RhythmHighway } from '../rhythm/RhythmHighway';
+import { RhythmMixer } from '../rhythm/RhythmMixer';
 import {
   getRhythmAssetLayout,
   RHYTHM_DECK_HEIGHT,
@@ -47,6 +48,7 @@ export class RhythmScene extends Phaser.Scene {
   private stageFlash!: Phaser.GameObjects.Rectangle;
   private clubRoot!: Phaser.GameObjects.Container;
   private deckRoot!: Phaser.GameObjects.Container;
+  private mixer!: RhythmMixer;
   private noteRoot!: Phaser.GameObjects.Container;
   private highwayForeground!: Phaser.GameObjects.Graphics;
   private tutorialRoot!: Phaser.GameObjects.Container;
@@ -145,6 +147,7 @@ export class RhythmScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#07040d');
     this.createClub();
     this.createDecks();
+    this.mixer = new RhythmMixer(this, this.centerX);
     this.highway = new RhythmHighway(this);
     this.highway.refreshGeometry(this.centerX);
     this.highwayForeground = this.add.graphics().setDepth(RhythmDepth.NOTES - 1);
@@ -215,13 +218,13 @@ export class RhythmScene extends Phaser.Scene {
 
   private createTouchControls(): void {
     for (let lane = 0; lane < 4; lane += 1) {
-      const x = getJudgementPadGeometry(lane as Lane, this.centerX).centerX;
+      const geometry = getJudgementPadGeometry(lane as Lane, this.centerX);
       const symbol = ['●', '■', '▲', '◆'][lane];
-      const label = this.add.text(x, 642, `${symbol}\n${LANE_LABELS[lane]}`, { fontFamily: 'Space Mono', fontSize: '34px', fontStyle: 'bold', color: '#ffffff', stroke: '#10091d', strokeThickness: 6, align: 'center', lineSpacing: 2 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
+      const label = this.add.text(geometry.centerX, geometry.centerY, `${symbol}\n${LANE_LABELS[lane]}`, { fontFamily: 'Space Mono', fontSize: '34px', fontStyle: 'bold', color: '#ffffff', stroke: '#10091d', strokeThickness: 6, align: 'center', lineSpacing: 2 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
       this.touchLabels.push(label);
     }
     this.hitHere = this.add.text(this.centerX, HIT_LINE_Y - 24, 'HIT HERE', { fontFamily: 'Space Mono', fontSize: '16px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#301536', padding: { x: 9, y: 4 } }).setOrigin(0.5, 1).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
-    if (this.game.device.input.touch) this.touchInstruction = this.add.text(this.centerX, 705, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI);
+    if (this.game.device.input.touch) this.touchInstruction = this.add.text(this.centerX, PAD_BOTTOM_Y + 20, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI);
     this.touchDebug = this.add.graphics().setDepth(RhythmDepth.UI + 1);
     this.touchDebugText = this.add.text(18, 130, '', { fontFamily: 'Space Mono', fontSize: '15px', color: '#56ffff', backgroundColor: '#090611cc', padding: { x: 8, y: 6 } }).setDepth(RhythmDepth.UI + 1).setVisible(false);
   }
@@ -326,7 +329,7 @@ export class RhythmScene extends Phaser.Scene {
     }
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       if (this.starting && !this.tutorial && !this.playing) return;
-      const area = getTouchArea(this.centerX, HIT_LINE_HALF_WIDTH);
+      const area = getTouchArea(this.centerX);
       const lane = mapLogicalPointerToLane(pointer.x, pointer.y, area);
       this.debugPointer = { x: pointer.x, y: pointer.y, lane };
       this.drawTouchDebug();
@@ -334,7 +337,7 @@ export class RhythmScene extends Phaser.Scene {
     });
     this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.inputGuard.endPointer(pointer.id));
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      const area = getTouchArea(this.centerX, HIT_LINE_HALF_WIDTH);
+      const area = getTouchArea(this.centerX);
       this.debugPointer = { x: pointer.x, y: pointer.y, lane: mapLogicalPointerToLane(pointer.x, pointer.y, area) };
       this.drawTouchDebug();
     });
@@ -395,6 +398,7 @@ export class RhythmScene extends Phaser.Scene {
     const protectEnergy = judgement === 'MISS' && this.clock.currentTimeMs < BEGINNER_GRACE_MS;
     this.scoreState = applyJudgement(this.scoreState, judgement, protectEnergy, scoringEnabled);
     if (lane !== undefined) this.highway.flashLane(lane, judgement === 'PERFECT' ? 0xffffff : LANE_COLORS[lane], judgement === 'PERFECT');
+    if (judgement === 'PERFECT') this.mixer.flashPerfect();
     if (judgement === 'MISS') this.cameras.main.shake(100, 0.004);
     const feedback = judgement === 'MISS' ? 'MISS' : `${judgement}\n+${awardedPoints}`;
     this.judgementText.setText(feedback).setFontSize(judgement === 'MISS' ? 28 : judgement === 'PERFECT' ? 46 : judgement === 'EXCELLENT' ? 40 : 34).setY(HIT_LINE_Y - (judgement === 'MISS' ? 52 : 92)).setColor(judgement === 'PERFECT' ? '#ffffff' : judgement === 'EXCELLENT' ? '#ffdd57' : judgement === 'GOOD' ? '#ff8a3d' : '#ff3f5e').setAlpha(1).setScale(judgement === 'PERFECT' ? 1.2 : 1);
@@ -413,6 +417,7 @@ export class RhythmScene extends Phaser.Scene {
     const centerX = this.centerX;
     this.clubRoot.setX(centerX);
     this.deckRoot.setX(centerX);
+    this.mixer.setCenterX(centerX);
     this.highway.refreshGeometry(centerX);
     this.drawHighwayForeground();
     this.notes.setCenterX(centerX);
@@ -440,7 +445,7 @@ export class RhythmScene extends Phaser.Scene {
     this.touchDebug.clear();
     this.touchDebugText.setVisible(this.touchDebugVisible);
     if (!this.touchDebugVisible) return;
-    const area = getTouchArea(this.centerX, HIT_LINE_HALF_WIDTH);
+    const area = getTouchArea(this.centerX);
     const touchTop = getHighwayGeometryAtY(area.top, this.centerX);
     const touchBottom = getHighwayGeometryAtY(area.bottom, this.centerX);
     this.touchDebug.lineStyle(3, 0x56ffff, 0.9);
@@ -458,7 +463,7 @@ export class RhythmScene extends Phaser.Scene {
     for (let lane = 0; lane < 4; lane += 1) {
       const centerTop = (horizon[lane] + horizon[lane + 1]) / 2;
       const centerBottom = (hit[lane] + hit[lane + 1]) / 2;
-      this.touchDebug.lineBetween(centerTop, HORIZON_Y, centerBottom, 720);
+      this.touchDebug.lineBetween(centerTop, HORIZON_Y, centerBottom, area.bottom);
       const pad = getJudgementPadGeometry(lane as Lane, this.centerX);
       const points = [] as Phaser.Geom.Point[];
       for (let index = 0; index < pad.points.length; index += 2) points.push(new Phaser.Geom.Point(pad.centerX + pad.points[index], pad.centerY + pad.points[index + 1]));
@@ -501,6 +506,7 @@ export class RhythmScene extends Phaser.Scene {
     const beatIndex = Math.floor(time / (60000 / this.chart.bpm));
     if (beatIndex !== this.lastBeat) {
       this.lastBeat = beatIndex; this.highway.pulse();
+      this.mixer.pulseBeat(beatIndex % 4 === 0);
       this.stageFlash.setAlpha(beatIndex % 4 === 0 ? 0.22 : 0.1);
       this.tweens.add({ targets: this.stageFlash, alpha: 0, duration: 170 });
       this.cameras.main.zoomTo(beatIndex % 4 === 0 ? 1.008 : 1.003, 55, 'Sine.easeOut', true);
