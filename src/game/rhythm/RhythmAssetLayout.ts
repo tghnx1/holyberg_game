@@ -9,6 +9,8 @@ export const RHYTHM_DECK_WIDTH = 340;
 export const RHYTHM_DECK_HEIGHT = 196;
 export const RHYTHM_DECK_CENTER_OFFSET_X = 310;
 export const RHYTHM_DECK_TOP_Y = 564;
+export const RHYTHM_DECK_PLATTER_OFFSET_X = 3.375;
+export const RHYTHM_DECK_PLATTER_OFFSET_Y = 105.53;
 
 export const RHYTHM_MIXER_WIDTH = 176;
 export const RHYTHM_MIXER_HEIGHT = 210;

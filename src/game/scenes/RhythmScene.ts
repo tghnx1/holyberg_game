@@ -12,6 +12,7 @@ import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../rhythm/InputPena
 import { NoteManager } from '../rhythm/NoteManager';
 import { ProceduralBeat } from '../rhythm/ProceduralBeat';
 import { RhythmClock } from '../rhythm/RhythmClock';
+import { RhythmBoothAnimation } from '../rhythm/RhythmBoothAnimation';
 import { RhythmHighway } from '../rhythm/RhythmHighway';
 import { RhythmMixer } from '../rhythm/RhythmMixer';
 import {
@@ -46,8 +47,14 @@ export class RhythmScene extends Phaser.Scene {
   private progressBar!: Phaser.GameObjects.Rectangle;
   private judgementText!: Phaser.GameObjects.Text;
   private stageFlash!: Phaser.GameObjects.Rectangle;
+  private clubBeams!: Phaser.GameObjects.Graphics;
+  private clubMissOverlay!: Phaser.GameObjects.Rectangle;
+  private crowdMembers: Phaser.GameObjects.Ellipse[] = [];
   private clubRoot!: Phaser.GameObjects.Container;
   private deckRoot!: Phaser.GameObjects.Container;
+  private leftDeck!: Phaser.GameObjects.Image;
+  private rightDeck!: Phaser.GameObjects.Image;
+  private boothAnimation!: RhythmBoothAnimation;
   private mixer!: RhythmMixer;
   private noteRoot!: Phaser.GameObjects.Container;
   private highwayForeground!: Phaser.GameObjects.Graphics;
@@ -148,6 +155,7 @@ export class RhythmScene extends Phaser.Scene {
     this.createClub();
     this.createDecks();
     this.mixer = new RhythmMixer(this, this.centerX);
+    this.boothAnimation = new RhythmBoothAnimation(this, this.centerX, this.leftDeck, this.rightDeck);
     this.highway = new RhythmHighway(this);
     this.highway.refreshGeometry(this.centerX);
     this.highwayForeground = this.add.graphics().setDepth(RhythmDepth.NOTES - 1);
@@ -163,8 +171,11 @@ export class RhythmScene extends Phaser.Scene {
     this.notes.setCenterX(this.centerX);
     this.createStartOverlay();
     new OrientationController(this, {
-      onPause: () => { this.clock.pause(); void this.beat.pause(); },
-      onResume: () => { void this.beat.resume().then((resumed) => { if (resumed) this.clock.resume(); }); },
+      onPause: () => { this.clock.pause(); this.boothAnimation.pause(); void this.beat.pause(); },
+      onResume: () => {
+        if (this.playing) this.boothAnimation.resume();
+        void this.beat.resume().then((resumed) => { if (resumed) this.clock.resume(); });
+      },
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
@@ -173,7 +184,7 @@ export class RhythmScene extends Phaser.Scene {
   private createClub(): void {
     const referenceCenterX = DESIGN_WIDTH / 2;
     this.clubRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.CLUB_BACKGROUND);
-    this.stageFlash = this.add.rectangle(0, 230, 900, 350, 0x8f2677, 0);
+    this.stageFlash = this.add.rectangle(0, 230, 900, 350, 0x8f2677, 1).setAlpha(0);
     this.clubRoot.add(this.stageFlash);
     this.clubRoot.add(this.add.rectangle(0, 190, 420, 100, 0x21112c));
     this.clubRoot.add(this.add.rectangle(0, 215, 230, 64, 0x0b0811).setStrokeStyle(4, 0xff477e));
@@ -182,13 +193,17 @@ export class RhythmScene extends Phaser.Scene {
       this.clubRoot.add(this.add.rectangle(x, 285, 125, 340, 0x0b0711).setStrokeStyle(4, 0x24192c));
       for (const y of [205, 320]) this.clubRoot.add(this.add.circle(x, y, 42, 0x120c19).setStrokeStyle(3, 0x2c2034, 0.55));
     }
-    const beams = this.add.graphics();
-    beams.fillStyle(0x9d6cff, 0.09).fillTriangle(360 - referenceCenterX, 100, 530 - referenceCenterX, 590, 650 - referenceCenterX, 590);
-    beams.fillStyle(0xff477e, 0.08).fillTriangle(920 - referenceCenterX, 100, 630 - referenceCenterX, 590, 780 - referenceCenterX, 590);
-    this.clubRoot.add(beams);
+    this.clubBeams = this.add.graphics();
+    this.clubBeams.fillStyle(0x9d6cff, 0.09).fillTriangle(360 - referenceCenterX, 100, 530 - referenceCenterX, 590, 650 - referenceCenterX, 590);
+    this.clubBeams.fillStyle(0xff477e, 0.08).fillTriangle(920 - referenceCenterX, 100, 630 - referenceCenterX, 590, 780 - referenceCenterX, 590);
+    this.clubRoot.add(this.clubBeams);
+    this.clubMissOverlay = this.add.rectangle(0, 310, 980, 480, 0xff334f, 1).setAlpha(0);
+    this.clubRoot.add(this.clubMissOverlay);
+    this.crowdMembers = [];
     for (let index = 0; index < 16; index += 1) {
       const crowd = this.add.ellipse(35 + index * 82 - referenceCenterX, 690, 72, 95 + (index % 3) * 18, 0x130b1c);
       this.clubRoot.add(crowd);
+      this.crowdMembers.push(crowd);
       this.tweens.add({ targets: crowd, y: `-=${7 + (index % 3) * 3}`, yoyo: true, repeat: -1, duration: 420 + index * 17 });
     }
   }
@@ -196,17 +211,17 @@ export class RhythmScene extends Phaser.Scene {
   private createDecks(): void {
     const layout = getRhythmAssetLayout(this.centerX);
     this.deckRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.HIGHWAY + 25);
-    const leftDeck = this.add.image(
+    this.leftDeck = this.add.image(
       layout.leftDeckX - this.centerX,
       layout.deckY,
       RHYTHM_DECK_TEXTURE_KEY,
     ).setOrigin(0.5, 0).setDisplaySize(RHYTHM_DECK_WIDTH, RHYTHM_DECK_HEIGHT);
-    const rightDeck = this.add.image(
+    this.rightDeck = this.add.image(
       layout.rightDeckX - this.centerX,
       layout.deckY,
       RHYTHM_DECK_TEXTURE_KEY,
     ).setOrigin(0.5, 0).setDisplaySize(RHYTHM_DECK_WIDTH, RHYTHM_DECK_HEIGHT).setFlipX(true);
-    this.deckRoot.add([leftDeck, rightDeck]);
+    this.deckRoot.add([this.leftDeck, this.rightDeck]);
   }
 
   private drawHighwayForeground(): void {
@@ -281,6 +296,7 @@ export class RhythmScene extends Phaser.Scene {
       if (this.activeOverlay === overlay) this.activeOverlay = undefined;
       const audioRunning = this.beat.start();
       this.clock.start(!(audioRunning || this.audioUnlocked));
+      this.boothAnimation.startGameplay();
       this.playing = true;
     });
   }
@@ -378,6 +394,7 @@ export class RhythmScene extends Phaser.Scene {
 
   private showPressFeedback(lane: Lane): void {
     this.highway.flashLane(lane, LANE_COLORS[lane], false);
+    this.boothAnimation.reactLane(lane);
     const horizon = getLaneBoundaries(0, 0);
     const hit = getLaneBoundaries(1, 0);
     const flash = this.add.graphics().fillStyle(LANE_COLORS[lane], 0.22).fillPoints([
@@ -398,8 +415,15 @@ export class RhythmScene extends Phaser.Scene {
     const protectEnergy = judgement === 'MISS' && this.clock.currentTimeMs < BEGINNER_GRACE_MS;
     this.scoreState = applyJudgement(this.scoreState, judgement, protectEnergy, scoringEnabled);
     if (lane !== undefined) this.highway.flashLane(lane, judgement === 'PERFECT' ? 0xffffff : LANE_COLORS[lane], judgement === 'PERFECT');
-    if (judgement === 'PERFECT') this.mixer.flashPerfect();
-    if (judgement === 'MISS') this.cameras.main.shake(100, 0.004);
+    if (judgement === 'PERFECT' && lane !== undefined) {
+      this.boothAnimation.flashPerfect(lane);
+      this.mixer.flashPerfect();
+      this.flashClubPerfect();
+    }
+    if (judgement === 'MISS') {
+      this.boothAnimation.flashMiss();
+      this.flashClubMiss();
+    }
     const feedback = judgement === 'MISS' ? 'MISS' : `${judgement}\n+${awardedPoints}`;
     this.judgementText.setText(feedback).setFontSize(judgement === 'MISS' ? 28 : judgement === 'PERFECT' ? 46 : judgement === 'EXCELLENT' ? 40 : 34).setY(HIT_LINE_Y - (judgement === 'MISS' ? 52 : 92)).setColor(judgement === 'PERFECT' ? '#ffffff' : judgement === 'EXCELLENT' ? '#ffdd57' : judgement === 'GOOD' ? '#ff8a3d' : '#ff3f5e').setAlpha(1).setScale(judgement === 'PERFECT' ? 1.2 : 1);
     this.tweens.killTweensOf(this.judgementText);
@@ -411,12 +435,15 @@ export class RhythmScene extends Phaser.Scene {
     this.scoreText.setText(`RHYTHM  ${this.scoreState.score}`);
     this.comboText.setText(`${this.scoreState.combo} COMBO   x${getMultiplier(this.scoreState.combo)}`);
     this.energyText.setText(`CROWD ENERGY\n${this.scoreState.energy}%`);
+    this.boothAnimation?.setCombo(this.scoreState.combo);
+    this.mixer?.setCombo(this.scoreState.combo);
   }
 
   private applyResponsiveLayout(viewport: ViewportInfo): void {
     const centerX = this.centerX;
     this.clubRoot.setX(centerX);
     this.deckRoot.setX(centerX);
+    this.boothAnimation.setCenterX(centerX);
     this.mixer.setCenterX(centerX);
     this.highway.refreshGeometry(centerX);
     this.drawHighwayForeground();
@@ -475,6 +502,7 @@ export class RhythmScene extends Phaser.Scene {
   private endLevel(): void {
     if (this.finished) return;
     this.finished = true; this.playing = false; this.clock.stop(); this.beat.stop();
+    this.boothAnimation.stop();
     const completeText = this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5);
     const overlay = this.add.container(this.centerX, 0, [completeText]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
@@ -488,6 +516,9 @@ export class RhythmScene extends Phaser.Scene {
   private cleanup(): void {
     this.playing = false;
     this.clock?.stop(); this.beat?.stop();
+    this.boothAnimation?.destroy();
+    this.mixer?.reset();
+    this.tweens.killTweensOf([this.stageFlash, this.clubBeams, this.clubMissOverlay, ...this.crowdMembers]);
     this.time.removeAllEvents();
     this.input.removeAllListeners();
     this.input.keyboard?.removeAllListeners();
@@ -506,12 +537,37 @@ export class RhythmScene extends Phaser.Scene {
     const beatIndex = Math.floor(time / (60000 / this.chart.bpm));
     if (beatIndex !== this.lastBeat) {
       this.lastBeat = beatIndex; this.highway.pulse();
+      const strongBeat = beatIndex % 4 === 0;
+      this.boothAnimation.pulseBeat(strongBeat);
       this.mixer.pulseBeat(beatIndex % 4 === 0);
-      this.stageFlash.setAlpha(beatIndex % 4 === 0 ? 0.22 : 0.1);
-      this.tweens.add({ targets: this.stageFlash, alpha: 0, duration: 170 });
+      this.pulseClubBeat(strongBeat);
       this.cameras.main.zoomTo(beatIndex % 4 === 0 ? 1.008 : 1.003, 55, 'Sine.easeOut', true);
       this.time.delayedCall(70, () => this.cameras.main.zoomTo(1, 100));
     }
     this.completionGate.tryComplete(shouldCompleteChart(time, this.chartEndTimeMs), () => this.endLevel());
+  }
+
+  private pulseClubBeat(strong: boolean): void {
+    const comboIntensity = Phaser.Math.Clamp(this.scoreState.combo / 40, 0, 1);
+    this.tweens.killTweensOf([this.stageFlash, this.clubBeams]);
+    this.stageFlash.setAlpha((strong ? 0.2 : 0.09) + comboIntensity * 0.1);
+    this.clubBeams.setAlpha(0.58 + comboIntensity * 0.34);
+    this.tweens.add({ targets: this.stageFlash, alpha: 0, duration: strong ? 230 : 170 });
+    this.tweens.add({ targets: this.clubBeams, alpha: 0.18 + comboIntensity * 0.12, duration: strong ? 280 : 190 });
+  }
+
+  private flashClubPerfect(): void {
+    const comboIntensity = Phaser.Math.Clamp(this.scoreState.combo / 40, 0, 1);
+    this.tweens.killTweensOf([this.stageFlash, this.clubBeams]);
+    this.stageFlash.setAlpha(0.34 + comboIntensity * 0.14);
+    this.clubBeams.setAlpha(1);
+    this.tweens.add({ targets: this.stageFlash, alpha: 0, duration: 280 });
+    this.tweens.add({ targets: this.clubBeams, alpha: 0.2 + comboIntensity * 0.12, duration: 330 });
+  }
+
+  private flashClubMiss(): void {
+    this.tweens.killTweensOf(this.clubMissOverlay);
+    this.clubMissOverlay.setAlpha(0.16);
+    this.tweens.add({ targets: this.clubMissOverlay, alpha: 0, duration: 190 });
   }
 }

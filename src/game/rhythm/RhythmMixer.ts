@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getComboVisualIntensity } from './BoothAnimationLogic';
 import { RhythmDepth } from './constants';
 import {
   getRhythmAssetLayout,
@@ -14,6 +15,8 @@ export class RhythmMixer {
   readonly root: Phaser.GameObjects.Container;
   private readonly leds: Phaser.GameObjects.Rectangle[] = [];
   private readonly perfectGlow: Phaser.GameObjects.Rectangle;
+  private readonly controlGlow: Phaser.GameObjects.Rectangle;
+  private comboIntensity = 0;
 
   constructor(private readonly scene: Phaser.Scene, centerX: number) {
     const layout = getRhythmAssetLayout(centerX);
@@ -35,6 +38,9 @@ export class RhythmMixer {
     body.lineStyle(2, 0x172c3d, 1).strokeRoundedRect(-79, 9, 158, 82, 8);
     this.root.add(body);
 
+    this.controlGlow = scene.add.rectangle(0, 50, 154, 78, CYAN, 1).setAlpha(0);
+    this.root.add(this.controlGlow);
+
     const channelXs = [-58, -20, 20, 58];
     channelXs.forEach((x, channel) => this.createChannel(x, channel));
 
@@ -49,6 +55,10 @@ export class RhythmMixer {
     this.root.setX(centerX);
   }
 
+  setCombo(combo: number): void {
+    this.comboIntensity = getComboVisualIntensity(combo);
+  }
+
   pulseBeat(strong: boolean): void {
     for (let index = 0; index < this.leds.length; index += 1) {
       const led = this.leds[index];
@@ -56,12 +66,26 @@ export class RhythmMixer {
       led.setAlpha(strong || index % 2 === 0 ? 0.95 : 0.68);
       this.scene.tweens.add({ targets: led, alpha: 0.28, duration: strong ? 220 : 150 });
     }
+    this.scene.tweens.killTweensOf(this.controlGlow);
+    this.controlGlow.setAlpha(0.035 + this.comboIntensity * 0.07 + (strong ? 0.05 : 0));
+    this.scene.tweens.add({ targets: this.controlGlow, alpha: this.comboIntensity * 0.025, duration: strong ? 220 : 150 });
   }
 
   flashPerfect(): void {
-    this.scene.tweens.killTweensOf(this.perfectGlow);
+    this.scene.tweens.killTweensOf([this.perfectGlow, this.controlGlow, ...this.leds]);
     this.perfectGlow.setAlpha(0.38);
+    this.controlGlow.setAlpha(0.2);
+    for (const led of this.leds) led.setAlpha(1);
     this.scene.tweens.add({ targets: this.perfectGlow, alpha: 0, duration: 260 });
+    this.scene.tweens.add({ targets: this.controlGlow, alpha: this.comboIntensity * 0.025, duration: 260 });
+    this.scene.tweens.add({ targets: this.leds, alpha: 0.28, duration: 220 });
+  }
+
+  reset(): void {
+    this.scene.tweens.killTweensOf([this.perfectGlow, this.controlGlow, ...this.leds]);
+    this.perfectGlow.setAlpha(0);
+    this.controlGlow.setAlpha(0);
+    for (const led of this.leds) led.setAlpha(0.28);
   }
 
   private createChannel(x: number, channel: number): void {
