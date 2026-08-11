@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { HIT_LINE_HALF_WIDTH, HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y } from '../src/game/rhythm/constants';
-import { getHighwayGeometryAtY, getJudgementPadGeometry, getPerspectivePosition } from '../src/game/rhythm/PerspectiveMath';
+import { getHighwayGeometryAtY, getJudgementPadGeometry, getLaneBoundariesAtY, getPerspectivePosition } from '../src/game/rhythm/PerspectiveMath';
 import { PAD_BOTTOM_Y, PAD_TOP_Y } from '../src/game/rhythm/constants';
+import {
+  getRhythmAssetLayout,
+  RHYTHM_DECK_HEIGHT,
+  RHYTHM_HIGHWAY_HEIGHT,
+  RHYTHM_HIGHWAY_LOCAL_CENTER_X,
+  RHYTHM_HIGHWAY_WIDTH,
+} from '../src/game/rhythm/RhythmAssetLayout';
 
 describe('rhythm highway perspective', () => {
   const centerX = 640;
@@ -57,5 +64,22 @@ describe('rhythm highway perspective', () => {
       expect(newPad.centerY).toBe(oldPad.centerY);
       newPad.points.forEach((point, index) => expect(point).toBeCloseTo(oldPad.points[index]));
     }
+  });
+  it('matches the adapted Figma SVG paths to gameplay boundaries', () => {
+    const assetCenter = RHYTHM_HIGHWAY_LOCAL_CENTER_X;
+    expect(getLaneBoundariesAtY(HORIZON_Y, assetCenter)).toEqual([375, 427.5, 480, 532.5, 585]);
+    expect(getLaneBoundariesAtY(HIT_LINE_Y, assetCenter)).toEqual([90, 285, 480, 675, 870]);
+    const expectedPadTop = [83.21428571428572, 281.6071428571429, 480, 678.3928571428571, 876.7857142857142];
+    const expectedPadBottom = [22.142857142857167, 251.07142857142858, 480, 708.9285714285714, 937.8571428571429];
+    getLaneBoundariesAtY(PAD_TOP_Y, assetCenter).forEach((boundary, index) => expect(boundary).toBeCloseTo(expectedPadTop[index]));
+    getLaneBoundariesAtY(PAD_BOTTOM_Y, assetCenter).forEach((boundary, index) => expect(boundary).toBeCloseTo(expectedPadBottom[index]));
+    expect([RHYTHM_HIGHWAY_WIDTH, RHYTHM_HIGHWAY_HEIGHT]).toEqual([960, 720]);
+  });
+  it('keeps proportional mirrored decks centered and partially cropped', () => {
+    const layout = getRhythmAssetLayout(centerX);
+    expect(layout.leftDeckX + layout.rightDeckX).toBe(centerX * 2);
+    expect(layout.rightDeckX - centerX).toBe(centerX - layout.leftDeckX);
+    expect(layout.deckY + RHYTHM_DECK_HEIGHT).toBeGreaterThan(720);
+    expect(getRhythmAssetLayout(900).leftDeckX - layout.leftDeckX).toBe(260);
   });
 });

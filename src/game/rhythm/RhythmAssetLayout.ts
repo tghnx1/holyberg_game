@@ -1,0 +1,29 @@
+export const RHYTHM_HIGHWAY_TEXTURE_KEY = 'rhythm-highway-figma';
+export const RHYTHM_DECK_TEXTURE_KEY = 'rhythm-deck-left';
+
+export const RHYTHM_HIGHWAY_WIDTH = 960;
+export const RHYTHM_HIGHWAY_HEIGHT = 720;
+export const RHYTHM_HIGHWAY_LOCAL_CENTER_X = RHYTHM_HIGHWAY_WIDTH / 2;
+
+export const RHYTHM_DECK_WIDTH = 340;
+export const RHYTHM_DECK_HEIGHT = 196;
+export const RHYTHM_DECK_CENTER_OFFSET_X = 310;
+export const RHYTHM_DECK_TOP_Y = 540;
+
+export interface RhythmAssetLayout {
+  highwayX: number;
+  highwayY: number;
+  leftDeckX: number;
+  rightDeckX: number;
+  deckY: number;
+}
+
+export function getRhythmAssetLayout(centerX: number): RhythmAssetLayout {
+  return {
+    highwayX: centerX,
+    highwayY: 0,
+    leftDeckX: centerX - RHYTHM_DECK_CENTER_OFFSET_X,
+    rightDeckX: centerX + RHYTHM_DECK_CENTER_OFFSET_X,
+    deckY: RHYTHM_DECK_TOP_Y,
+  };
+}

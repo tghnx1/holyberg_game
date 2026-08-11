@@ -3,6 +3,10 @@ import {
   getAssetQualityProfile,
   getBerlinBackgroundAssetUrls,
 } from '../responsive/AssetQuality';
+import {
+  RHYTHM_DECK_TEXTURE_KEY,
+  RHYTHM_HIGHWAY_TEXTURE_KEY,
+} from '../rhythm/RhythmAssetLayout';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -44,6 +48,11 @@ export class BootScene extends Phaser.Scene {
 
     this.load.image('berlin-train-right', 'assets/backgrounds/train-right.png');
     this.load.image('berlin-train-left', 'assets/backgrounds/train-left.png');
+    this.load.svg(
+      RHYTHM_HIGHWAY_TEXTURE_KEY,
+      'assets/images/Rhythm Highway (unchanged).svg',
+    );
+    this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/images/Deck L.svg');
   }
 
   create(): void {

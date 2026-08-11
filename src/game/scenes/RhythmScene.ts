@@ -13,6 +13,12 @@ import { NoteManager } from '../rhythm/NoteManager';
 import { ProceduralBeat } from '../rhythm/ProceduralBeat';
 import { RhythmClock } from '../rhythm/RhythmClock';
 import { RhythmHighway } from '../rhythm/RhythmHighway';
+import {
+  getRhythmAssetLayout,
+  RHYTHM_DECK_HEIGHT,
+  RHYTHM_DECK_TEXTURE_KEY,
+  RHYTHM_DECK_WIDTH,
+} from '../rhythm/RhythmAssetLayout';
 import { resetRhythmRunState } from '../rhythm/RhythmRunState';
 import { getHighwayGeometryAtY, getJudgementPadGeometry, getLaneBoundaries } from '../rhythm/PerspectiveMath';
 import { getTouchArea, mapLogicalPointerToLane } from '../rhythm/TouchLaneMapper';
@@ -40,6 +46,9 @@ export class RhythmScene extends Phaser.Scene {
   private judgementText!: Phaser.GameObjects.Text;
   private stageFlash!: Phaser.GameObjects.Rectangle;
   private clubRoot!: Phaser.GameObjects.Container;
+  private deckRoot!: Phaser.GameObjects.Container;
+  private noteRoot!: Phaser.GameObjects.Container;
+  private highwayForeground!: Phaser.GameObjects.Graphics;
   private tutorialRoot!: Phaser.GameObjects.Container;
   private feedbackRoot!: Phaser.GameObjects.Container;
   private progressTrack!: Phaser.GameObjects.Rectangle;
@@ -135,16 +144,19 @@ export class RhythmScene extends Phaser.Scene {
     this.clock = new RhythmClock(this.beat);
     this.cameras.main.setBackgroundColor('#07040d');
     this.createClub();
+    this.createDecks();
     this.highway = new RhythmHighway(this);
     this.highway.refreshGeometry(this.centerX);
-    this.tutorialRoot = this.add.container(this.centerX, 0);
-    this.highway.root.add(this.tutorialRoot);
+    this.highwayForeground = this.add.graphics().setDepth(RhythmDepth.NOTES - 1);
+    this.drawHighwayForeground();
+    this.noteRoot = this.add.container(0, 0).setDepth(RhythmDepth.NOTES);
+    this.tutorialRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.NOTES);
     this.feedbackRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
     this.createTouchControls();
     this.createHud();
     this.bindLaneInput();
     this.bindTouchInput();
-    this.notes = new NoteManager(this, this.chart.notes, this.highway.root);
+    this.notes = new NoteManager(this, this.chart.notes, this.noteRoot);
     this.notes.setCenterX(this.centerX);
     this.createStartOverlay();
     new OrientationController(this, {
@@ -178,12 +190,34 @@ export class RhythmScene extends Phaser.Scene {
     }
   }
 
+  private createDecks(): void {
+    const layout = getRhythmAssetLayout(this.centerX);
+    this.deckRoot = this.add.container(this.centerX, 0).setDepth(RhythmDepth.HIGHWAY + 25);
+    const leftDeck = this.add.image(
+      layout.leftDeckX - this.centerX,
+      layout.deckY,
+      RHYTHM_DECK_TEXTURE_KEY,
+    ).setOrigin(0.5, 0).setDisplaySize(RHYTHM_DECK_WIDTH, RHYTHM_DECK_HEIGHT);
+    const rightDeck = this.add.image(
+      layout.rightDeckX - this.centerX,
+      layout.deckY,
+      RHYTHM_DECK_TEXTURE_KEY,
+    ).setOrigin(0.5, 0).setDisplaySize(RHYTHM_DECK_WIDTH, RHYTHM_DECK_HEIGHT).setFlipX(true);
+    this.deckRoot.add([leftDeck, rightDeck]);
+  }
+
+  private drawHighwayForeground(): void {
+    const hit = getLaneBoundaries(1, this.centerX);
+    this.highwayForeground.clear();
+    this.highwayForeground.lineStyle(18, 0xffdf57, 0.22).lineBetween(hit[0], HIT_LINE_Y, hit[4], HIT_LINE_Y);
+    this.highwayForeground.lineStyle(7, 0xffffff, 1).lineBetween(hit[0], HIT_LINE_Y, hit[4], HIT_LINE_Y);
+  }
+
   private createTouchControls(): void {
     for (let lane = 0; lane < 4; lane += 1) {
       const x = getJudgementPadGeometry(lane as Lane, this.centerX).centerX;
       const symbol = ['●', '■', '▲', '◆'][lane];
       const label = this.add.text(x, 642, `${symbol}\n${LANE_LABELS[lane]}`, { fontFamily: 'Space Mono', fontSize: '34px', fontStyle: 'bold', color: '#ffffff', stroke: '#10091d', strokeThickness: 6, align: 'center', lineSpacing: 2 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-      this.highway.root.add(label);
       this.touchLabels.push(label);
     }
     this.hitHere = this.add.text(this.centerX, HIT_LINE_Y - 24, 'HIT HERE', { fontFamily: 'Space Mono', fontSize: '16px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#301536', padding: { x: 9, y: 4 } }).setOrigin(0.5, 1).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
@@ -378,7 +412,9 @@ export class RhythmScene extends Phaser.Scene {
   private applyResponsiveLayout(viewport: ViewportInfo): void {
     const centerX = this.centerX;
     this.clubRoot.setX(centerX);
+    this.deckRoot.setX(centerX);
     this.highway.refreshGeometry(centerX);
+    this.drawHighwayForeground();
     this.notes.setCenterX(centerX);
     this.tutorialRoot.setX(centerX);
     this.feedbackRoot.setX(centerX);
