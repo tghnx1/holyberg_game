@@ -173,15 +173,6 @@ export class RhythmScene extends Phaser.Scene {
         metadata,
         import.meta.env.DEV ? (message) => console.warn(message) : () => undefined,
       );
-      if (
-        import.meta.env.DEV &&
-        this.chart.notes[0] &&
-        this.chart.notes[0].time < this.chart.preRoll
-      ) {
-        console.warn(
-          `[RhythmScene] first note at ${this.chart.notes[0].time.toFixed(3)}s is earlier than the configured ${this.chart.preRoll.toFixed(3)}s pre-roll`,
-        );
-      }
       this.audio = new AudioTrackPlayer();
       await this.audio.prepare(audioBuffer);
       if (!this.scene.isActive()) return;
@@ -234,7 +225,7 @@ export class RhythmScene extends Phaser.Scene {
     this.createHud();
     this.bindLaneInput();
     this.bindTouchInput();
-    const approachSeconds = Math.max(SPAWN_AHEAD_SECONDS, this.chart.preRoll);
+    const approachSeconds = SPAWN_AHEAD_SECONDS;
     this.notes = new NoteManager(
       this,
       this.engine.notes,
@@ -377,7 +368,7 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   private beginGameplay(): boolean {
-    if (!this.audio.start(this.playbackWindow.startSeconds, this.playbackWindow.endSeconds, this.playbackWindow.fadeOutSeconds)) return false;
+    if (!this.audio.start(this.playbackWindow.audioStartSeconds, this.playbackWindow.endSeconds, this.playbackWindow.fadeOutSeconds)) return false;
     this.clock.start();
     this.boothAnimation.startGameplay();
     this.playing = true;

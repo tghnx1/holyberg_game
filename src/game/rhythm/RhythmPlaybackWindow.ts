@@ -5,6 +5,7 @@ export interface RhythmPlaybackWindow {
   endSeconds: number;
   durationSeconds: number;
   fadeOutSeconds: number;
+  audioStartSeconds: number;
 }
 
 const DEFAULT_FADE_OUT_SECONDS = 0.25;
@@ -17,7 +18,7 @@ function requireFiniteNonNegative(value: number, field: string): number {
 }
 
 export function resolveRhythmPlaybackWindow(
-  metadata: { startSeconds?: number; endSeconds?: number },
+  metadata: { startSeconds?: number; endSeconds?: number; preRollSeconds?: number },
   audioDurationSeconds: number,
 ): RhythmPlaybackWindow {
   const trackDuration = requireFiniteNonNegative(audioDurationSeconds, 'audioDurationSeconds');
@@ -34,6 +35,7 @@ export function resolveRhythmPlaybackWindow(
     endSeconds: clampedEnd,
     durationSeconds,
     fadeOutSeconds: Math.min(DEFAULT_FADE_OUT_SECONDS, durationSeconds / 2),
+    audioStartSeconds: Math.max(0, clampedStart - (metadata.preRollSeconds ?? 0)),
   };
 }
 
