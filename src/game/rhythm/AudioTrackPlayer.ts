@@ -2,6 +2,7 @@ import type { TrackTimeSource } from './RhythmClock';
 
 const START_LEAD_SECONDS = 0.04;
 const DEFAULT_FADE_OUT_SECONDS = 0.25;
+const AUDIO_RESUME_TIMEOUT_MS = 750;
 
 export class AudioTrackPlayer implements TrackTimeSource {
   private context?: AudioContext;
@@ -49,18 +50,28 @@ export class AudioTrackPlayer implements TrackTimeSource {
       // Scheduling in the gesture handler keeps iOS from dropping the audio
       // permission while resume() settles asynchronously.
       resumeAttempt = context.resume();
-      if (!this.schedulePlayback(startSeconds, endSeconds, fadeOutSeconds)) return false;
+      if (!this.schedulePlayback(startSeconds, endSeconds, fadeOutSeconds)) {
+        void resumeAttempt.catch(() => undefined);
+        return false;
+      }
     } catch {
       return false;
     }
 
+    let resumeTimeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      await resumeAttempt;
-      if (context.state === 'running') return true;
-    } catch {
-      // The scheduled source is cleaned up below so another tap can retry.
+      await Promise.race([
+        resumeAttempt.catch(() => undefined),
+        new Promise<void>((resolve) => {
+          resumeTimeout = globalThis.setTimeout(resolve, AUDIO_RESUME_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (resumeTimeout !== undefined) globalThis.clearTimeout(resumeTimeout);
     }
+    if (context.state === 'running') return true;
 
+    // A pending or rejected iOS resume must release the UI for another tap.
     this.running = false;
     this.stopSource();
     return false;

@@ -41,6 +41,7 @@ class FakeAudioContext {
 
 describe('AudioTrackPlayer mobile start', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     FakeAudioContext.latest = undefined;
   });
@@ -57,5 +58,22 @@ describe('AudioTrackPlayer mobile start', () => {
     expect(context.source.start).toHaveBeenCalledWith(12.04, 25);
     expect(await startAttempt).toBe(true);
     expect(player.currentTimeSeconds).toBe(25);
+  });
+
+  it('times out and allows retry when iOS leaves resume pending', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    const player = new AudioTrackPlayer();
+    await player.prepare(new ArrayBuffer(8));
+    const context = FakeAudioContext.latest!;
+    context.resume.mockImplementation(() => new Promise<void>(() => undefined));
+
+    const startAttempt = player.startFromGesture(25, 40, 0.25);
+
+    expect(context.source.start).toHaveBeenCalledWith(12.04, 25);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await startAttempt).toBe(false);
+    expect(context.source.stop).toHaveBeenLastCalledWith();
+    expect(context.source.disconnect).toHaveBeenCalledOnce();
   });
 });
