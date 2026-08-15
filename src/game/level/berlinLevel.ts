@@ -1,8 +1,12 @@
 import Phaser from 'phaser';
-import { DESIGN_WIDTH, GROUND_Y, WORLD_WIDTH } from '../constants';
-import { GROUND_SEGMENTS } from './berlin/berlinLevelConfig';
+import { DESIGN_WIDTH, WORLD_WIDTH } from '../constants';
 import { backgroundLayout, getDisplaySize, getSkyDisplayWidth } from './berlin/backgroundLayout';
-import { attachBackgroundDebug, isBackgroundDebugEnabled, type DebugTarget } from './berlin/backgroundDebug';
+import {
+  attachBackgroundDebug,
+  isBackgroundDebugEnabled,
+  type DebugTarget,
+} from './berlin/backgroundDebug';
+import { createStreetGround } from './berlin/StreetGround';
 import type { SceneLayers } from './sceneLayers';
 
 // Back-to-front stacking order for the shared mid-background layer: the
@@ -17,50 +21,6 @@ const BACKGROUND_ORDER = [
   'railway',
   'houses',
 ] as const;
-
-interface ShapeOptions {
-  scene: Phaser.Scene;
-  layer: Phaser.GameObjects.Layer;
-  x: number;
-  y: number;
-  color: number;
-  depth: number;
-  scrollFactorX: number;
-  scrollFactorY?: number;
-}
-
-interface RectangleOptions extends ShapeOptions {
-  width: number;
-  height: number;
-}
-
-function configure<
-  T extends Phaser.GameObjects.GameObject &
-    Phaser.GameObjects.Components.Depth &
-    Phaser.GameObjects.Components.ScrollFactor,
->(
-  object: T,
-  layer: Phaser.GameObjects.Layer,
-  depth: number,
-  scrollFactorX: number,
-  scrollFactorY = 1,
-): T {
-  object.setDepth(depth).setScrollFactor(scrollFactorX, scrollFactorY);
-  layer.add(object);
-  return object;
-}
-
-function addRectangle(options: RectangleOptions): Phaser.GameObjects.Rectangle {
-  const { scene, layer, x, y, width, height, color, depth, scrollFactorX, scrollFactorY } = options;
-  return configure(
-    scene.add.rectangle(x, y, width, height, color),
-    layer,
-    depth,
-    scrollFactorX,
-    scrollFactorY,
-  );
-}
-
 
 /** Creates a full-height-scaled, bottom-anchored (origin 0,1) background image. */
 function createBackgroundImage(
@@ -81,17 +41,6 @@ export interface BuiltBerlinWorld {
 }
 
 export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): BuiltBerlinWorld {
-  const rectangle = (
-    layer: Phaser.GameObjects.Layer,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    color: number,
-    depth: number,
-    scrollFactorX: number,
-  ) => addRectangle({ scene, layer, x, y, width, height, color, depth, scrollFactorX });
-
   const debugTargets: DebugTarget[] = [];
 
   // A fixed sunset image sits behind all parallax scenery and never scrolls
@@ -276,21 +225,11 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
     }
   });
 
-  // Asphalt is drawn per ground segment, matching the physics ground
-  // colliders in BerlinScene.
-  const { asphaltColor, asphaltHeight, asphaltOffsetY, depth: groundDepth } =
-    backgroundLayout.ground;
-  GROUND_SEGMENTS.forEach((segment) => {
-    rectangle(
-      layers.gameplay,
-      (segment.startX + segment.endX) / 2,
-      GROUND_Y + asphaltOffsetY,
-      segment.endX - segment.startX,
-      asphaltHeight,
-      asphaltColor,
-      groundDepth,
-      1,
-    );
+  // Visual ground only. BerlinScene retains its separate invisible Arcade
+  // ground zones, so transparent pixels and street furniture never collide.
+  const streetGround = createStreetGround(scene, layers.gameplay, backgroundLayout.ground.depth);
+  streetGround.forEach((object, index) => {
+    debugTargets.push({ name: `concrete-${index}`, object });
   });
 
   if (isBackgroundDebugEnabled()) {

@@ -3,7 +3,9 @@ import { resolve } from 'node:path';
 import { stdout } from 'node:process';
 import {
   getGeneratedAssetUrl,
+  getStreetGroundGeneratedAssetUrl,
   loadBerlinBackgroundManifest,
+  loadBerlinStreetGroundManifest,
   repoRoot,
 } from './berlin-background-assets.mjs';
 
@@ -23,6 +25,21 @@ for (const asset of manifest.assets) {
     } catch {
       missing.push(url);
     }
+  }
+}
+
+const streetGround = await loadBerlinStreetGroundManifest();
+const streetGroundChunkCount = Math.ceil(streetGround.sourceWidth / streetGround.chunkWidth);
+for (let index = 0; index < streetGroundChunkCount; index += 1) {
+  const url = getStreetGroundGeneratedAssetUrl(streetGround, index);
+  const outputPath = resolve(repoRoot, 'dist', url);
+
+  try {
+    const file = await stat(outputPath);
+    if (!file.isFile() || file.size === 0) missing.push(url);
+    else verified += 1;
+  } catch {
+    missing.push(url);
   }
 }
 

@@ -1,0 +1,11 @@
+{
+  "source": "assets/backgrounds/concrete.png",
+  "sourceWidth": 15000,
+  "sourceHeight": 1049,
+  "cropTop": 598,
+  "visibleTopY": 876,
+  "surfaceY": 889,
+  "chunkWidth": 3000,
+  "textureKeyPrefix": "berlin-concrete-strip",
+  "generatedNamePrefix": "concrete-strip"
+}
