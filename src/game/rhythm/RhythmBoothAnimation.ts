@@ -26,6 +26,7 @@ export class RhythmBoothAnimation {
   readonly root: Phaser.GameObjects.Container;
   private readonly decks: Record<BoothDeckSide, DeckEffects>;
   private readonly missWash: Phaser.GameObjects.Rectangle;
+  private missTintRecovery?: Phaser.Time.TimerEvent;
   private rotationTweens: Phaser.Tweens.Tween[] = [];
   private comboIntensity = 0;
 
@@ -115,15 +116,15 @@ export class RhythmBoothAnimation {
     this.scene.tweens.killTweensOf(this.missWash);
     this.missWash.setAlpha(0.18);
     this.scene.tweens.add({ targets: this.missWash, alpha: 0, duration: 190 });
+    this.missTintRecovery?.remove(false);
+    this.missTintRecovery = this.scene.time.delayedCall(190, () => {
+      this.missTintRecovery = undefined;
+      for (const deck of Object.values(this.decks)) deck.image.clearTint();
+    });
     for (const deck of Object.values(this.decks)) {
       this.scene.tweens.killTweensOf(deck.image);
       deck.image.setTint(MISS_RED).setAlpha(0.72).setScale(1);
-      this.scene.tweens.add({
-        targets: deck.image,
-        alpha: 1,
-        duration: 190,
-        onComplete: () => deck.image.clearTint(),
-      });
+      this.scene.tweens.add({ targets: deck.image, alpha: 1, duration: 190 });
     }
   }
 
@@ -138,6 +139,8 @@ export class RhythmBoothAnimation {
       ...deck.particles,
     ]);
     this.scene.tweens.killTweensOf([this.missWash, ...targets]);
+    this.missTintRecovery?.remove(false);
+    this.missTintRecovery = undefined;
     this.missWash.setAlpha(0);
     for (const deck of Object.values(this.decks)) {
       deck.image.setScale(1).setAlpha(1).clearTint();
