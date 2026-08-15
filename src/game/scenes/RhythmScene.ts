@@ -369,10 +369,25 @@ export class RhythmScene extends Phaser.Scene {
 
   private beginGameplay(): boolean {
     if (!this.audio.start(this.playbackWindow.audioStartSeconds, this.playbackWindow.endSeconds, this.playbackWindow.fadeOutSeconds)) return false;
+    this.activateGameplay();
+    return true;
+  }
+
+  private async beginGameplayFromGesture(): Promise<boolean> {
+    const started = await this.audio.startFromGesture(
+      this.playbackWindow.audioStartSeconds,
+      this.playbackWindow.endSeconds,
+      this.playbackWindow.fadeOutSeconds,
+    );
+    if (!started || !this.scene.isActive()) return false;
+    this.activateGameplay();
+    return true;
+  }
+
+  private activateGameplay(): void {
     this.clock.start();
     this.boothAnimation.startGameplay();
     this.playing = true;
-    return true;
   }
 
   private showAudioStartFallback(): void {
@@ -381,21 +396,31 @@ export class RhythmScene extends Phaser.Scene {
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     let retrying = false;
+    const cleanup = (): void => {
+      background.off('pointerdown', retry);
+      this.input.off('pointerdown', retry);
+      this.input.keyboard?.off('keydown-SPACE', retry);
+    };
     const retry = (): void => {
       if (retrying) return;
       retrying = true;
-      void this.audio.unlock().then((unlocked) => {
+      text.setText('STARTING AUDIO...');
+      void this.beginGameplayFromGesture().then((started) => {
         retrying = false;
-        if (!unlocked || !this.beginGameplay()) {
+        if (!started) {
           text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
           return;
         }
-        this.input.off('pointerdown', retry);
-        this.input.keyboard?.off('keydown-SPACE', retry);
+        cleanup();
         overlay.destroy(true);
         if (this.activeOverlay === overlay) this.activeOverlay = undefined;
+      }).catch((error: unknown) => {
+        retrying = false;
+        text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
+        if (import.meta.env.DEV) console.warn('[RhythmScene] audio retry failed', error);
       });
     };
+    background.on('pointerdown', retry);
     this.input.on('pointerdown', retry);
     this.input.keyboard?.on('keydown-SPACE', retry);
   }

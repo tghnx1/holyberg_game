@@ -33,6 +33,41 @@ export class AudioTrackPlayer implements TrackTimeSource {
 
   start(startSeconds = 0, endSeconds = this.durationSeconds, fadeOutSeconds = DEFAULT_FADE_OUT_SECONDS): boolean {
     if (!this.context || !this.buffer || this.context.state !== 'running') return false;
+    return this.schedulePlayback(startSeconds, endSeconds, fadeOutSeconds);
+  }
+
+  async startFromGesture(
+    startSeconds = 0,
+    endSeconds = this.durationSeconds,
+    fadeOutSeconds = DEFAULT_FADE_OUT_SECONDS,
+  ): Promise<boolean> {
+    if (!this.context || !this.buffer || this.context.state === 'closed') return false;
+
+    const context = this.context;
+    let resumeAttempt: Promise<void>;
+    try {
+      // Scheduling in the gesture handler keeps iOS from dropping the audio
+      // permission while resume() settles asynchronously.
+      resumeAttempt = context.resume();
+      if (!this.schedulePlayback(startSeconds, endSeconds, fadeOutSeconds)) return false;
+    } catch {
+      return false;
+    }
+
+    try {
+      await resumeAttempt;
+      if (context.state === 'running') return true;
+    } catch {
+      // The scheduled source is cleaned up below so another tap can retry.
+    }
+
+    this.running = false;
+    this.stopSource();
+    return false;
+  }
+
+  private schedulePlayback(startSeconds: number, endSeconds: number, fadeOutSeconds: number): boolean {
+    if (!this.context || !this.buffer) return false;
     if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds) return false;
     this.stopSource();
     const startOffsetSeconds = Math.min(Math.max(0, startSeconds), this.buffer.duration);
