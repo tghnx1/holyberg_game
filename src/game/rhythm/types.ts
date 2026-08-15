@@ -62,7 +62,6 @@ export interface ScoreState {
   ok: number;
   miss: number;
   badTap: number;
-  energy: number;
 }
 
 export interface RhythmResult extends ScoreState {

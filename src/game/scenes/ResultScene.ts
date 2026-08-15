@@ -85,7 +85,7 @@ export class ResultScene extends Phaser.Scene {
       .text(
         92,
         188,
-        `BERLIN SCORE       ${this.result.berlinScore}\nRHYTHM SCORE       ${this.result.score}\nTOTAL SCORE        ${this.totalScore}\n\nPERFECT            ${this.result.perfect}\nGOOD               ${this.result.good}\nOK                 ${this.result.ok}\nMISS               ${this.result.miss}\nBAD TAPS           ${this.result.badTap}\nMAX COMBO          ${this.result.maxCombo}\nACCURACY           ${this.result.accuracy.toFixed(1)}%\nCROWD ENERGY       ${Math.round(this.result.energy)}%`,
+        `BERLIN SCORE       ${this.result.berlinScore}\nRHYTHM SCORE       ${this.result.score}\nTOTAL SCORE        ${this.totalScore}\n\nPERFECT            ${this.result.perfect}\nGOOD               ${this.result.good}\nOK                 ${this.result.ok}\nMISS               ${this.result.miss}\nBAD TAPS           ${this.result.badTap}\nMAX COMBO          ${this.result.maxCombo}\nACCURACY           ${this.result.accuracy.toFixed(1)}%`,
         {
           fontFamily: 'Space Mono',
           fontSize: '18px',

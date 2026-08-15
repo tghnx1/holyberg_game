@@ -14,10 +14,9 @@ describe('bad taps and anti-mash', () => {
     expect(guard.beginPointer(2, 1, 181)).toBe(true);
   });
   it('penalizes an empty press without creating a miss', () => {
-    const state = applyBadTap({ ...initialScoreState(), score: 30, combo: 12, energy: 20 });
+    const state = applyBadTap({ ...initialScoreState(), score: 30, combo: 12 });
     expect(state.score).toBe(0);
     expect(state.combo).toBe(0);
-    expect(state.energy).toBe(19);
     expect(state.badTap).toBe(1);
     expect(state.miss).toBe(0);
   });
@@ -30,7 +29,7 @@ describe('bad taps and anti-mash', () => {
   });
   it('disables score and combo during lock, then supports normal scoring', () => {
     const initial = initialScoreState();
-    const locked = applyJudgement(initial, 'PERFECT', false, false);
+    const locked = applyJudgement(initial, 'PERFECT', false);
     expect(locked.score).toBe(0);
     expect(locked.combo).toBe(0);
     expect(locked.perfect).toBe(1);

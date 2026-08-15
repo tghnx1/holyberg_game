@@ -86,16 +86,14 @@ Track completion requires both the audio-ended event and every chart note to be 
 
 Timing uses the absolute early/late difference:
 
-| Judgement | Window | Base score | Crowd energy |
-| --- | ---: | ---: | ---: |
-| PERFECT | up to 60 ms | 100 | +2 |
-| GOOD | up to 120 ms | 70 | +1 |
-| OK | up to 180 ms | 40 | 0 |
-| MISS | over 180 ms | 0 | -5 |
+| Judgement | Window | Base score |
+| --- | ---: | ---: |
+| PERFECT | up to 60 ms | 100 |
+| GOOD | up to 120 ms | 70 |
+| OK | up to 180 ms | 40 |
+| MISS | over 180 ms | 0 |
 
 Combo multipliers are x1 at 0-9, x2 at 10-24, x3 at 25-49, and x4 at 50+. Raw combo-weighted points are normalized against the chart's theoretical all-PERFECT score, so every chart has the same 7,500-point maximum regardless of note count. MISS awards zero and never removes earned score. Accuracy is earned base judgement points divided by 100 points per judged chart note. Grade thresholds are S at 95%, A at 90%, B at 80%, C at 70%, and D below 70%.
-
-Crowd energy starts at 70 and is clamped to 0-100. Remaining at zero for three continuous audio-clock seconds fails the set; recovering above zero during that grace period cancels failure. A failed set can retry the rhythm scene while preserving the completed Berlin score.
 
 ## Calibration and debug
 

@@ -8,7 +8,6 @@ import { readInputOffsetMs } from '../rhythm/Calibration';
 import { HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RhythmDepth, SPAWN_AHEAD_SECONDS } from '../rhythm/constants';
 import { HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y, PAD_BOTTOM_Y } from '../rhythm/constants';
 import { CompletionGate, shouldCompleteTrack } from '../rhythm/CompletionSystem';
-import { CrowdFailureSystem } from '../rhythm/CrowdFailureSystem';
 import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../rhythm/InputPenaltySystem';
 import { formatChartStatistics, getBeatIndexAtTime, parseMidiChart } from '../rhythm/MidiChartLoader';
 import { NoteManager } from '../rhythm/NoteManager';
@@ -48,7 +47,6 @@ export class RhythmScene extends Phaser.Scene {
   private lastBeat = -1;
   private scoreText!: Phaser.GameObjects.Text;
   private comboText!: Phaser.GameObjects.Text;
-  private energyText!: Phaser.GameObjects.Text;
   private progressBar!: Phaser.GameObjects.Rectangle;
   private judgementText!: Phaser.GameObjects.Text;
   private stageFlash!: Phaser.GameObjects.Rectangle;
@@ -83,7 +81,6 @@ export class RhythmScene extends Phaser.Scene {
   private lastTimingDifferenceMs: number | null = null;
   private audioEnded = false;
   private completionGate!: CompletionGate;
-  private crowdFailure!: CrowdFailureSystem;
   private readonly inputGuard = new LaneInputGuard();
   private readonly antiMash = new AntiMashSystem();
   private debugPointer = { x: 0, y: 0, lane: null as Lane | null };
@@ -215,7 +212,6 @@ export class RhythmScene extends Phaser.Scene {
   private build(): void {
     this.scoreState = initialScoreState(this.chart.notes.length);
     this.completionGate = new CompletionGate();
-    this.crowdFailure = new CrowdFailureSystem();
     this.engine = new RhythmEngine(this.chart.notes);
     this.clock = new RhythmClock(this.audio);
     this.cameras.main.setBackgroundColor('#07040d');
@@ -323,7 +319,6 @@ export class RhythmScene extends Phaser.Scene {
     this.add.text(22, 48, `BERLIN  ${this.berlinScore}`, style).setDepth(RhythmDepth.UI);
     this.scoreText = this.add.text(22, 76, '', style).setDepth(RhythmDepth.UI);
     this.comboText = this.add.text(this.centerX, 38, '', { ...style, align: 'center' }).setOrigin(0.5).setDepth(RhythmDepth.UI);
-    this.energyText = this.add.text(DESIGN_WIDTH - 22, 20, '', { ...style, align: 'right' }).setOrigin(1, 0).setDepth(RhythmDepth.UI);
     this.progressTrack = this.add.rectangle(this.centerX, 12, 500, 7, 0x2a1836).setDepth(RhythmDepth.UI);
     this.progressBar = this.add.rectangle(this.centerX - 250, 12, 0, 7, 0xffdd57).setOrigin(0, 0.5).setDepth(RhythmDepth.UI);
     this.judgementText = this.add.text(this.centerX, HIT_LINE_Y - 82, '', { fontFamily: 'Archivo Black', fontSize: '46px', color: '#fff', stroke: '#541864', strokeThickness: 7 }).setOrigin(0.5).setAlpha(0).setDepth(RhythmDepth.UI);
@@ -531,7 +526,7 @@ export class RhythmScene extends Phaser.Scene {
 
   private registerJudgement(judgement: Judgement, lane?: Lane, scoringEnabled = true): void {
     const awardedPoints = scoringEnabled ? getAwardedPoints(this.scoreState, judgement) : 0;
-    this.scoreState = applyJudgement(this.scoreState, judgement, false, scoringEnabled);
+    this.scoreState = applyJudgement(this.scoreState, judgement, scoringEnabled);
     if (lane !== undefined) this.highway.flashLane(lane, judgement === 'PERFECT' ? 0xffffff : LANE_COLORS[lane], judgement === 'PERFECT');
     if (judgement === 'PERFECT' && lane !== undefined) {
       this.boothAnimation.flashPerfect(lane);
@@ -552,9 +547,6 @@ export class RhythmScene extends Phaser.Scene {
   private updateHud(): void {
     this.scoreText.setText(`RHYTHM  ${this.scoreState.score}`);
     this.comboText.setText(`${this.scoreState.combo} COMBO   x${getMultiplier(this.scoreState.combo)}`);
-    const energy = Math.round(this.scoreState.energy);
-    const filled = Math.round(energy / 10);
-    this.energyText.setText(`CROWD  [${'#'.repeat(filled)}${'-'.repeat(10 - filled)}]\n${energy}%`);
     this.boothAnimation?.setCombo(this.scoreState.combo);
     this.mixer?.setCombo(this.scoreState.combo);
   }
@@ -578,7 +570,6 @@ export class RhythmScene extends Phaser.Scene {
     this.tutorialPrompt?.setX(centerX);
     this.scoreText.setScale(viewport.hudScale);
     this.comboText.setPosition(centerX, this.comboText.y).setScale(viewport.hudScale);
-    this.energyText.setX(this.cameras.main.width - 22).setScale(viewport.hudScale);
     this.judgementText.setPosition(centerX, this.judgementText.y).setScale(viewport.hudScale);
     this.rhythmDebugText.setX(this.cameras.main.width - 18);
     const controlScale = viewport.compactLandscape ? 0.82 : 1;
@@ -646,41 +637,6 @@ export class RhythmScene extends Phaser.Scene {
     });
   }
 
-  private failLevel(): void {
-    if (this.finished) return;
-    this.finished = true;
-    this.playing = false;
-    this.clock.stop();
-    this.audio.stop();
-    this.boothAnimation.stop();
-
-    const background = this.add
-      .rectangle(0, this.cameras.main.height / 2, 700, 260, 0x090611, 0.97)
-      .setStrokeStyle(5, 0xff334f)
-      .setInteractive();
-    const text = this.add
-      .text(0, this.cameras.main.height / 2, 'SET FAILED\n\nPRESS SPACE OR TAP TO RETRY', {
-        fontFamily: 'Archivo Black',
-        fontSize: '38px',
-        color: '#ffdd57',
-        align: 'center',
-        lineSpacing: 10,
-      })
-      .setOrigin(0.5);
-    const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
-    this.activeOverlay = overlay;
-
-    let accepted = false;
-    const retry = (): void => {
-      if (accepted) return;
-      accepted = true;
-      this.input.keyboard?.off('keydown-SPACE', retry);
-      this.scene.start('RhythmScene', { score: this.berlinScore });
-    };
-    background.on('pointerdown', retry);
-    this.input.keyboard?.on('keydown-SPACE', retry);
-  }
-
   private cleanup(): void {
     this.playing = false;
     this.clock?.stop();
@@ -719,10 +675,6 @@ export class RhythmScene extends Phaser.Scene {
       this.time.delayedCall(70, () => this.cameras.main.zoomTo(1, 100));
     }
     this.updateRhythmDebug();
-    if (this.crowdFailure.update(this.scoreState.energy, time)) {
-      this.failLevel();
-      return;
-    }
     this.completionGate.tryComplete(
       shouldCompleteTrack(this.audioEnded, this.engine.allNotesJudged),
       () => this.endLevel(),

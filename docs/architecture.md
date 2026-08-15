@@ -22,4 +22,4 @@ Keyboard or one touch lane calls `pressLane`. The audio timestamp receives the l
 
 ## Scoring flow
 
-`ScoreSystem` is pure TypeScript. A judgement updates score, combo, maximum combo, counts, multiplier, and crowd energy. RhythmScene passes the completed state and Berlin score to ResultScene, where they are displayed separately and combined for the total.
+`ScoreSystem` is pure TypeScript. A judgement updates score, combo, maximum combo, counts, and multiplier. RhythmScene passes the completed state and Berlin score to ResultScene, where they are displayed separately and combined for the total.

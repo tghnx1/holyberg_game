@@ -64,14 +64,6 @@ describe('rhythm scoring logic', () => {
     expect(getMultiplier(state.combo)).toBe(1);
   });
 
-  it('applies the configured crowd-energy tuning and clamps to 0-100', () => {
-    expect(initialScoreState().energy).toBe(70);
-    expect(applyJudgement({ ...initialScoreState(), energy: 98 }, 'PERFECT').energy).toBe(100);
-    expect(applyJudgement({ ...initialScoreState(), energy: 98 }, 'GOOD').energy).toBe(99);
-    expect(applyJudgement({ ...initialScoreState(), energy: 98 }, 'OK').energy).toBe(98);
-    expect(applyJudgement({ ...initialScoreState(), energy: 4 }, 'MISS').energy).toBe(0);
-  });
-
   it('calculates deterministic weighted accuracy and total score', () => {
     expect(calculateAccuracy({ ...initialScoreState(), perfect: 1, good: 1, ok: 1, miss: 1 })).toBeCloseTo(52.5);
     expect(combineScores(7430, RHYTHM_SCORE_CAP)).toBe(14_930);

@@ -29,7 +29,7 @@ Features include:
 - tempo-map-aware MIDI parsing with explicit D/F/J/K lane-note numbers;
 - Web Audio synchronized playback, judgement, and frame-independent note positioning;
 - keyboard and four-zone landscape touch input;
-- PERFECT/GOOD/OK/MISS scoring, combo multipliers, accuracy, grade, and crowd energy;
+- PERFECT/GOOD/OK/MISS scoring, combo multipliers, accuracy, and grade;
 - look-ahead note spawning, one-time hit/miss state transitions, and audio-ended completion gating;
 - local-storage-ready latency compensation and a development timing overlay.
 

@@ -1,9 +1,4 @@
-import {
-  CROWD_ENERGY_MAX,
-  CROWD_ENERGY_MIN,
-  INITIAL_ENERGY,
-  RHYTHM_SCORE_CAP,
-} from './constants';
+import { RHYTHM_SCORE_CAP } from './constants';
 import type { Judgement, ScoreState } from './types';
 
 export function getMultiplier(combo: number): number {
@@ -47,7 +42,6 @@ export const initialScoreState = (noteCount = 1): ScoreState => ({
   ok: 0,
   miss: 0,
   badTap: 0,
-  energy: INITIAL_ENERGY,
 });
 
 export function getAwardedPoints(state: ScoreState, judgement: Judgement): number {
@@ -63,7 +57,6 @@ export function getAwardedPoints(state: ScoreState, judgement: Judgement): numbe
 export function applyJudgement(
   state: ScoreState,
   judgement: Judgement,
-  protectEnergy = false,
   scoringEnabled = true,
 ): ScoreState {
   if (judgement === 'MISS') {
@@ -71,9 +64,6 @@ export function applyJudgement(
       ...state,
       combo: 0,
       miss: state.miss + 1,
-      energy: protectEnergy
-        ? state.energy
-        : Math.max(CROWD_ENERGY_MIN, state.energy - 5),
     };
   }
 
@@ -82,7 +72,6 @@ export function applyJudgement(
     ? getJudgementBaseScore(judgement) * getMultiplier(combo)
     : 0;
   const rawScore = state.rawScore + rawAward;
-  const energyGain = judgement === 'PERFECT' ? 2 : judgement === 'GOOD' ? 1 : 0;
   return {
     ...state,
     score: scoringEnabled
@@ -97,7 +86,6 @@ export function applyJudgement(
     perfect: state.perfect + (judgement === 'PERFECT' ? 1 : 0),
     good: state.good + (judgement === 'GOOD' ? 1 : 0),
     ok: state.ok + (judgement === 'OK' ? 1 : 0),
-    energy: Math.min(CROWD_ENERGY_MAX, state.energy + energyGain),
   };
 }
 
