@@ -3,6 +3,7 @@ import { GROUND_Y } from '../../constants';
 import { CROUCHING_BODY, STANDING_BODY } from './playerPhysics';
 import { BERLIN_ENTITIES } from './berlinLevelConfig';
 import { PlaceholderFactory } from './PlaceholderFactory';
+import { getBerlinEntityZoneLayout } from './entityZoneLayout';
 import type {
   BerlinEntity,
   CollectibleConfig,
@@ -70,8 +71,7 @@ export class LevelBuilder {
    */
   addEntity(config: BerlinEntity): BuiltEntity {
     const artwork = this.factory.create(config);
-    const hitbox = 'hitbox' in config ? config.hitbox : undefined;
-    const zone = this.createZone(config, hitbox);
+    const zone = this.createZone(config);
     zone.setData('config', config).setData('artwork', artwork).setData('id', config.id);
     if (config.type === 'obstacle') {
       zone.setData('alreadyHit', false);
@@ -115,16 +115,9 @@ export class LevelBuilder {
     zone.destroy();
   }
 
-  private createZone(
-    config: BerlinEntity,
-    hitbox?: { offsetX: number; offsetY: number; width: number; height: number },
-  ): Phaser.GameObjects.Zone {
-    const zone = this.scene.add.zone(
-      hitbox ? config.x + hitbox.offsetX : config.x,
-      hitbox ? config.y + hitbox.offsetY : config.y,
-      hitbox ? hitbox.width : config.width * 0.78,
-      hitbox ? hitbox.height : config.height * 0.82,
-    );
+  private createZone(config: BerlinEntity): Phaser.GameObjects.Zone {
+    const layout = getBerlinEntityZoneLayout(config);
+    const zone = this.scene.add.zone(layout.x, layout.y, layout.width, layout.height);
     const isStatic = config.type === 'collectible' || config.type === 'platform';
     this.scene.physics.add.existing(zone, isStatic);
     const body = zone.body as

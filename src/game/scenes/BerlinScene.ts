@@ -438,27 +438,6 @@ export class BerlinScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(Depth.UI);
     this.debugOverlay = this.add.container(0, 0, [this.debugGraphics, status]).setVisible(false);
-    this.add.text(6900, 395, 'PLATFORM ROUTE', {
-      fontFamily: 'Archivo Black',
-      fontSize: '18px',
-      color: '#ffe36d',
-      backgroundColor: '#1b1020cc',
-      padding: { x: 8, y: 4 },
-    }).setDepth(Depth.UI - 2);
-    this.add.text(7600, 325, 'DOUBLE JUMP', {
-      fontFamily: 'Archivo Black',
-      fontSize: '18px',
-      color: '#7ef0ff',
-      backgroundColor: '#1b1020cc',
-      padding: { x: 8, y: 4 },
-    }).setDepth(Depth.UI - 2);
-    this.add.text(8200, 350, 'BONUS ABOVE', {
-      fontFamily: 'Archivo Black',
-      fontSize: '18px',
-      color: '#ff7ac1',
-      backgroundColor: '#1b1020cc',
-      padding: { x: 8, y: 4 },
-    }).setDepth(Depth.UI - 2);
     [1, 2, 3, 4, 5].forEach((_number, index) => {
       const key = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ONE + index);
       key.on('down', (event: KeyboardEvent) => {
