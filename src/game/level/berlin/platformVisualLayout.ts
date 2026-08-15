@@ -24,7 +24,10 @@ interface PlatformTextureMetrics {
 
 export interface PlatformVisualLayout {
   textureKey: PlatformTextureKey;
+  /** Legacy alias for horizontal scale. */
   scale: number;
+  scaleX: number;
+  scaleY: number;
   imageX: number;
   imageY: number;
   visibleDeckWidth: number;
@@ -142,19 +145,26 @@ export function getPlatformVisualLayout(
 
   const deckWidth = metrics.deckRight - metrics.deckLeft + 1;
   const deckCenterX = (metrics.deckLeft + metrics.deckRight + 1) / 2;
-  const scale = entity.width / deckWidth;
-  const imageX = (metrics.sourceWidth / 2 - deckCenterX) * scale;
-  const imageY = entity.topY - entity.y + (metrics.sourceHeight / 2 - metrics.surfaceY) * scale;
+  const deckThickness = metrics.deckBottomY - metrics.surfaceY + 1;
+  const scaleX = entity.width / deckWidth;
+  // Existing layouts authored before visual resize support retain their
+  // original uniform PNG scale. Once resized, explicit height controls Y.
+  const scaleY = entity.editorSized ? entity.height / deckThickness : scaleX;
+  const imageX = (metrics.sourceWidth / 2 - deckCenterX) * scaleX;
+  const imageY =
+    entity.topY - entity.y + (metrics.sourceHeight / 2 - metrics.surfaceY) * scaleY;
 
   return {
     textureKey,
-    scale,
+    scale: scaleX,
+    scaleX,
+    scaleY,
     imageX,
     imageY,
-    visibleDeckWidth: deckWidth * scale,
-    visibleDeckThickness: (metrics.deckBottomY - metrics.surfaceY + 1) * scale,
+    visibleDeckWidth: deckWidth * scaleX,
+    visibleDeckThickness: deckThickness * scaleY,
     visibleSurfaceY:
-      entity.y + imageY + (metrics.surfaceY - metrics.sourceHeight / 2) * scale,
+      entity.y + imageY + (metrics.surfaceY - metrics.sourceHeight / 2) * scaleY,
   };
 }
 

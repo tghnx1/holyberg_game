@@ -73,6 +73,25 @@ describe('Berlin platform visual layout', () => {
     }
   });
 
+  it('keeps legacy platform art uniform but honours explicit editor height', () => {
+    const legacy = platforms[0];
+    const legacyLayout = getPlatformVisualLayout(legacy)!;
+    expect(legacyLayout.scaleY).toBe(legacyLayout.scaleX);
+
+    const resized: PlatformConfig | MovingPlatformConfig = {
+      ...legacy,
+      y: legacy.topY + 21,
+      height: 42,
+      editorSized: true,
+    };
+    const resizedLayout = getPlatformVisualLayout(resized)!;
+    const resizedZone = getBerlinEntityZoneLayout(resized);
+    expect(resizedLayout.visibleDeckWidth).toBeCloseTo(resized.width, 8);
+    expect(resizedLayout.visibleDeckThickness).toBeCloseTo(42, 8);
+    expect(resizedLayout.visibleSurfaceY).toBeCloseTo(resized.topY, 8);
+    expect(resizedZone.y - resizedZone.height / 2).toBe(resized.topY);
+  });
+
   it('uses playable 120–200 px nominal gaps inside each elevated route cluster', () => {
     const ids = [
       ['early-moving-platform-1', 'early-moving-platform-2'],

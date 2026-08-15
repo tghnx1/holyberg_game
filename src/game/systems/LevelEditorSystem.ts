@@ -1,7 +1,18 @@
 import Phaser from 'phaser';
 import { Depth } from '../constants';
 import type { BuiltEntity } from '../level/berlin/LevelBuilder';
+import { getBerlinEntityZoneLayout } from '../level/berlin/entityZoneLayout';
+import { getPlatformVisualLayout } from '../level/berlin/platformVisualLayout';
 import type { BerlinEntity, MovingPlatformConfig } from '../level/berlin/types';
+import {
+  RESIZE_HANDLES,
+  resizeBoundsFromPointer,
+  resizeBoundsSize,
+  resizeHandlePoints,
+  type MinimumResizeSize,
+  type ResizeBounds,
+  type ResizeHandle,
+} from './levelEditorResize';
 
 /** Entity kinds the editor lets you move; `finish` and scenery are excluded. */
 const EDITABLE_TYPES = new Set(['obstacle', 'collectible', 'platform', 'movingPlatform']);
@@ -18,6 +29,7 @@ const MARKER_RADIUS = 11;
 const SCALE_STEP = 1.05;
 const SCALE_STEP_FAST = 1.25;
 const MIN_SIZE = 8;
+const RESIZE_HANDLE_SCREEN = 9;
 /** Where a pasted copy lands relative to the original. */
 const PASTE_OFFSET = 40;
 /** How long the on-screen confirmation stays up. */
@@ -59,6 +71,13 @@ interface Point {
 
 type DragTarget = 'body' | 'start' | 'end';
 
+interface ResizeOperation {
+  entity: EditableEntity;
+  handle: ResizeHandle;
+  before: EditableConfig;
+  originalBounds: ResizeBounds;
+}
+
 export interface LevelEditorHooks {
   /** Builds and registers a brand new entity, used when pasting. */
   spawn: (config: BerlinEntity) => BuiltEntity;
@@ -85,6 +104,7 @@ export class LevelEditorSystem {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly panel: Phaser.GameObjects.Text;
   private readonly toast: Phaser.GameObjects.Text;
+  private readonly sizeLabel: Phaser.GameObjects.Text;
   private toastTimer?: Phaser.Time.TimerEvent;
   private readonly cursors: Phaser.Types.Input.Keyboard.CursorKeys;
   private readonly shiftKey: Phaser.Input.Keyboard.Key;
@@ -93,9 +113,11 @@ export class LevelEditorSystem {
   private readonly growKeys: Phaser.Input.Keyboard.Key[];
   private readonly shrinkKeys: Phaser.Input.Keyboard.Key[];
   private readonly deleteKeys: Phaser.Input.Keyboard.Key[];
+  private readonly escapeKey: Phaser.Input.Keyboard.Key;
 
   private selected?: EditableEntity;
   private dragging?: { entity: EditableEntity; target: DragTarget; offsetX: number; offsetY: number };
+  private resizing?: ResizeOperation;
   private enabled = false;
   private clipboard?: EditableConfig;
   private pasteCount = 0;
@@ -165,6 +187,19 @@ export class LevelEditorSystem {
       .setDepth(Depth.UI + 11)
       .setVisible(false);
 
+    this.sizeLabel = this.scene.add
+      .text(0, 0, '', {
+        fontFamily: 'Space Mono',
+        fontSize: '13px',
+        color: '#120b1d',
+        backgroundColor: '#ffe36d',
+        padding: { x: 6, y: 3 },
+      })
+      .setOrigin(0, 1)
+      .setScrollFactor(1)
+      .setDepth(Depth.UI + 9)
+      .setVisible(false);
+
     const keyboard = this.scene.input.keyboard!;
     this.cursors = keyboard.createCursorKeys();
     this.shiftKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
@@ -183,6 +218,7 @@ export class LevelEditorSystem {
       keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DELETE),
       keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.BACKSPACE),
     ];
+    this.escapeKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
     this.scene.input.on(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.scene.input.on(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
@@ -273,18 +309,23 @@ export class LevelEditorSystem {
   private disable(): void {
     this.enabled = false;
     this.dragging = undefined;
+    this.resizing = undefined;
     this.panning = undefined;
     this.hooks.restoreCamera();
     this.graphics.setVisible(false).clear();
     this.panel.setVisible(false);
+    this.sizeLabel.setVisible(false);
     this.scene.physics.resume();
     this.scene.tweens.resumeAll();
   }
 
   update(): void {
     if (!this.enabled) return;
-    this.handleNudge();
-    this.handleResize();
+    if (this.resizing && Phaser.Input.Keyboard.JustDown(this.escapeKey)) this.cancelResize();
+    if (!this.resizing) {
+      this.handleNudge();
+      this.handleResize();
+    }
     if (Phaser.Input.Keyboard.JustDown(this.copyKey)) this.copySelected();
     if (Phaser.Input.Keyboard.JustDown(this.pasteKey)) this.paste();
     if (this.deleteKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))) this.deleteSelected();
@@ -356,57 +397,141 @@ export class LevelEditorSystem {
   }
 
   /**
-   * Scales the config, the artwork and the physics body by the same factor,
-   * keeping the object centred on its current position.
+   * Keyboard resize remains as a convenience, using the same explicit bounds
+   * path as pointer handles so visuals, config and physics cannot diverge.
    */
   private resize(entity: EditableEntity, factor: number): void {
-    const config = entity.config;
-    const width = Math.max(MIN_SIZE, Math.round(config.width * factor));
-    const height = Math.max(MIN_SIZE, Math.round(config.height * factor));
-    if (width === config.width && height === config.height) return;
-    const scaleX = width / config.width;
-    const scaleY = height / config.height;
-    config.width = width;
-    config.height = height;
+    const originalBounds = this.entityBounds(entity);
+    const { width, height } = resizeBoundsSize(originalBounds);
+    const operation: ResizeOperation = {
+      entity,
+      handle: 'se',
+      before: structuredClone(entity.config),
+      originalBounds,
+    };
+    this.applyResizeBounds(operation, {
+      left: originalBounds.left - (width * factor - width) / 2,
+      right: originalBounds.right + (width * factor - width) / 2,
+      top: originalBounds.top - (height * factor - height) / 2,
+      bottom: originalBounds.bottom + (height * factor - height) / 2,
+    });
+  }
 
-    // A platform's landing surface is its top edge, so it follows the height.
+  private entityBounds(entity: EditableEntity): ResizeBounds {
+    const { config } = entity;
+    if ((config.type === 'platform' || config.type === 'movingPlatform') && !config.editorSized) {
+      const layout = getPlatformVisualLayout(config);
+      if (layout) {
+        return {
+          left: config.x - layout.visibleDeckWidth / 2,
+          right: config.x + layout.visibleDeckWidth / 2,
+          top: config.topY,
+          bottom: config.topY + layout.visibleDeckThickness,
+        };
+      }
+    }
+    return {
+      left: config.x - config.width / 2,
+      right: config.x + config.width / 2,
+      top: config.y - config.height / 2,
+      bottom: config.y + config.height / 2,
+    };
+  }
+
+  private minimumSize(config: EditableConfig): MinimumResizeSize {
     if (config.type === 'platform' || config.type === 'movingPlatform') {
-      config.topY = Math.round(config.y - height / 2);
+      return { width: 48, height: MIN_SIZE };
     }
-    if (config.type === 'obstacle') {
-      config.hitbox.width = Math.round(config.hitbox.width * scaleX);
-      config.hitbox.height = Math.round(config.hitbox.height * scaleY);
-      config.hitbox.offsetX = Math.round(config.hitbox.offsetX * scaleX);
-      config.hitbox.offsetY = Math.round(config.hitbox.offsetY * scaleY);
-    }
-
-    this.applyArtworkSize(entity, width, height);
-    this.resizeZone(entity, scaleX, scaleY);
+    if (config.type === 'obstacle') return { width: 16, height: 12 };
+    return { width: 12, height: 12 };
   }
 
-  /**
-   * PlaceholderFactory puts the sized image or rectangle first in the
-   * container; the optional debug label after it keeps its own size.
-   */
-  private applyArtworkSize(entity: EditableEntity, width: number, height: number): void {
-    const body = entity.artwork.list[0];
-    if (body instanceof Phaser.GameObjects.Rectangle) body.setSize(width, height);
-    else if (body instanceof Phaser.GameObjects.Image) body.setDisplaySize(width, height);
+  private resizeHandleAt(world: Point, entity: EditableEntity): ResizeHandle | undefined {
+    const tolerance = (RESIZE_HANDLE_SCREEN + 4) / this.scene.cameras.main.zoom;
+    const points = resizeHandlePoints(this.entityBounds(entity));
+    return RESIZE_HANDLES.find(
+      (handle) =>
+        Phaser.Math.Distance.Between(world.x, world.y, points[handle].x, points[handle].y) <=
+        tolerance,
+    );
   }
 
-  private resizeZone(entity: EditableEntity, scaleX: number, scaleY: number): void {
+  private applyResizeBounds(operation: ResizeOperation, bounds: ResizeBounds): void {
+    const entity = operation.entity;
+    const before = operation.before;
+    const minimum = this.minimumSize(before);
+    const width = Math.max(minimum.width, Math.round(bounds.right - bounds.left));
+    const height = Math.max(minimum.height, Math.round(bounds.bottom - bounds.top));
+    const x = Math.round((bounds.left + bounds.right) / 2);
+    const y = Math.round((bounds.top + bounds.bottom) / 2);
+    const dx = x - entity.config.x;
+    const dy = y - entity.config.y;
+
+    entity.config.x = x;
+    entity.config.y = y;
+    entity.config.width = width;
+    entity.config.height = height;
+    if (entity.config.type === 'platform' || entity.config.type === 'movingPlatform') {
+      entity.config.topY = Math.round(y - height / 2);
+      entity.config.editorSized = true;
+    } else if (entity.config.type === 'obstacle' && before.type === 'obstacle') {
+      const scaleX = width / Math.max(1, before.width);
+      const scaleY = height / Math.max(1, before.height);
+      entity.config.hitbox.width = Math.max(1, Math.round(before.hitbox.width * scaleX));
+      entity.config.hitbox.height = Math.max(1, Math.round(before.hitbox.height * scaleY));
+      entity.config.hitbox.offsetX = Math.round(before.hitbox.offsetX * scaleX);
+      entity.config.hitbox.offsetY = Math.round(before.hitbox.offsetY * scaleY);
+    }
+
+    this.shift(entity, dx, dy);
+    this.refreshArtwork(entity);
+    this.syncZoneToConfig(entity);
+  }
+
+  private refreshArtwork(entity: EditableEntity): void {
+    const resizeVisual = entity.artwork.getData('resizeVisual') as
+      | ((config: BerlinEntity) => void)
+      | undefined;
+    if (resizeVisual) {
+      resizeVisual(entity.config);
+      return;
+    }
+    const primary =
+      (entity.artwork.getData('primaryVisual') as Phaser.GameObjects.GameObject | undefined) ??
+      entity.artwork.list[0];
+    if (primary instanceof Phaser.GameObjects.Rectangle)
+      primary.setSize(entity.config.width, entity.config.height);
+    else if (primary instanceof Phaser.GameObjects.Image)
+      primary.setDisplaySize(entity.config.width, entity.config.height);
+  }
+
+  private syncZoneToConfig(entity: EditableEntity): void {
+    const layout = getBerlinEntityZoneLayout(entity.config);
     const zone = entity.zone;
-    const width = Math.max(MIN_SIZE, Math.round(zone.width * scaleX));
-    const height = Math.max(MIN_SIZE, Math.round(zone.height * scaleY));
-    zone.setSize(width, height);
+    zone.setPosition(layout.x, layout.y).setSize(layout.width, layout.height);
     const body = zone.body;
     if (body instanceof Phaser.Physics.Arcade.StaticBody) {
-      body.setSize(width, height);
+      body.setSize(layout.width, layout.height);
       body.updateFromGameObject();
     } else if (body instanceof Phaser.Physics.Arcade.Body) {
-      body.setSize(width, height);
-      body.reset(zone.x, zone.y);
+      body.setSize(layout.width, layout.height);
+      body.reset(layout.x, layout.y);
     }
+  }
+
+  private cancelResize(): void {
+    const operation = this.resizing;
+    if (!operation) return;
+    const entity = operation.entity;
+    const current = entity.config;
+    const restored = structuredClone(operation.before);
+    this.shift(entity, restored.x - current.x, restored.y - current.y);
+    entity.config = restored;
+    this.refreshArtwork(entity);
+    this.syncZoneToConfig(entity);
+    this.resizing = undefined;
+    this.sizeLabel.setVisible(false);
+    this.status = 'resize cancelled';
   }
 
   // ------------------------------------------------------------ copy/paste
@@ -463,6 +588,7 @@ export class LevelEditorSystem {
     this.authored.delete(entity.config.id);
     if (this.selected === entity) this.selected = undefined;
     if (this.dragging?.entity === entity) this.dragging = undefined;
+    if (this.resizing?.entity === entity) this.resizing = undefined;
     this.hooks.despawn(entity.zone);
   }
 
@@ -517,8 +643,21 @@ export class LevelEditorSystem {
     if (!this.enabled) return;
     const world = { x: pointer.worldX, y: pointer.worldY };
 
-    // A selected moving platform's handles win over the object underneath.
     const selected = this.selected;
+    const resizeHandle = selected ? this.resizeHandleAt(world, selected) : undefined;
+    if (selected && resizeHandle) {
+      this.resizing = {
+        entity: selected,
+        handle: resizeHandle,
+        before: structuredClone(selected.config),
+        originalBounds: this.entityBounds(selected),
+      };
+      this.dragging = undefined;
+      this.panning = undefined;
+      return;
+    }
+
+    // A selected moving platform's travel handles win over the object underneath.
     if (selected && selected.config.type === 'movingPlatform') {
       const { start, end } = this.extremes(selected.config);
       if (this.withinMarker(world, start)) {
@@ -567,6 +706,19 @@ export class LevelEditorSystem {
       return;
     }
 
+    if (this.resizing) {
+      const world = { x: pointer.worldX, y: pointer.worldY };
+      const bounds = resizeBoundsFromPointer(
+        this.resizing.originalBounds,
+        this.resizing.handle,
+        world,
+        this.minimumSize(this.resizing.before),
+        this.shiftKey.isDown,
+      );
+      this.applyResizeBounds(this.resizing, bounds);
+      return;
+    }
+
     if (!this.dragging) return;
     const world = { x: pointer.worldX, y: pointer.worldY };
     const { entity, target, offsetX, offsetY } = this.dragging;
@@ -580,8 +732,14 @@ export class LevelEditorSystem {
   }
 
   private onPointerUp(): void {
+    if (this.resizing) {
+      const { width, height } = resizeBoundsSize(this.entityBounds(this.resizing.entity));
+      this.status = `resized ${this.resizing.entity.config.id} to ${Math.round(width)} × ${Math.round(height)}`;
+    }
     this.dragging = undefined;
+    this.resizing = undefined;
     this.panning = undefined;
+    this.sizeLabel.setVisible(false);
   }
 
   /** Wheel zooms the map view around its centre. */
@@ -669,11 +827,23 @@ export class LevelEditorSystem {
     const selected = this.selected;
     if (selected) {
       const { config } = selected;
-      const { halfWidth, halfHeight } = this.pickExtents(config);
+      const bounds = this.entityBounds(selected);
+      const { width, height } = resizeBoundsSize(bounds);
       graphics.fillStyle(COLOR_SELECTED, 0.3);
-      graphics.fillRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
+      graphics.fillRect(bounds.left, bounds.top, width, height);
       graphics.lineStyle(stroke * 2, COLOR_SELECTED, 1);
-      graphics.strokeRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
+      graphics.strokeRect(bounds.left, bounds.top, width, height);
+
+      const handleSize = RESIZE_HANDLE_SCREEN / zoom;
+      const halfHandle = handleSize / 2;
+      graphics.fillStyle(COLOR_SELECTED, 1);
+      graphics.lineStyle(stroke, 0x120b1d, 1);
+      const handlePoints = resizeHandlePoints(bounds);
+      for (const handle of RESIZE_HANDLES) {
+        const point = handlePoints[handle];
+        graphics.fillRect(point.x - halfHandle, point.y - halfHandle, handleSize, handleSize);
+        graphics.strokeRect(point.x - halfHandle, point.y - halfHandle, handleSize, handleSize);
+      }
 
       if (config.type === 'movingPlatform') {
         const { start, end } = this.extremes(config);
@@ -684,6 +854,18 @@ export class LevelEditorSystem {
         graphics.fillStyle(COLOR_END, 1);
         graphics.fillCircle(end.x, end.y, markerRadius);
       }
+
+      if (this.resizing) {
+        this.sizeLabel
+          .setText(`${Math.round(width)} × ${Math.round(height)}`)
+          .setPosition(bounds.right + 8 / zoom, bounds.top - 7 / zoom)
+          .setScale(1 / zoom)
+          .setVisible(true);
+      } else {
+        this.sizeLabel.setVisible(false);
+      }
+    } else {
+      this.sizeLabel.setVisible(false);
     }
 
     this.panel.setText(this.panelText());
@@ -694,7 +876,8 @@ export class LevelEditorSystem {
     const lines = [
       'LEVEL EDITOR  —  E exit   P save to berlinLevel.generated.json',
       'click select · drag move · arrows 1px · shift+arrows 10px',
-      '+/- resize (shift = coarse) · C copy · V paste · del remove',
+      'drag handles resize · Shift lock aspect · Esc cancel',
+      '+/- proportional resize (shift = coarse) · C copy · V paste · del remove',
       'drag empty space to scroll · wheel to zoom · arrows scroll when nothing selected',
     ];
     if (this.deleted.length) lines.push(`${this.deleted.length} deleted`);
@@ -710,11 +893,12 @@ export class LevelEditorSystem {
       return lines.join('\n');
     }
     const { config } = selected;
+    const size = resizeBoundsSize(this.entityBounds(selected));
     lines.push(
       '',
       `${config.id}  (${config.type})`,
       `x ${Math.round(config.x)}   y ${Math.round(config.y)}`,
-      `w ${config.width}   h ${config.height}`,
+      `w ${Math.round(size.width)}   h ${Math.round(size.height)}`,
     );
     if (config.type === 'movingPlatform') {
       const { start, end } = this.extremes(config);
@@ -800,40 +984,57 @@ export class LevelEditorSystem {
       return;
     }
 
+    const validSaved = saved.filter(
+      (config): config is EditableConfig => Boolean(config && typeof config.id === 'string'),
+    );
     const byId = new Map(this.entities.map((entity) => [entity.config.id, entity]));
-    const savedIds = new Set(saved.map((config) => config.id));
+    const savedIds = new Set(validSaved.map((config) => config.id));
 
     for (const entity of [...this.entities]) {
       if (!savedIds.has(entity.config.id)) this.removeEntity(entity);
     }
 
-    for (const config of saved) {
-      if (!config || typeof config.id !== 'string') continue;
+    for (const config of validSaved) {
       const existing = byId.get(config.id);
       if (existing) this.applyConfig(existing, config);
-      else this.addEntity(structuredClone(config));
+      else if (this.hasValidSize(config)) this.addEntity(structuredClone(config));
     }
   }
 
   /** Moves and resizes an entity to match a stored config. */
   private applyConfig(entity: EditableEntity, saved: EditableConfig): void {
     const current = entity.config;
-    const dx = saved.x - current.x;
-    const dy = saved.y - current.y;
-    const scaleX = current.width === 0 ? 1 : saved.width / current.width;
-    const scaleY = current.height === 0 ? 1 : saved.height / current.height;
-
-    entity.config = structuredClone(saved);
-    this.shift(entity, dx, dy);
-    if (scaleX !== 1 || scaleY !== 1) {
-      this.applyArtworkSize(entity, saved.width, saved.height);
-      this.resizeZone(entity, scaleX, scaleY);
+    const normalized = structuredClone(saved);
+    // Drafts made before resize support may omit explicit dimensions. Use the
+    // authored values for those fields, preserving old browser layouts.
+    if (!Number.isFinite(normalized.width) || normalized.width <= 0) normalized.width = current.width;
+    if (!Number.isFinite(normalized.height) || normalized.height <= 0)
+      normalized.height = current.height;
+    if (normalized.type === 'obstacle' && current.type === 'obstacle' && !normalized.hitbox) {
+      normalized.hitbox = structuredClone(current.hitbox);
     }
-    this.authored.set(saved.id, {
-      x: saved.x,
-      y: saved.y,
-      movementDistance: saved.type === 'movingPlatform' ? saved.movementDistance : undefined,
+    const dx = normalized.x - current.x;
+    const dy = normalized.y - current.y;
+
+    entity.config = normalized;
+    this.shift(entity, dx, dy);
+    this.refreshArtwork(entity);
+    this.syncZoneToConfig(entity);
+    this.authored.set(normalized.id, {
+      x: normalized.x,
+      y: normalized.y,
+      movementDistance:
+        normalized.type === 'movingPlatform' ? normalized.movementDistance : undefined,
     });
+  }
+
+  private hasValidSize(config: EditableConfig): boolean {
+    return (
+      Number.isFinite(config.width) &&
+      config.width > 0 &&
+      Number.isFinite(config.height) &&
+      config.height > 0
+    );
   }
 
   private flash(message: string): void {

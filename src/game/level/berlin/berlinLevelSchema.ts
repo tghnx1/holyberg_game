@@ -41,6 +41,13 @@ function optionalNumber(record: Record_, key: string, where: string): void {
   requireNumber(record, key, where);
 }
 
+function optionalBoolean(record: Record_, key: string, where: string): void {
+  const value = record[key];
+  if (value !== undefined && typeof value !== 'boolean') {
+    fail(where, `field "${key}" must be a boolean, got ${JSON.stringify(value)}`);
+  }
+}
+
 function requireString(record: Record_, key: string, where: string): string {
   const value = record[key];
   if (typeof value !== 'string' || value.length === 0) {
@@ -114,6 +121,7 @@ export function validateBerlinEntities(data: unknown): BerlinEntity[] {
     requireNumber(entity, 'y', where);
     requirePositive(entity, 'width', where);
     requirePositive(entity, 'height', where);
+    optionalBoolean(entity, 'editorSized', where);
 
     if (type === 'obstacle') {
       requireOneOf(entity, 'action', OBSTACLE_ACTIONS, where);

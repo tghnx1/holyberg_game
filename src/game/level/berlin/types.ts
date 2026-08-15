@@ -34,6 +34,8 @@ export interface LevelEntityBase {
   width: number;
   height: number;
   artSlot: string;
+  /** Written by the dev editor once legacy platform dimensions are explicitly resized. */
+  editorSized?: boolean;
 }
 
 export interface HitboxSpec {

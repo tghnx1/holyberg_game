@@ -29,22 +29,20 @@ export class PlaceholderFactory {
     const body = platformLayout
       ? this.scene.add
           .image(platformLayout.imageX, platformLayout.imageY, platformLayout.textureKey)
-          .setScale(platformLayout.scale)
+          .setScale(platformLayout.scaleX, platformLayout.scaleY)
       : texture
         ? this.scene.add.image(0, 0, texture).setDisplaySize(entity.width, entity.height)
       : this.scene.add
           .rectangle(0, 0, entity.width, entity.height, color)
           .setStrokeStyle(4, 0x17101f);
-    const supports =
+    const supportLayer = this.scene.add.container(
+      0,
+      0,
       platformLayout && (entity.type === 'platform' || entity.type === 'movingPlatform')
-        ? getPlatformSupportLayout(entity, platformLayout).map((piece) =>
-            this.scene.add
-              .rectangle(piece.x, piece.y, piece.width, piece.height, piece.color, piece.alpha)
-              .setRotation(piece.rotation ?? 0)
-              .setStrokeStyle(1, 0x0d0912, 0.72),
-          )
-        : [];
-    const children: Phaser.GameObjects.GameObject[] = [...supports, body];
+        ? this.createSupports(entity, platformLayout)
+        : [],
+    );
+    const children: Phaser.GameObjects.GameObject[] = [supportLayer, body];
     if (
       import.meta.env.DEV &&
       entity.type !== 'platform' &&
@@ -68,7 +66,35 @@ export class PlaceholderFactory {
       .container(entity.x, entity.y, children)
       .setDepth(entity.type === 'collectible' ? Depth.COLLECTIBLES : Depth.GAMEPLAY)
       .setScrollFactor(1);
+    container.setData('primaryVisual', body);
+    container.setData('resizeVisual', (updated: BerlinEntity) => {
+      if (updated.type === 'platform' || updated.type === 'movingPlatform') {
+        const layout = getPlatformVisualLayout(updated);
+        if (!layout || !(body instanceof Phaser.GameObjects.Image)) return;
+        body
+          .setPosition(layout.imageX, layout.imageY)
+          .setScale(layout.scaleX, layout.scaleY);
+        supportLayer.removeAll(true);
+        supportLayer.add(this.createSupports(updated, layout));
+        return;
+      }
+      if (body instanceof Phaser.GameObjects.Rectangle) body.setSize(updated.width, updated.height);
+      else if (body instanceof Phaser.GameObjects.Image)
+        body.setDisplaySize(updated.width, updated.height);
+    });
     this.layer.add(container);
     return container;
+  }
+
+  private createSupports(
+    entity: Extract<BerlinEntity, { type: 'platform' | 'movingPlatform' }>,
+    layout: NonNullable<ReturnType<typeof getPlatformVisualLayout>>,
+  ): Phaser.GameObjects.Rectangle[] {
+    return getPlatformSupportLayout(entity, layout).map((piece) =>
+      this.scene.add
+        .rectangle(piece.x, piece.y, piece.width, piece.height, piece.color, piece.alpha)
+        .setRotation(piece.rotation ?? 0)
+        .setStrokeStyle(1, 0x0d0912, 0.72),
+    );
   }
 }
