@@ -1,7 +1,10 @@
-import { CROWD_ENERGY_MAX, CROWD_ENERGY_MIN, INITIAL_ENERGY } from './constants';
+import {
+  CROWD_ENERGY_MAX,
+  CROWD_ENERGY_MIN,
+  INITIAL_ENERGY,
+  RHYTHM_SCORE_CAP,
+} from './constants';
 import type { Judgement, ScoreState } from './types';
-
-export const initialScoreState = (): ScoreState => ({ score: 0, combo: 0, maxCombo: 0, perfect: 0, excellent: 0, good: 0, miss: 0, badTap: 0, energy: INITIAL_ENERGY });
 
 export function getMultiplier(combo: number): number {
   if (combo >= 50) return 4;
@@ -11,46 +14,106 @@ export function getMultiplier(combo: number): number {
 }
 
 export function getJudgementBaseScore(judgement: Judgement): number {
-  if (judgement === 'PERFECT') return 150;
-  if (judgement === 'EXCELLENT') return 100;
-  if (judgement === 'GOOD') return 50;
+  if (judgement === 'PERFECT') return 100;
+  if (judgement === 'GOOD') return 70;
+  if (judgement === 'OK') return 40;
   return 0;
 }
 
-export function getAwardedPoints(state: ScoreState, judgement: Judgement): number {
-  const scoringCombo = judgement === 'MISS' ? 0 : state.combo + 1;
-  return getJudgementBaseScore(judgement) * getMultiplier(scoringCombo);
+export function getMaximumRawScore(noteCount: number): number {
+  let maximum = 0;
+  for (let combo = 1; combo <= noteCount; combo += 1) {
+    maximum += getJudgementBaseScore('PERFECT') * getMultiplier(combo);
+  }
+  return maximum;
 }
 
-export function applyJudgement(state: ScoreState, judgement: Judgement, protectEnergy = false, scoringEnabled = true): ScoreState {
+export function normalizeRhythmScore(rawScore: number, maximumRawScore: number): number {
+  if (maximumRawScore <= 0) return 0;
+  return Math.round(
+    RHYTHM_SCORE_CAP * Math.min(1, Math.max(0, rawScore / maximumRawScore)),
+  );
+}
+
+export const initialScoreState = (noteCount = 1): ScoreState => ({
+  score: 0,
+  rawScore: 0,
+  maximumRawScore: getMaximumRawScore(noteCount),
+  scorePenalty: 0,
+  combo: 0,
+  maxCombo: 0,
+  perfect: 0,
+  good: 0,
+  ok: 0,
+  miss: 0,
+  badTap: 0,
+  energy: INITIAL_ENERGY,
+});
+
+export function getAwardedPoints(state: ScoreState, judgement: Judgement): number {
+  if (judgement === 'MISS') return 0;
+  const rawAward = getJudgementBaseScore(judgement) * getMultiplier(state.combo + 1);
+  const projectedScore = Math.max(
+    0,
+    normalizeRhythmScore(state.rawScore + rawAward, state.maximumRawScore) - state.scorePenalty,
+  );
+  return Math.max(0, projectedScore - state.score);
+}
+
+export function applyJudgement(
+  state: ScoreState,
+  judgement: Judgement,
+  protectEnergy = false,
+  scoringEnabled = true,
+): ScoreState {
   if (judgement === 'MISS') {
-    return { ...state, combo: 0, miss: state.miss + 1, energy: protectEnergy ? state.energy : Math.max(CROWD_ENERGY_MIN, state.energy - 3) };
+    return {
+      ...state,
+      combo: 0,
+      miss: state.miss + 1,
+      energy: protectEnergy
+        ? state.energy
+        : Math.max(CROWD_ENERGY_MIN, state.energy - 5),
+    };
   }
+
   const combo = scoringEnabled ? state.combo + 1 : state.combo;
-  const energyGain = judgement === 'GOOD' ? 1 : 2;
+  const rawAward = scoringEnabled
+    ? getJudgementBaseScore(judgement) * getMultiplier(combo)
+    : 0;
+  const rawScore = state.rawScore + rawAward;
+  const energyGain = judgement === 'PERFECT' ? 2 : judgement === 'GOOD' ? 1 : 0;
   return {
     ...state,
-    score: state.score + (scoringEnabled ? getAwardedPoints(state, judgement) : 0),
+    score: scoringEnabled
+      ? Math.max(
+          0,
+          normalizeRhythmScore(rawScore, state.maximumRawScore) - state.scorePenalty,
+        )
+      : state.score,
+    rawScore,
     combo,
     maxCombo: scoringEnabled ? Math.max(state.maxCombo, combo) : state.maxCombo,
     perfect: state.perfect + (judgement === 'PERFECT' ? 1 : 0),
-    excellent: state.excellent + (judgement === 'EXCELLENT' ? 1 : 0),
     good: state.good + (judgement === 'GOOD' ? 1 : 0),
+    ok: state.ok + (judgement === 'OK' ? 1 : 0),
     energy: Math.min(CROWD_ENERGY_MAX, state.energy + energyGain),
   };
 }
 
 export function calculateAccuracy(state: ScoreState): number {
-  const total = state.perfect + state.excellent + state.good + state.miss;
-  return total === 0 ? 0 : ((state.perfect + state.excellent * 0.8 + state.good * 0.5) / total) * 100;
+  const total = state.perfect + state.good + state.ok + state.miss;
+  const earned = state.perfect * 100 + state.good * 70 + state.ok * 40;
+  return total === 0 ? 0 : earned / total;
 }
 
-export const combineScores = (berlinScore: number, rhythmScore: number): number => berlinScore + rhythmScore;
+export const combineScores = (berlinScore: number, rhythmScore: number): number =>
+  berlinScore + rhythmScore;
 
 export function getPerformanceGrade(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
-  if (accuracy >= 90) return 'S';
-  if (accuracy >= 75) return 'A';
-  if (accuracy >= 55) return 'B';
-  if (accuracy >= 35) return 'C';
+  if (accuracy >= 95) return 'S';
+  if (accuracy >= 90) return 'A';
+  if (accuracy >= 80) return 'B';
+  if (accuracy >= 70) return 'C';
   return 'D';
 }

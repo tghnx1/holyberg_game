@@ -1,15 +1,18 @@
-export const PERFECT_WINDOW_MS = 70;
-export const EXCELLENT_WINDOW_MS = 130;
-export const GOOD_WINDOW_MS = 230;
-export const MISS_WINDOW_MS = 300;
-export const GLOBAL_INPUT_OFFSET_MS = 0;
-export const SPAWN_AHEAD_MS = 2200;
-export const NOTE_TRAVEL_MS = 2500;
-export const CROWD_ENERGY_MIN = 20;
+import type { Lane } from './types';
+
+export const PERFECT_WINDOW_MS = 60;
+export const GOOD_WINDOW_MS = 120;
+export const OK_WINDOW_MS = 180;
+export const MAX_HIT_WINDOW_MS = OK_WINDOW_MS;
+export const DEFAULT_INPUT_OFFSET_MS = 0;
+export const INPUT_OFFSET_STORAGE_KEY = 'holyberg.rhythm.inputOffsetMs';
+export const SPAWN_AHEAD_SECONDS = 3;
+export const NOTE_TRAVEL_SECONDS = 3;
+export const CROWD_ENERGY_MIN = 0;
 export const CROWD_ENERGY_MAX = 100;
-export const INITIAL_ENERGY = 80;
-export const BEGINNER_GRACE_MS = 10000;
-export const END_GRACE_MS = 800;
+export const INITIAL_ENERGY = 70;
+export const CROWD_FAILURE_SECONDS = 3;
+export const RHYTHM_SCORE_CAP = 7500;
 export const PAD_TOP_Y = 470;
 export const PAD_BOTTOM_Y = 540;
 export const LANE_INPUT_COOLDOWN_MS = 80;
@@ -19,6 +22,13 @@ export const MASH_THRESHOLD = 6;
 export const MASH_LOCK_MS = 1200;
 export const LANE_LABELS = ['D', 'F', 'J', 'K'] as const;
 export const LANE_COLORS = [0xff8a3d, 0xff477e, 0x9d6cff, 0xffdd57] as const;
+/** Ableton labels these C1/D1/E1/F1; @tonejs/midi calls MIDI 36 C2. */
+export const LANE_MIDI_NOTES: Readonly<Record<number, Lane>> = {
+  36: 0,
+  38: 1,
+  40: 2,
+  41: 3,
+};
 export const HORIZON_Y = 150;
 export const HIT_LINE_Y = 460;
 export const HORIZON_HALF_WIDTH = 105;

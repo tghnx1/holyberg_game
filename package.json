@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "generate:backgrounds": "node scripts/generate-berlin-background-assets.mjs",
+    "generate:rhythm-fixture": "node scripts/generate-rhythm-development-track.mjs",
     "verify:backgrounds": "node scripts/verify-berlin-background-assets.mjs",
-    "predev": "npm run generate:backgrounds",
+    "predev": "npm run generate:backgrounds && npm run generate:rhythm-fixture",
     "dev": "vite --host 0.0.0.0",
-    "prebuild": "npm run generate:backgrounds",
+    "prebuild": "npm run generate:backgrounds && npm run generate:rhythm-fixture",
     "build": "tsc -b && vite build",
     "postbuild": "npm run verify:backgrounds",
     "worker:migrate": "wrangler d1 migrations apply holyberg-leaderboard --remote",
@@ -19,6 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tonejs/midi": "^2.0.28",
     "phaser": "^3.90.0"
   },
   "devDependencies": {

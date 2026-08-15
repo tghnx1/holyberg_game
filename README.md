@@ -20,18 +20,25 @@ Rhythm set:
 - touch: the four large lane buttons;
 - results: Space/tap replays the set, R restarts Berlin.
 
-## Rhythm charts and timing
+## MIDI rhythm engine
 
-The demo chart is `public/charts/demo.json`. Notes use absolute milliseconds and lanes 0–3. Replace it with an original event track by loading that audio in Phaser, assigning its cache key to `audioKey`, and keeping chart `timeMs` values aligned to the track playback position.
+Level 2 is a reusable four-lane rhythm game driven by one externally curated Ableton MIDI chart per track. A track directory contains project-owned MP3/WAV audio, `chart.mid`, and metadata; adding music does not require embedding note data in TypeScript or generating difficulty variants.
 
-The current demo generates an original 124 BPM electronic kick/hat beat with Web Audio after the player presses Space or taps. `RhythmClock` reads that audio context's monotonic playback position; note position is always derived from `note.timeMs - currentAudioTimeMs`, never accumulated frame delta. `GLOBAL_INPUT_OFFSET_MS` in `src/game/rhythm/constants.ts` provides manual latency calibration and defaults to zero.
+Features include:
 
-To replace the procedural beat, implement the same `currentTimeMs` clock-source interface around a Phaser-loaded MP3, OGG, or WAV and start it at the countdown's `DROP`. Gameplay and rendering do not need to change.
+- tempo-map-aware MIDI parsing with explicit D/F/J/K lane-note numbers;
+- Web Audio synchronized playback, judgement, and frame-independent note positioning;
+- keyboard and four-zone landscape touch input;
+- PERFECT/GOOD/OK/MISS scoring, combo multipliers, accuracy, grade, and crowd energy;
+- look-ahead note spawning, one-time hit/miss state transitions, and audio-ended completion gating;
+- local-storage-ready latency compensation and a development timing overlay.
 
-See [rhythm chart authoring](docs/rhythm-chart-authoring.md) and [architecture](docs/architecture.md).
+The included `development-track` is an original generated fixture, not production music. Replace the `main` entry in the track registry when the final Ableton audio and chart arrive.
+
+See [MIDI rhythm engine](docs/rhythm-engine.md), [rhythm chart authoring](docs/rhythm-chart-authoring.md), and [architecture](docs/architecture.md).
 
 Berlin level content is driven by `src/game/level/berlin/berlinLevelConfig.ts`. See [Berlin level design](docs/berlin-level-design.md) and [art integration](docs/art-integration.md) for layout, scoring, debug shortcuts, and stable replacement slots.
 
 ## Current limitations
 
-All art is procedural placeholder art. The demo has no copyrighted music, calibration UI, chart editor, leaderboard, or online submission.
+MIDI durations are retained, but held notes currently play as taps. The calibration value is supported through local storage; there is no calibration wizard or in-browser chart editor yet.

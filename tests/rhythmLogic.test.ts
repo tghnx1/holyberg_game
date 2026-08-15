@@ -1,45 +1,79 @@
 import { describe, expect, it } from 'vitest';
-import { filterChartNotes, parseChart } from '../src/game/rhythm/ChartLoader';
-import { EXCELLENT_WINDOW_MS, GOOD_WINDOW_MS, MISS_WINDOW_MS, PERFECT_WINDOW_MS } from '../src/game/rhythm/constants';
+import {
+  GOOD_WINDOW_MS,
+  OK_WINDOW_MS,
+  PERFECT_WINDOW_MS,
+  RHYTHM_SCORE_CAP,
+} from '../src/game/rhythm/constants';
 import { judgeTiming } from '../src/game/rhythm/JudgementSystem';
-import { applyJudgement, calculateAccuracy, combineScores, getAwardedPoints, getMultiplier, initialScoreState } from '../src/game/rhythm/ScoreSystem';
+import {
+  applyJudgement,
+  calculateAccuracy,
+  combineScores,
+  getAwardedPoints,
+  getMaximumRawScore,
+  getMultiplier,
+  initialScoreState,
+} from '../src/game/rhythm/ScoreSystem';
 
-describe('rhythm logic', () => {
-  it('judges exact boundaries and ignores empty-lane timing', () => {
-    expect(judgeTiming(PERFECT_WINDOW_MS)).toBe('PERFECT');
-    expect(judgeTiming(EXCELLENT_WINDOW_MS)).toBe('EXCELLENT');
+describe('rhythm scoring logic', () => {
+  it('judges early and late hits using absolute timing differences', () => {
+    expect(judgeTiming(30)).toBe('PERFECT');
+    expect(judgeTiming(-PERFECT_WINDOW_MS)).toBe('PERFECT');
+    expect(judgeTiming(90)).toBe('GOOD');
     expect(judgeTiming(-GOOD_WINDOW_MS)).toBe('GOOD');
-    expect(judgeTiming(GOOD_WINDOW_MS + 1)).toBeNull();
-    expect(judgeTiming(MISS_WINDOW_MS)).toBeNull();
+    expect(judgeTiming(150)).toBe('OK');
+    expect(judgeTiming(OK_WINDOW_MS)).toBe('OK');
+    expect(judgeTiming(220)).toBeNull();
   });
-  it('uses combo multiplier thresholds', () => {
+
+  it('uses the configured combo multiplier thresholds', () => {
     expect([0, 9, 10, 24, 25, 49, 50].map(getMultiplier)).toEqual([1, 1, 2, 2, 3, 3, 4]);
   });
-  it('awards every positive judgement with multiplier', () => {
-    const state = initialScoreState();
-    expect(getAwardedPoints(state, 'PERFECT')).toBe(150);
-    expect(getAwardedPoints(state, 'EXCELLENT')).toBe(100);
-    expect(getAwardedPoints(state, 'GOOD')).toBe(50);
-    expect(getAwardedPoints({ ...state, combo: 9 }, 'PERFECT')).toBe(300);
+
+  it.each([1, 20, 623])(
+    'normalizes an all-PERFECT %i-note chart to the fixed score cap',
+    (noteCount) => {
+      let state = initialScoreState(noteCount);
+      for (let note = 0; note < noteCount; note += 1) {
+        state = applyJudgement(state, 'PERFECT');
+      }
+      expect(state.rawScore).toBe(getMaximumRawScore(noteCount));
+      expect(state.score).toBe(RHYTHM_SCORE_CAP);
+    },
+  );
+
+  it('normalizes positive judgements and never exceeds the cap', () => {
+    const state = initialScoreState(1);
+    expect(getAwardedPoints(state, 'PERFECT')).toBe(RHYTHM_SCORE_CAP);
+    expect(getAwardedPoints(state, 'GOOD')).toBe(5250);
+    expect(getAwardedPoints(state, 'OK')).toBe(3000);
+    expect(applyJudgement(state, 'PERFECT').score).toBeLessThanOrEqual(RHYTHM_SCORE_CAP);
   });
-  it('resets combo after miss and never lowers energy below 20', () => {
-    const state = applyJudgement({ ...initialScoreState(), combo: 20, energy: 21 }, 'MISS');
+
+  it('gives MISS zero points without subtracting score and resets multiplier', () => {
+    let state = initialScoreState(20);
+    for (let note = 0; note < 10; note += 1) state = applyJudgement(state, 'PERFECT');
+    const earnedScore = state.score;
+    expect(getMultiplier(state.combo)).toBe(2);
+    expect(getAwardedPoints(state, 'MISS')).toBe(0);
+
+    state = applyJudgement(state, 'MISS');
+    expect(state.score).toBe(earnedScore);
     expect(state.combo).toBe(0);
-    expect(state.energy).toBe(20);
-    expect(applyJudgement({ ...state, energy: 99 }, 'PERFECT').energy).toBe(100);
+    expect(getMultiplier(state.combo)).toBe(1);
   });
-  it('protects crowd energy during the beginner grace period', () => {
-    const missed = applyJudgement({ ...initialScoreState(), combo: 4, energy: 80 }, 'MISS', true);
-    expect(missed.combo).toBe(0);
-    expect(missed.miss).toBe(1);
-    expect(missed.energy).toBe(80);
+
+  it('applies the configured crowd-energy tuning and clamps to 0-100', () => {
+    expect(initialScoreState().energy).toBe(70);
+    expect(applyJudgement({ ...initialScoreState(), energy: 98 }, 'PERFECT').energy).toBe(100);
+    expect(applyJudgement({ ...initialScoreState(), energy: 98 }, 'GOOD').energy).toBe(99);
+    expect(applyJudgement({ ...initialScoreState(), energy: 98 }, 'OK').energy).toBe(98);
+    expect(applyJudgement({ ...initialScoreState(), energy: 4 }, 'MISS').energy).toBe(0);
   });
-  it('calculates four-grade weighted accuracy and total score', () => {
-    expect(calculateAccuracy({ ...initialScoreState(), perfect: 1, excellent: 1, good: 1, miss: 1 })).toBeCloseTo(57.5);
-    expect(combineScores(500, 1200)).toBe(1700);
-  });
-  it('filters malformed and out-of-duration notes', () => {
-    expect(filterChartNotes([{ timeMs: 200, lane: 2 }, { timeMs: -1, lane: 0 }, { timeMs: 10, lane: 8 }, null])).toEqual([{ timeMs: 200, lane: 2 }]);
-    expect(parseChart({ durationMs: 1000, notes: [{ timeMs: 1001, lane: 0 }, { timeMs: 999, lane: 1 }] }).notes).toEqual([{ timeMs: 999, lane: 1 }]);
+
+  it('calculates deterministic weighted accuracy and total score', () => {
+    expect(calculateAccuracy({ ...initialScoreState(), perfect: 1, good: 1, ok: 1, miss: 1 })).toBeCloseTo(52.5);
+    expect(combineScores(7430, RHYTHM_SCORE_CAP)).toBe(14_930);
   });
 });

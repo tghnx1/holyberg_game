@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXCELLENT_WINDOW_MS, GOOD_WINDOW_MS, MISS_WINDOW_MS, PAD_TOP_Y, PERFECT_WINDOW_MS } from '../src/game/rhythm/constants';
+import { GOOD_WINDOW_MS, OK_WINDOW_MS, PAD_TOP_Y, PERFECT_WINDOW_MS } from '../src/game/rhythm/constants';
 import { judgeTiming } from '../src/game/rhythm/JudgementSystem';
 import { getTouchArea, mapLogicalPointerToLane, physicalToLogicalX, TOUCH_ZONE_BOTTOM_Y, TOUCH_ZONE_TOP_Y } from '../src/game/rhythm/TouchLaneMapper';
 import { TutorialProgress } from '../src/game/rhythm/TutorialProgress';
@@ -54,14 +54,13 @@ describe('rhythm touch onboarding', () => {
     expect(tutorial.complete).toBe(true);
   });
 
-  it('uses promotional timing windows', () => {
-    expect(PERFECT_WINDOW_MS).toBe(70);
-    expect(EXCELLENT_WINDOW_MS).toBe(130);
-    expect(GOOD_WINDOW_MS).toBe(230);
-    expect(MISS_WINDOW_MS).toBe(300);
-    expect(judgeTiming(70)).toBe('PERFECT');
-    expect(judgeTiming(130)).toBe('EXCELLENT');
-    expect(judgeTiming(230)).toBe('GOOD');
-    expect(judgeTiming(300)).toBeNull();
+  it('uses the curated rhythm timing windows', () => {
+    expect(PERFECT_WINDOW_MS).toBe(60);
+    expect(GOOD_WINDOW_MS).toBe(120);
+    expect(OK_WINDOW_MS).toBe(180);
+    expect(judgeTiming(60)).toBe('PERFECT');
+    expect(judgeTiming(120)).toBe('GOOD');
+    expect(judgeTiming(180)).toBe('OK');
+    expect(judgeTiming(181)).toBeNull();
   });
 });

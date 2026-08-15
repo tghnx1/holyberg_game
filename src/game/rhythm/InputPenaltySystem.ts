@@ -1,8 +1,20 @@
 import { BAD_TAP_SCORE_PENALTY, CROWD_ENERGY_MIN, LANE_INPUT_COOLDOWN_MS, MASH_LOCK_MS, MASH_THRESHOLD, MASH_WINDOW_MS } from './constants';
+import { normalizeRhythmScore } from './ScoreSystem';
 import type { Lane, ScoreState } from './types';
 
 export function applyBadTap(state: ScoreState): ScoreState {
-  return { ...state, score: Math.max(0, state.score - BAD_TAP_SCORE_PENALTY), combo: 0, energy: Math.max(CROWD_ENERGY_MIN, state.energy - 1), badTap: state.badTap + 1 };
+  const scorePenalty = state.scorePenalty + BAD_TAP_SCORE_PENALTY;
+  return {
+    ...state,
+    score: Math.max(
+      0,
+      normalizeRhythmScore(state.rawScore, state.maximumRawScore) - scorePenalty,
+    ),
+    scorePenalty,
+    combo: 0,
+    energy: Math.max(CROWD_ENERGY_MIN, state.energy - 1),
+    badTap: state.badTap + 1,
+  };
 }
 
 export class LaneInputGuard {

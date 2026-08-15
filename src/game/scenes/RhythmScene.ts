@@ -3,15 +3,17 @@ import { DESIGN_WIDTH } from '../constants';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
-import { parseChart } from '../rhythm/ChartLoader';
-import { GLOBAL_INPUT_OFFSET_MS, HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RhythmDepth } from '../rhythm/constants';
-import { BEGINNER_GRACE_MS, HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y, PAD_BOTTOM_Y } from '../rhythm/constants';
-import { CompletionGate, getChartEndTimeMs, shouldCompleteChart } from '../rhythm/CompletionSystem';
-import { judgeTiming } from '../rhythm/JudgementSystem';
+import { AudioTrackPlayer } from '../rhythm/AudioTrackPlayer';
+import { readInputOffsetMs } from '../rhythm/Calibration';
+import { HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RhythmDepth, SPAWN_AHEAD_SECONDS } from '../rhythm/constants';
+import { HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y, PAD_BOTTOM_Y } from '../rhythm/constants';
+import { CompletionGate, shouldCompleteTrack } from '../rhythm/CompletionSystem';
+import { CrowdFailureSystem } from '../rhythm/CrowdFailureSystem';
 import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../rhythm/InputPenaltySystem';
+import { formatChartStatistics, getBeatIndexAtTime, parseMidiChart } from '../rhythm/MidiChartLoader';
 import { NoteManager } from '../rhythm/NoteManager';
-import { ProceduralBeat } from '../rhythm/ProceduralBeat';
 import { RhythmClock } from '../rhythm/RhythmClock';
+import { RhythmEngine } from '../rhythm/RhythmEngine';
 import { RhythmBoothAnimation } from '../rhythm/RhythmBoothAnimation';
 import { RhythmHighway } from '../rhythm/RhythmHighway';
 import { RhythmMixer } from '../rhythm/RhythmMixer';
@@ -27,14 +29,17 @@ import { getTouchArea, mapLogicalPointerToLane } from '../rhythm/TouchLaneMapper
 import { TutorialProgress } from '../rhythm/TutorialProgress';
 import { applyJudgement, calculateAccuracy, getAwardedPoints, getMultiplier, initialScoreState } from '../rhythm/ScoreSystem';
 import { createRhythmStartHandler } from '../rhythm/StartGate';
-import type { Lane, RhythmChart, ScoreState } from '../rhythm/types';
+import { parseTrackMetadata } from '../rhythm/TrackLoader';
+import { MAIN_RHYTHM_TRACK } from '../rhythm/TrackRegistry';
+import type { Judgement, Lane, RhythmChart, ScoreState } from '../rhythm/types';
 
 export class RhythmScene extends Phaser.Scene {
   private berlinScore = 0;
   private chart!: RhythmChart;
   private scoreState!: ScoreState;
-  private beat!: ProceduralBeat;
+  private audio!: AudioTrackPlayer;
   private clock!: RhythmClock;
+  private engine!: RhythmEngine;
   private notes!: NoteManager;
   private highway!: RhythmHighway;
   private playing = false;
@@ -72,9 +77,13 @@ export class RhythmScene extends Phaser.Scene {
   private touchDebug!: Phaser.GameObjects.Graphics;
   private touchDebugText!: Phaser.GameObjects.Text;
   private touchDebugVisible = false;
-  private audioUnlocked = false;
+  private rhythmDebugText!: Phaser.GameObjects.Text;
+  private rhythmDebugVisible = false;
+  private inputOffsetMs = 0;
+  private lastTimingDifferenceMs: number | null = null;
+  private audioEnded = false;
   private completionGate!: CompletionGate;
-  private chartEndTimeMs = 0;
+  private crowdFailure!: CrowdFailureSystem;
   private readonly inputGuard = new LaneInputGuard();
   private readonly antiMash = new AntiMashSystem();
   private debugPointer = { x: 0, y: 0, lane: null as Lane | null };
@@ -104,27 +113,34 @@ export class RhythmScene extends Phaser.Scene {
     this.touchLabels = [];
     this.touchDebugVisible = false;
     this.debugPointer = { x: 0, y: 0, lane: null };
-    this.audioUnlocked = false;
+    this.rhythmDebugVisible = false;
+    this.inputOffsetMs = readInputOffsetMs(
+      typeof window === 'undefined' ? undefined : window.localStorage,
+    );
+    this.lastTimingDifferenceMs = null;
+    this.audioEnded = false;
   }
   preload(): void {
-    this.load.json('holyberg-demo-chart', 'charts/demo.json');
-    // Surfaced rather than swallowed: a missing chart shows up as an empty
-    // scene, which is indistinguishable from a freeze.
+    this.load.json('rhythm-track-metadata', MAIN_RHYTHM_TRACK.metadataUrl);
+    this.load.binary('rhythm-track-midi', MAIN_RHYTHM_TRACK.midiUrl);
+    this.load.binary('rhythm-track-audio', MAIN_RHYTHM_TRACK.audioUrl);
     this.load.once(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       console.error(`[RhythmScene] failed to load ${file.key} from ${file.url}`);
     });
   }
 
   create(): void {
-    // Attached first so an exit route exists even if the build below fails.
     attachFullscreenExitControl(this);
-    try {
-      this.build();
-    } catch (error) {
-      // A throw in here used to leave the previous scene's last frame on the
-      // canvas with no way to tell what happened, which reads as a freeze.
-      this.showFatalError(error);
-    }
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+    this.cameras.main.setBackgroundColor('#07040d');
+    const loading = this.add
+      .text(this.centerX, this.cameras.main.height / 2, 'LOADING TRACK', {
+        fontFamily: 'Archivo Black',
+        fontSize: '38px',
+        color: '#ffdd57',
+      })
+      .setOrigin(0.5);
+    void this.prepareTrack(loading);
   }
 
   private showFatalError(error: unknown): void {
@@ -133,7 +149,7 @@ export class RhythmScene extends Phaser.Scene {
     const camera = this.cameras.main;
     camera.setBackgroundColor('#12060c');
     this.add
-      .text(camera.width / 2, camera.height / 2, `RHYTHM STAGE FAILED TO LOAD\n\n${message}`, {
+      .text(camera.width / 2, camera.height / 2, `TRACK FAILED TO LOAD\n\n${message}`, {
         fontFamily: 'Space Mono',
         fontSize: '18px',
         color: '#ff8a8a',
@@ -144,13 +160,64 @@ export class RhythmScene extends Phaser.Scene {
       .setScrollFactor(0);
   }
 
+  private async prepareTrack(loading: Phaser.GameObjects.Text): Promise<void> {
+    try {
+      const metadata = parseTrackMetadata(
+        this.cache.json.get('rhythm-track-metadata'),
+        MAIN_RHYTHM_TRACK,
+      );
+      const midiBuffer = this.getBinaryAsset('rhythm-track-midi');
+      const audioBuffer = this.getBinaryAsset('rhythm-track-audio');
+      this.chart = parseMidiChart(
+        midiBuffer,
+        metadata,
+        import.meta.env.DEV ? (message) => console.warn(message) : () => undefined,
+      );
+      if (
+        import.meta.env.DEV &&
+        this.chart.notes[0] &&
+        this.chart.notes[0].time < this.chart.preRoll
+      ) {
+        console.warn(
+          `[RhythmScene] first note at ${this.chart.notes[0].time.toFixed(3)}s is earlier than the configured ${this.chart.preRoll.toFixed(3)}s pre-roll`,
+        );
+      }
+      this.audio = new AudioTrackPlayer();
+      await this.audio.prepare(audioBuffer);
+      if (!this.scene.isActive()) return;
+      this.chart = { ...this.chart, duration: this.audio.durationSeconds };
+      this.audio.onEnded = () => {
+        this.audioEnded = true;
+        if (!this.engine) return;
+        for (const note of this.engine.missRemaining()) {
+          this.notes.resolve(note.id);
+          this.registerJudgement('MISS');
+        }
+      };
+      loading.destroy();
+      if (import.meta.env.DEV) console.debug(formatChartStatistics(this.chart));
+      this.build();
+    } catch (error) {
+      loading.destroy();
+      this.showFatalError(error);
+    }
+  }
+
+  private getBinaryAsset(key: string): ArrayBuffer {
+    const value: unknown = this.cache.binary.get(key);
+    if (value instanceof ArrayBuffer) return value;
+    if (ArrayBuffer.isView(value)) {
+      return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+    }
+    throw new Error(`Track asset "${key}" is missing or not binary data`);
+  }
+
   private build(): void {
-    this.chart = parseChart(this.cache.json.get('holyberg-demo-chart'));
-    this.scoreState = initialScoreState();
+    this.scoreState = initialScoreState(this.chart.notes.length);
     this.completionGate = new CompletionGate();
-    this.chartEndTimeMs = getChartEndTimeMs(this.chart.durationMs, this.chart.notes);
-    this.beat = new ProceduralBeat(this.chart.bpm, this.chart.durationMs);
-    this.clock = new RhythmClock(this.beat);
+    this.crowdFailure = new CrowdFailureSystem();
+    this.engine = new RhythmEngine(this.chart.notes);
+    this.clock = new RhythmClock(this.audio);
     this.cameras.main.setBackgroundColor('#07040d');
     this.createClub();
     this.createDecks();
@@ -167,18 +234,24 @@ export class RhythmScene extends Phaser.Scene {
     this.createHud();
     this.bindLaneInput();
     this.bindTouchInput();
-    this.notes = new NoteManager(this, this.chart.notes, this.noteRoot);
+    const approachSeconds = Math.max(SPAWN_AHEAD_SECONDS, this.chart.preRoll);
+    this.notes = new NoteManager(
+      this,
+      this.engine.notes,
+      this.noteRoot,
+      approachSeconds,
+      approachSeconds,
+    );
     this.notes.setCenterX(this.centerX);
     this.createStartOverlay();
     new OrientationController(this, {
-      onPause: () => { this.clock.pause(); this.boothAnimation.pause(); void this.beat.pause(); },
+      onPause: () => { this.clock.pause(); this.boothAnimation.pause(); void this.audio.pause(); },
       onResume: () => {
         if (this.playing) this.boothAnimation.resume();
-        void this.beat.resume().then((resumed) => { if (resumed) this.clock.resume(); });
+        void this.audio.resume().then((resumed) => { if (resumed) this.clock.resume(); });
       },
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
   }
 
   private createClub(): void {
@@ -254,20 +327,26 @@ export class RhythmScene extends Phaser.Scene {
     this.progressTrack = this.add.rectangle(this.centerX, 12, 500, 7, 0x2a1836).setDepth(RhythmDepth.UI);
     this.progressBar = this.add.rectangle(this.centerX - 250, 12, 0, 7, 0xffdd57).setOrigin(0, 0.5).setDepth(RhythmDepth.UI);
     this.judgementText = this.add.text(this.centerX, HIT_LINE_Y - 82, '', { fontFamily: 'Archivo Black', fontSize: '46px', color: '#fff', stroke: '#541864', strokeThickness: 7 }).setOrigin(0.5).setAlpha(0).setDepth(RhythmDepth.UI);
+    this.rhythmDebugText = this.add.text(this.cameras.main.width - 18, 108, '', {
+      fontFamily: 'Space Mono',
+      fontSize: '14px',
+      color: '#56ffff',
+      backgroundColor: '#090611dd',
+      align: 'right',
+      padding: { x: 9, y: 7 },
+    }).setOrigin(1, 0).setDepth(RhythmDepth.UI + 2).setVisible(false);
     this.updateHud();
   }
 
   private createStartOverlay(): void {
     const background = this.add.rectangle(0, this.cameras.main.height / 2, 760, 280, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
-    const text = this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE OR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center', lineSpacing: 12 }).setOrigin(0.5);
+    const text = this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE\nOR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '34px', color: '#ffdd57', align: 'center', lineSpacing: 8 }).setOrigin(0.5);
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     let start = (): void => undefined;
     start = createRhythmStartHandler({
       unlockAudio: async () => {
-        const unlocked = await this.beat.unlock();
-        this.audioUnlocked = unlocked;
-        return unlocked;
+        return this.audio.unlock();
       },
       cleanupListeners: () => {
         this.input.off('pointerdown', start);
@@ -290,15 +369,45 @@ export class RhythmScene extends Phaser.Scene {
 
   private runCountdown(overlay: Phaser.GameObjects.Container, background: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text): void {
     background.setAlpha(0.84);
-    ['3', '2', '1', 'DROP'].forEach((step, index) => this.time.delayedCall(index * 650, () => text.setText(step)));
-    this.time.delayedCall(2600, () => {
+    ["YOU'RE ON.", '3', '2', '1', 'GO'].forEach((step, index) => this.time.delayedCall(index * 600, () => text.setText(step)));
+    this.time.delayedCall(3000, () => {
       overlay.destroy(true);
       if (this.activeOverlay === overlay) this.activeOverlay = undefined;
-      const audioRunning = this.beat.start();
-      this.clock.start(!(audioRunning || this.audioUnlocked));
-      this.boothAnimation.startGameplay();
-      this.playing = true;
+      if (!this.beginGameplay()) this.showAudioStartFallback();
     });
+  }
+
+  private beginGameplay(): boolean {
+    if (!this.audio.start()) return false;
+    this.clock.start();
+    this.boothAnimation.startGameplay();
+    this.playing = true;
+    return true;
+  }
+
+  private showAudioStartFallback(): void {
+    const background = this.add.rectangle(0, this.cameras.main.height / 2, 700, 240, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
+    const text = this.add.text(0, this.cameras.main.height / 2, 'AUDIO IS PAUSED\n\nTAP TO START SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center' }).setOrigin(0.5);
+    const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
+    this.activeOverlay = overlay;
+    let retrying = false;
+    const retry = (): void => {
+      if (retrying) return;
+      retrying = true;
+      void this.audio.unlock().then((unlocked) => {
+        retrying = false;
+        if (!unlocked || !this.beginGameplay()) {
+          text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
+          return;
+        }
+        this.input.off('pointerdown', retry);
+        this.input.keyboard?.off('keydown-SPACE', retry);
+        overlay.destroy(true);
+        if (this.activeOverlay === overlay) this.activeOverlay = undefined;
+      });
+    };
+    this.input.on('pointerdown', retry);
+    this.input.keyboard?.on('keydown-SPACE', retry);
   }
 
   private startTutorial(): void {
@@ -310,7 +419,7 @@ export class RhythmScene extends Phaser.Scene {
     const lane = this.tutorial?.currentLane;
     if (lane === null || lane === undefined) {
       this.hitHere.destroy();
-      this.scoreState = initialScoreState();
+      this.scoreState = initialScoreState(this.chart.notes.length);
       this.inputGuard.reset();
       this.antiMash.reset();
       this.updateHud();
@@ -334,8 +443,18 @@ export class RhythmScene extends Phaser.Scene {
 
   private bindLaneInput(): void {
     const bindings: Array<[string, Lane]> = [['D', 0], ['F', 1], ['J', 2], ['K', 3], ['LEFT', 0], ['DOWN', 1], ['UP', 2], ['RIGHT', 3]];
-    for (const [key, lane] of bindings) this.input.keyboard?.on(`keydown-${key}`, () => this.pressLane(lane));
+    for (const [key, lane] of bindings) {
+      this.input.keyboard?.on(`keydown-${key}`, (event: KeyboardEvent) => {
+        event.preventDefault();
+        if (!event.repeat) this.pressLane(lane);
+      });
+    }
     if (import.meta.env.DEV) this.input.keyboard?.on('keydown-T', () => { this.touchDebugVisible = !this.touchDebugVisible; this.drawTouchDebug(); });
+    if (import.meta.env.DEV) this.input.keyboard?.on('keydown-R', () => {
+      this.rhythmDebugVisible = !this.rhythmDebugVisible;
+      this.rhythmDebugText.setVisible(this.rhythmDebugVisible);
+      this.updateRhythmDebug();
+    });
   }
 
   private bindTouchInput(): void {
@@ -370,12 +489,12 @@ export class RhythmScene extends Phaser.Scene {
       return;
     }
     if (!this.playing || this.finished) return;
-    const inputTime = this.clock.currentTimeMs + GLOBAL_INPUT_OFFSET_MS;
-    const note = this.notes.nearestPending(lane, inputTime);
-    const judgement = note ? judgeTiming(inputTime - note.timeMs) : null;
-    if (!note || !judgement) { this.registerBadTap(lane); return; }
-    this.notes.resolve(note, 'hit');
-    this.registerJudgement(judgement, lane, !this.antiMash.isLocked(this.clock.currentTimeMs));
+    const effectiveSongTime = this.clock.currentTimeSeconds + this.inputOffsetMs / 1000;
+    const result = this.engine.hitLane(lane, effectiveSongTime);
+    if (!result) { this.registerBadTap(lane); return; }
+    this.lastTimingDifferenceMs = result.differenceMs;
+    this.notes.resolve(result.note.id);
+    this.registerJudgement(result.judgement, lane, !this.antiMash.isLocked(this.clock.currentTimeMs));
   }
 
   private registerBadTap(lane: Lane): void {
@@ -410,10 +529,9 @@ export class RhythmScene extends Phaser.Scene {
     this.tweens.add({ targets: ripple, scale: 2.2, duration: 180 });
   }
 
-  private registerJudgement(judgement: 'PERFECT' | 'EXCELLENT' | 'GOOD' | 'MISS', lane?: Lane, scoringEnabled = true): void {
+  private registerJudgement(judgement: Judgement, lane?: Lane, scoringEnabled = true): void {
     const awardedPoints = scoringEnabled ? getAwardedPoints(this.scoreState, judgement) : 0;
-    const protectEnergy = judgement === 'MISS' && this.clock.currentTimeMs < BEGINNER_GRACE_MS;
-    this.scoreState = applyJudgement(this.scoreState, judgement, protectEnergy, scoringEnabled);
+    this.scoreState = applyJudgement(this.scoreState, judgement, false, scoringEnabled);
     if (lane !== undefined) this.highway.flashLane(lane, judgement === 'PERFECT' ? 0xffffff : LANE_COLORS[lane], judgement === 'PERFECT');
     if (judgement === 'PERFECT' && lane !== undefined) {
       this.boothAnimation.flashPerfect(lane);
@@ -425,7 +543,7 @@ export class RhythmScene extends Phaser.Scene {
       this.flashClubMiss();
     }
     const feedback = judgement === 'MISS' ? 'MISS' : `${judgement}\n+${awardedPoints}`;
-    this.judgementText.setText(feedback).setFontSize(judgement === 'MISS' ? 28 : judgement === 'PERFECT' ? 46 : judgement === 'EXCELLENT' ? 40 : 34).setY(HIT_LINE_Y - (judgement === 'MISS' ? 52 : 92)).setColor(judgement === 'PERFECT' ? '#ffffff' : judgement === 'EXCELLENT' ? '#ffdd57' : judgement === 'GOOD' ? '#ff8a3d' : '#ff3f5e').setAlpha(1).setScale(judgement === 'PERFECT' ? 1.2 : 1);
+    this.judgementText.setText(feedback).setFontSize(judgement === 'MISS' ? 28 : judgement === 'PERFECT' ? 46 : judgement === 'GOOD' ? 40 : 34).setY(HIT_LINE_Y - (judgement === 'MISS' ? 52 : 92)).setColor(judgement === 'PERFECT' ? '#ffffff' : judgement === 'GOOD' ? '#ffdd57' : judgement === 'OK' ? '#ff8a3d' : '#ff3f5e').setAlpha(1).setScale(judgement === 'PERFECT' ? 1.2 : 1);
     this.tweens.killTweensOf(this.judgementText);
     this.tweens.add({ targets: this.judgementText, alpha: 0, scale: 1, duration: 330 });
     this.updateHud();
@@ -434,7 +552,9 @@ export class RhythmScene extends Phaser.Scene {
   private updateHud(): void {
     this.scoreText.setText(`RHYTHM  ${this.scoreState.score}`);
     this.comboText.setText(`${this.scoreState.combo} COMBO   x${getMultiplier(this.scoreState.combo)}`);
-    this.energyText.setText(`CROWD ENERGY\n${this.scoreState.energy}%`);
+    const energy = Math.round(this.scoreState.energy);
+    const filled = Math.round(energy / 10);
+    this.energyText.setText(`CROWD  [${'#'.repeat(filled)}${'-'.repeat(10 - filled)}]\n${energy}%`);
     this.boothAnimation?.setCombo(this.scoreState.combo);
     this.mixer?.setCombo(this.scoreState.combo);
   }
@@ -460,6 +580,7 @@ export class RhythmScene extends Phaser.Scene {
     this.comboText.setPosition(centerX, this.comboText.y).setScale(viewport.hudScale);
     this.energyText.setX(this.cameras.main.width - 22).setScale(viewport.hudScale);
     this.judgementText.setPosition(centerX, this.judgementText.y).setScale(viewport.hudScale);
+    this.rhythmDebugText.setX(this.cameras.main.width - 18);
     const controlScale = viewport.compactLandscape ? 0.82 : 1;
     for (let lane = 0; lane < this.touchLabels.length; lane += 1) {
       const geometry = getJudgementPadGeometry(lane as Lane, centerX);
@@ -497,9 +618,23 @@ export class RhythmScene extends Phaser.Scene {
     this.touchDebugText.setText(`POINTER  ${Math.round(this.debugPointer.x)}, ${Math.round(this.debugPointer.y)}\nLANE     ${this.debugPointer.lane ?? '—'}`);
   }
 
+  private updateRhythmDebug(): void {
+    if (!this.rhythmDebugVisible || !this.engine || !this.clock) return;
+    const nextNote = this.engine.nextPendingNote;
+    this.rhythmDebugText.setText([
+      `SONG        ${this.clock.currentTimeSeconds.toFixed(3)} s`,
+      `NEXT NOTE   ${nextNote ? `${nextNote.time.toFixed(3)} s` : 'none'}`,
+      `DIFFERENCE  ${this.lastTimingDifferenceMs === null ? 'n/a' : `${this.lastTimingDifferenceMs.toFixed(1)} ms`}`,
+      `ACTIVE      ${this.notes.activeCount}`,
+      `FPS         ${this.game.loop.actualFps.toFixed(1)}`,
+      `OFFSET      ${this.inputOffsetMs.toFixed(1)} ms`,
+      `NOTES       ${this.engine.judgedCount}/${this.chart.notes.length}`,
+    ]);
+  }
+
   private endLevel(): void {
     if (this.finished) return;
-    this.finished = true; this.playing = false; this.clock.stop(); this.beat.stop();
+    this.finished = true; this.playing = false; this.clock.stop(); this.audio.stop();
     this.boothAnimation.stop();
     const completeText = this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5);
     const overlay = this.add.container(this.centerX, 0, [completeText]).setDepth(RhythmDepth.UI);
@@ -511,9 +646,46 @@ export class RhythmScene extends Phaser.Scene {
     });
   }
 
+  private failLevel(): void {
+    if (this.finished) return;
+    this.finished = true;
+    this.playing = false;
+    this.clock.stop();
+    this.audio.stop();
+    this.boothAnimation.stop();
+
+    const background = this.add
+      .rectangle(0, this.cameras.main.height / 2, 700, 260, 0x090611, 0.97)
+      .setStrokeStyle(5, 0xff334f)
+      .setInteractive();
+    const text = this.add
+      .text(0, this.cameras.main.height / 2, 'SET FAILED\n\nPRESS SPACE OR TAP TO RETRY', {
+        fontFamily: 'Archivo Black',
+        fontSize: '38px',
+        color: '#ffdd57',
+        align: 'center',
+        lineSpacing: 10,
+      })
+      .setOrigin(0.5);
+    const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
+    this.activeOverlay = overlay;
+
+    let accepted = false;
+    const retry = (): void => {
+      if (accepted) return;
+      accepted = true;
+      this.input.keyboard?.off('keydown-SPACE', retry);
+      this.scene.start('RhythmScene', { score: this.berlinScore });
+    };
+    background.on('pointerdown', retry);
+    this.input.keyboard?.on('keydown-SPACE', retry);
+  }
+
   private cleanup(): void {
     this.playing = false;
-    this.clock?.stop(); this.beat?.stop();
+    this.clock?.stop();
+    this.audio?.destroy();
+    this.notes?.destroy();
     this.boothAnimation?.destroy();
     this.mixer?.reset();
     this.tweens.killTweensOf([this.stageFlash, this.clubBeams, this.clubMissOverlay, ...this.crowdMembers]);
@@ -528,11 +700,15 @@ export class RhythmScene extends Phaser.Scene {
 
   update(): void {
     if (!this.playing || this.finished) return;
-    const time = this.clock.currentTimeMs;
-    const missed = this.notes.update(time);
-    for (let index = 0; index < missed.length; index += 1) this.registerJudgement('MISS');
-    this.progressBar.displayWidth = 500 * Phaser.Math.Clamp(time / this.chart.durationMs, 0, 1);
-    const beatIndex = Math.floor(time / (60000 / this.chart.bpm));
+    const time = this.clock.currentTimeSeconds;
+    this.notes.update(time);
+    const missed = this.engine.update(time);
+    for (const note of missed) {
+      this.notes.resolve(note.id);
+      this.registerJudgement('MISS');
+    }
+    this.progressBar.displayWidth = 500 * Phaser.Math.Clamp(time / this.audio.durationSeconds, 0, 1);
+    const beatIndex = getBeatIndexAtTime(this.chart, time);
     if (beatIndex !== this.lastBeat) {
       this.lastBeat = beatIndex; this.highway.pulse();
       const strongBeat = beatIndex % 4 === 0;
@@ -542,7 +718,15 @@ export class RhythmScene extends Phaser.Scene {
       this.cameras.main.zoomTo(beatIndex % 4 === 0 ? 1.008 : 1.003, 55, 'Sine.easeOut', true);
       this.time.delayedCall(70, () => this.cameras.main.zoomTo(1, 100));
     }
-    this.completionGate.tryComplete(shouldCompleteChart(time, this.chartEndTimeMs), () => this.endLevel());
+    this.updateRhythmDebug();
+    if (this.crowdFailure.update(this.scoreState.energy, time)) {
+      this.failLevel();
+      return;
+    }
+    this.completionGate.tryComplete(
+      shouldCompleteTrack(this.audioEnded, this.engine.allNotesJudged),
+      () => this.endLevel(),
+    );
   }
 
   private pulseClubBeat(strong: boolean): void {

@@ -2,7 +2,7 @@
 
 ## Audio-clock synchronization
 
-Each chart note has an absolute `timeMs`. After a user gesture unlocks Web Audio, the countdown starts the procedural beat and `RhythmClock` at the same origin. Rendering computes note progress from the audio context time, preventing frame-rate drift.
+Each MIDI chart note has an absolute `time` in seconds. After a user gesture unlocks Web Audio, the countdown schedules the decoded track and starts `RhythmClock` from the same audio-context origin. Rendering computes note progress from audio time, preventing frame-rate drift.
 
 ## 2.5D perspective
 
@@ -10,15 +10,15 @@ The highway is a Phaser-drawn trapezoid. Pure `getPerspectivePosition` converts 
 
 ## Note lifecycle
 
-`NoteManager` holds lightweight chart data and spawns a Phaser object only inside the spawn-ahead window. A note moves from `pending` to `hit` or `missed`, then its visual is destroyed and removed from the active collection.
+`RhythmEngine` owns lightweight note state and enforces one-time transitions from `pending` to `hit` or `missed`. `NoteManager` spawns Phaser objects only inside the look-ahead window and removes visuals when the engine resolves them.
 
 ## Scene cleanup
 
-On shutdown RhythmScene stops and disconnects all scheduled Web Audio sources, removes timers and keyboard listeners, and lets Phaser destroy scene-owned visuals.
+On shutdown RhythmScene stops the source, closes its audio context, removes timers and keyboard listeners, and destroys active note visuals.
 
 ## Judgement flow
 
-Keyboard or one touch lane calls `pressLane`. The input timestamp receives `GLOBAL_INPUT_OFFSET_MS`, the nearest pending note in that lane is selected, and `JudgementSystem` returns PERFECT, GOOD, MISS, or no judgement. Overdue notes are marked MISS by `NoteManager`.
+Keyboard or one touch lane calls `pressLane`. The audio timestamp receives the local-storage input offset, `RhythmEngine` selects the nearest pending note in that lane, and `JudgementSystem` returns PERFECT, GOOD, OK, or no judgement. The engine marks overdue notes MISS.
 
 ## Scoring flow
 

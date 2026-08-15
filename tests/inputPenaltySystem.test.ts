@@ -17,7 +17,7 @@ describe('bad taps and anti-mash', () => {
     const state = applyBadTap({ ...initialScoreState(), score: 30, combo: 12, energy: 20 });
     expect(state.score).toBe(0);
     expect(state.combo).toBe(0);
-    expect(state.energy).toBe(20);
+    expect(state.energy).toBe(19);
     expect(state.badTap).toBe(1);
     expect(state.miss).toBe(0);
   });
@@ -35,7 +35,7 @@ describe('bad taps and anti-mash', () => {
     expect(locked.combo).toBe(0);
     expect(locked.perfect).toBe(1);
     const restored = applyJudgement(locked, 'PERFECT');
-    expect(restored.score).toBe(150);
+    expect(restored.score).toBe(7500);
     expect(restored.combo).toBe(1);
   });
   it('tutorial state remains untouched unless a caller applies a bad tap', () => {

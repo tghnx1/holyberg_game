@@ -1,0 +1,9 @@
+{
+  "id": "development-track",
+  "title": "Holyberg Development Click Track",
+  "artist": "Holyberg",
+  "audio": "audio.wav",
+  "chart": "chart.mid",
+  "preRollSeconds": 2,
+  "chartOffsetSeconds": 0
+}
