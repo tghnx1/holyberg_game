@@ -11,6 +11,8 @@ const metadata: TrackMetadata = {
   chart: 'chart.mid',
   preRollSeconds: 2,
   chartOffsetSeconds: 0,
+  startSeconds: 0,
+  endSeconds: 13,
 };
 
 function makeMidi(): Uint8Array {

@@ -19,8 +19,24 @@ function optionalNonNegativeNumber(value: unknown, fallback: number, field: stri
   return value;
 }
 
+function optionalOptionalNonNegativeNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(`Track metadata field "${field}" must be a non-negative number`);
+  }
+  return value;
+}
+
 function optionalFiniteNumber(value: unknown, fallback: number, field: string): number {
   if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Track metadata field "${field}" must be a finite number`);
+  }
+  return value;
+}
+
+function optionalOptionalFiniteNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`Track metadata field "${field}" must be a finite number`);
   }
@@ -41,6 +57,8 @@ export function parseTrackMetadata(value: unknown, definition: TrackDefinition):
       0,
       'chartOffsetSeconds',
     ),
+    startSeconds: optionalOptionalNonNegativeNumber(value.startSeconds, 'startSeconds'),
+    endSeconds: optionalOptionalFiniteNumber(value.endSeconds, 'endSeconds'),
   };
 
   if (metadata.id !== definition.id) {

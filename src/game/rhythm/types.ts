@@ -48,6 +48,8 @@ export interface TrackMetadata {
   chart: string;
   preRollSeconds: number;
   chartOffsetSeconds: number;
+  startSeconds?: number;
+  endSeconds?: number;
 }
 
 export interface ScoreState {

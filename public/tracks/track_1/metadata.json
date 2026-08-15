@@ -5,5 +5,7 @@
   "audio": "audio.mp3",
   "chart": "chart.mid",
   "preRollSeconds": 2,
-  "chartOffsetSeconds": 0
+  "chartOffsetSeconds": 0,
+  "startSeconds": 0,
+  "endSeconds": 261.12
 }

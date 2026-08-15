@@ -16,6 +16,7 @@ import { RhythmEngine } from '../rhythm/RhythmEngine';
 import { RhythmBoothAnimation } from '../rhythm/RhythmBoothAnimation';
 import { RhythmHighway } from '../rhythm/RhythmHighway';
 import { RhythmMixer } from '../rhythm/RhythmMixer';
+import { getRhythmPlaybackProgress, resolveRhythmPlaybackWindow, selectRhythmNotesInWindow } from '../rhythm/RhythmPlaybackWindow';
 import {
   getRhythmAssetLayout,
   RHYTHM_DECK_HEIGHT,
@@ -31,10 +32,12 @@ import { createRhythmStartHandler } from '../rhythm/StartGate';
 import { parseTrackMetadata } from '../rhythm/TrackLoader';
 import { MAIN_RHYTHM_TRACK } from '../rhythm/TrackRegistry';
 import type { Judgement, Lane, RhythmChart, ScoreState } from '../rhythm/types';
+import type { RhythmPlaybackWindow } from '../rhythm/RhythmPlaybackWindow';
 
 export class RhythmScene extends Phaser.Scene {
   private berlinScore = 0;
   private chart!: RhythmChart;
+  private playbackWindow!: RhythmPlaybackWindow;
   private scoreState!: ScoreState;
   private audio!: AudioTrackPlayer;
   private clock!: RhythmClock;
@@ -182,7 +185,8 @@ export class RhythmScene extends Phaser.Scene {
       this.audio = new AudioTrackPlayer();
       await this.audio.prepare(audioBuffer);
       if (!this.scene.isActive()) return;
-      this.chart = { ...this.chart, duration: this.audio.durationSeconds };
+      this.playbackWindow = resolveRhythmPlaybackWindow(metadata, this.audio.durationSeconds);
+      this.chart = { ...this.chart, notes: selectRhythmNotesInWindow(this.chart.notes, this.playbackWindow.startSeconds, this.playbackWindow.endSeconds) };
       this.audio.onEnded = () => {
         this.audioEnded = true;
         if (!this.engine) return;
@@ -373,7 +377,7 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   private beginGameplay(): boolean {
-    if (!this.audio.start()) return false;
+    if (!this.audio.start(this.playbackWindow.startSeconds, this.playbackWindow.endSeconds, this.playbackWindow.fadeOutSeconds)) return false;
     this.clock.start();
     this.boothAnimation.startGameplay();
     this.playing = true;
@@ -663,7 +667,7 @@ export class RhythmScene extends Phaser.Scene {
       this.notes.resolve(note.id);
       this.registerJudgement('MISS');
     }
-    this.progressBar.displayWidth = 500 * Phaser.Math.Clamp(time / this.audio.durationSeconds, 0, 1);
+    this.progressBar.displayWidth = 500 * getRhythmPlaybackProgress(time, this.playbackWindow.startSeconds, this.playbackWindow.endSeconds);
     const beatIndex = getBeatIndexAtTime(this.chart, time);
     if (beatIndex !== this.lastBeat) {
       this.lastBeat = beatIndex; this.highway.pulse();
