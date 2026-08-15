@@ -8,6 +8,7 @@ import {
   RHYTHM_HIGHWAY_TEXTURE_KEY,
 } from '../rhythm/RhythmAssetLayout';
 import { getStreetGroundAssetUrls } from '../level/berlin/streetGroundLayout';
+import { getPlatformTextureAssets } from '../level/berlin/platformVisualLayout';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -46,6 +47,9 @@ export class BootScene extends Phaser.Scene {
       this.load.image(asset.key, asset.url);
     }
     for (const asset of getStreetGroundAssetUrls()) {
+      this.load.image(asset.key, asset.url);
+    }
+    for (const asset of getPlatformTextureAssets()) {
       this.load.image(asset.key, asset.url);
     }
     if (import.meta.env.DEV) console.debug('[BootScene] Berlin asset profile', qualityProfile);

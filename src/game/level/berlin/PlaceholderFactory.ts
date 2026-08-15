@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Depth } from '../../constants';
 import { textureForSlot } from './ArtSlotRegistry';
+import { getPlatformSupportLayout, getPlatformVisualLayout } from './platformVisualLayout';
 import type { BerlinEntity } from './types';
 
 const colors = {
@@ -19,15 +20,36 @@ export class PlaceholderFactory {
   ) {}
 
   create(entity: BerlinEntity): Phaser.GameObjects.Container {
-    const texture = textureForSlot(this.scene, entity.artSlot);
+    const platformLayout =
+      entity.type === 'platform' || entity.type === 'movingPlatform'
+        ? getPlatformVisualLayout(entity)
+        : undefined;
+    const texture = platformLayout?.textureKey ?? textureForSlot(this.scene, entity.artSlot);
     const color = entity.type === 'obstacle' ? colors[entity.action] : colors[entity.type];
-    const body = texture
-      ? this.scene.add.image(0, 0, texture).setDisplaySize(entity.width, entity.height)
+    const body = platformLayout
+      ? this.scene.add
+          .image(platformLayout.imageX, platformLayout.imageY, platformLayout.textureKey)
+          .setScale(platformLayout.scale)
+      : texture
+        ? this.scene.add.image(0, 0, texture).setDisplaySize(entity.width, entity.height)
       : this.scene.add
           .rectangle(0, 0, entity.width, entity.height, color)
           .setStrokeStyle(4, 0x17101f);
-    const children: Phaser.GameObjects.GameObject[] = [body];
-    if (import.meta.env.DEV) {
+    const supports =
+      platformLayout && (entity.type === 'platform' || entity.type === 'movingPlatform')
+        ? getPlatformSupportLayout(entity, platformLayout).map((piece) =>
+            this.scene.add
+              .rectangle(piece.x, piece.y, piece.width, piece.height, piece.color, piece.alpha)
+              .setRotation(piece.rotation ?? 0)
+              .setStrokeStyle(1, 0x0d0912, 0.72),
+          )
+        : [];
+    const children: Phaser.GameObjects.GameObject[] = [...supports, body];
+    if (
+      import.meta.env.DEV &&
+      entity.type !== 'platform' &&
+      entity.type !== 'movingPlatform'
+    ) {
       const debugType = entity.type === 'obstacle' ? entity.action.toUpperCase() : entity.label;
       children.push(
         this.scene.add
