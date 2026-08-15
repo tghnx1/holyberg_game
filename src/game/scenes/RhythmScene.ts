@@ -22,7 +22,7 @@ import {
   RHYTHM_DECK_WIDTH,
 } from '../rhythm/RhythmAssetLayout';
 import { resetRhythmRunState } from '../rhythm/RhythmRunState';
-import { getHighwayGeometryAtY, getJudgementPadGeometry, getLaneBoundaries } from '../rhythm/PerspectiveMath';
+import { getJudgementPadGeometry, getLaneBoundaries } from '../rhythm/PerspectiveMath';
 import { getTouchArea, mapLogicalPointerToLane } from '../rhythm/TouchLaneMapper';
 import { TutorialProgress } from '../rhythm/TutorialProgress';
 import { applyJudgement, calculateAccuracy, getAwardedPoints, getMultiplier, initialScoreState } from '../rhythm/ScoreSystem';
@@ -473,14 +473,12 @@ export class RhythmScene extends Phaser.Scene {
     this.touchDebugText.setVisible(this.touchDebugVisible);
     if (!this.touchDebugVisible) return;
     const area = getTouchArea(this.centerX);
-    const touchTop = getHighwayGeometryAtY(area.top, this.centerX);
-    const touchBottom = getHighwayGeometryAtY(area.bottom, this.centerX);
     this.touchDebug.lineStyle(3, 0x56ffff, 0.9);
     for (let lane = 0; lane < 4; lane += 1) this.touchDebug.strokePoints([
-      new Phaser.Geom.Point(touchTop.boundaries[lane], area.top),
-      new Phaser.Geom.Point(touchTop.boundaries[lane + 1], area.top),
-      new Phaser.Geom.Point(touchBottom.boundaries[lane + 1], area.bottom),
-      new Phaser.Geom.Point(touchBottom.boundaries[lane], area.bottom),
+      new Phaser.Geom.Point(area.boundaries[lane], area.top),
+      new Phaser.Geom.Point(area.boundaries[lane + 1], area.top),
+      new Phaser.Geom.Point(area.boundaries[lane + 1], area.bottom),
+      new Phaser.Geom.Point(area.boundaries[lane], area.bottom),
     ], true);
     const horizon = getLaneBoundaries(0, this.centerX);
     const hit = getLaneBoundaries(1, this.centerX);
