@@ -51,14 +51,15 @@ export function getPerspectivePosition(
   progress: number,
   screenCenterX: number,
 ): PerspectivePosition {
-  const clamped = Math.min(1, Math.max(0, progress));
-  const easedScale = clamped * clamped * (3 - 2 * clamped);
+  const clamped = Math.max(0, progress);
+  const easedScale = Math.min(1, clamped);
+  const easedScaleValue = easedScale * easedScale * (3 - 2 * easedScale);
   const y = HORIZON_Y + (HIT_LINE_Y - HORIZON_Y) * clamped;
   const halfWidth = HORIZON_HALF_WIDTH + (HIT_LINE_HALF_WIDTH - HORIZON_HALF_WIDTH) * clamped;
   return {
     x: getLaneCenterX(lane, clamped, screenCenterX),
     y,
-    scale: 0.2 + 1.0 * easedScale,
+    scale: 0.2 + 1.0 * easedScaleValue,
     progress: clamped,
     halfWidth,
   };

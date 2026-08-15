@@ -37,11 +37,14 @@ describe('rhythm highway perspective', () => {
     const middle = getPerspectivePosition(2, 0.5, centerX);
     const quarter = getPerspectivePosition(2, 0.25, centerX);
     const end = getPerspectivePosition(2, 1, centerX);
+    const overdue = getPerspectivePosition(2, 1.2, centerX);
 
     expect(middle.y).toBeCloseTo((start.y + end.y) / 2);
     expect(middle.x).toBeCloseTo((start.x + end.x) / 2);
     expect(middle.halfWidth).toBeCloseTo((start.halfWidth + end.halfWidth) / 2);
     expect(quarter.scale).toBeLessThan(0.45);
+    expect(overdue.y).toBeGreaterThan(HIT_LINE_Y);
+    expect(overdue.halfWidth).toBeGreaterThan(HIT_LINE_HALF_WIDTH);
   });
   it('derives every judgement pad from shared hit-line boundaries', () => {
     const top = getHighwayGeometryAtY(PAD_TOP_Y, centerX);
