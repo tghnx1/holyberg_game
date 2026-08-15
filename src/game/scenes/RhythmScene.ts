@@ -391,13 +391,19 @@ export class RhythmScene extends Phaser.Scene {
   }
 
   private showAudioStartFallback(): void {
-    const background = this.add.rectangle(0, this.cameras.main.height / 2, 700, 240, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
-    const text = this.add.text(0, this.cameras.main.height / 2, 'AUDIO IS PAUSED\n\nTAP TO START SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center' }).setOrigin(0.5);
-    const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
+    const text = this.add.text(0, this.cameras.main.height / 2, 'TAP TO START AUDIO', {
+      fontFamily: 'Archivo Black',
+      fontSize: '28px',
+      color: '#ffdd57',
+      stroke: '#090611',
+      strokeThickness: 8,
+      align: 'center',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const overlay = this.add.container(this.centerX, 0, [text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     let retrying = false;
     const cleanup = (): void => {
-      background.off('pointerdown', retry);
+      text.off('pointerdown', retry);
       this.input.off('pointerdown', retry);
       this.input.keyboard?.off('keydown-SPACE', retry);
     };
@@ -408,7 +414,7 @@ export class RhythmScene extends Phaser.Scene {
       void this.beginGameplayFromGesture().then((started) => {
         retrying = false;
         if (!started) {
-          text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
+          text.setText('TAP TO RETRY');
           return;
         }
         cleanup();
@@ -416,11 +422,11 @@ export class RhythmScene extends Phaser.Scene {
         if (this.activeOverlay === overlay) this.activeOverlay = undefined;
       }).catch((error: unknown) => {
         retrying = false;
-        text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
+        text.setText('TAP TO RETRY');
         if (import.meta.env.DEV) console.warn('[RhythmScene] audio retry failed', error);
       });
     };
-    background.on('pointerdown', retry);
+    text.on('pointerdown', retry);
     this.input.on('pointerdown', retry);
     this.input.keyboard?.on('keydown-SPACE', retry);
   }
