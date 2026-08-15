@@ -11,8 +11,7 @@ const defineTrack = (id: string, audioFile: string): TrackDefinition => {
 };
 
 export const TRACKS = {
-  // Replace this registry entry when the production Ableton export arrives.
-  main: defineTrack('development-track', 'audio.wav'),
+  main: defineTrack('track_1', 'audio.mp3'),
 } as const satisfies Record<string, TrackDefinition>;
 
 export const MAIN_RHYTHM_TRACK: TrackDefinition = TRACKS.main;

@@ -1,0 +1,9 @@
+{
+  "id": "track_1",
+  "title": "DARKSISKO_16",
+  "artist": "HOLHESH",
+  "audio": "audio.mp3",
+  "chart": "chart.mid",
+  "preRollSeconds": 2,
+  "chartOffsetSeconds": 0
+}
