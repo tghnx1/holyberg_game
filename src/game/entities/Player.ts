@@ -13,6 +13,17 @@ import {
 import { JUMP_BUFFER_MS, playerBodyFor, resolveJumpImpulse } from '../level/berlin/playerPhysics';
 import type { PlayerAnimationState } from '../level/berlin/types';
 
+export const ATMOS_RUN_FRAME_KEYS = [
+  'atmos-run-1',
+  'atmos-run-2',
+  'atmos-run-3',
+  'atmos-run-4',
+  'atmos-run-5',
+  'atmos-run-6',
+] as const;
+export const ATMOS_RUN_STATIC_FRAME_KEY = ATMOS_RUN_FRAME_KEYS[2];
+const ATMOS_RUN_FRAME_DURATION_MS = 92;
+
 export class Player extends Phaser.Physics.Arcade.Sprite {
   animationState: PlayerAnimationState = 'run';
   private crouched = false;
@@ -31,6 +42,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private airHoldRequested = false;
   private airHolding = false;
   private visual: Phaser.GameObjects.Sprite;
+  private currentVisualFrameKey?: string;
 
   constructor(scene: Phaser.Scene, x: number) {
     super(scene, x, GROUND_Y, 'dj');
@@ -93,16 +105,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             ? 'jump'
             : 'fall';
     this.rotation = this.crouched ? 0 : Math.sin(now / 80) * 0.025;
-    this.syncVisual();
+    this.syncVisual(now);
   }
 
-  private syncVisual(): void {
+  private syncVisual(now: number): void {
     // this.y (origin 0.5,1) is always the sprite's own feet position and is
     // never affected by resizing the physics body, unlike body.y + body.height
     // which reads stale for one frame right after a crouch/stand toggle
     // (the body only resyncs on Phaser's next automatic preUpdate).
     this.visual.x = this.x;
     this.visual.y = this.y;
+    const targetFrameKey = this.animationState === 'run'
+      ? ATMOS_RUN_FRAME_KEYS[Math.floor(now / ATMOS_RUN_FRAME_DURATION_MS) % ATMOS_RUN_FRAME_KEYS.length]
+      : ATMOS_RUN_STATIC_FRAME_KEY;
+    if (targetFrameKey !== this.currentVisualFrameKey) {
+      this.visual.setTexture(targetFrameKey);
+      this.currentVisualFrameKey = targetFrameKey;
+    }
     this.visual.setScale(1, this.crouched ? 0.64 : 1);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);
