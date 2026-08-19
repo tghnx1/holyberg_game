@@ -12,37 +12,37 @@
     "artSlot": "collectible.usb"
   },
   {
-    "id": "trash-bags",
+    "id": "homeless-tutorial",
     "type": "obstacle",
     "action": "jump",
     "x": 656,
-    "y": 577,
-    "width": 84,
-    "height": 62,
-    "label": "TRASH BAGS",
-    "artSlot": "obstacle.trash",
+    "y": 573.5,
+    "width": 95,
+    "height": 90,
+    "label": "HOMELESS",
+    "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 67,
-      "height": 56,
+      "width": 85,
+      "height": 60,
       "offsetX": 0,
-      "offsetY": 3
+      "offsetY": 6.5
     }
   },
   {
-    "id": "low-sign",
+    "id": "stinky-cloud-tutorial",
     "type": "obstacle",
     "action": "duck",
     "x": 1015,
-    "y": 520,
-    "width": 150,
-    "height": 30,
-    "label": "LOW SIGN",
-    "artSlot": "obstacle.lowSign",
+    "y": 530,
+    "width": 170,
+    "height": 113,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
     "hitbox": {
-      "width": 131,
-      "height": 31,
+      "width": 148,
+      "height": 25,
       "offsetX": 0,
-      "offsetY": -0.5
+      "offsetY": -2
     }
   },
   {
