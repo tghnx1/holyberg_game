@@ -5,7 +5,7 @@ import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { AudioTrackPlayer } from '../rhythm/AudioTrackPlayer';
 import { readInputOffsetMs } from '../rhythm/Calibration';
-import { HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RhythmDepth, SPAWN_AHEAD_SECONDS } from '../rhythm/constants';
+import { HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RHYTHM_SCORE_CAP, RhythmDepth, SPAWN_AHEAD_SECONDS } from '../rhythm/constants';
 import { HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y, PAD_BOTTOM_Y } from '../rhythm/constants';
 import { CompletionGate, shouldCompleteTrack } from '../rhythm/CompletionSystem';
 import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../rhythm/InputPenaltySystem';
@@ -33,6 +33,7 @@ import { parseTrackMetadata } from '../rhythm/TrackLoader';
 import { MAIN_RHYTHM_TRACK } from '../rhythm/TrackRegistry';
 import type { Judgement, Lane, RhythmChart, ScoreState } from '../rhythm/types';
 import type { RhythmPlaybackWindow } from '../rhythm/RhythmPlaybackWindow';
+import type { LevelCompleteSceneData } from './LevelCompleteScene';
 
 export class RhythmScene extends Phaser.Scene {
   private berlinScore = 0;
@@ -654,7 +655,22 @@ export class RhythmScene extends Phaser.Scene {
       overlay.destroy(true);
       if (this.activeOverlay === overlay) this.activeOverlay = undefined;
       // Level 3 carries the Berlin and rhythm totals through to the result.
-      this.scene.start('BossScene', { rhythmResult: { ...this.scoreState, berlinScore: this.berlinScore, accuracy: calculateAccuracy(this.scoreState), success: true } });
+      this.scene.start('LevelCompleteScene', {
+        score: this.scoreState.score,
+        maxScore: RHYTHM_SCORE_CAP,
+        retryScene: 'RhythmScene',
+        // Preserves the already-earned Berlin score; resets only the rhythm run.
+        retryData: { score: this.berlinScore },
+        continueScene: 'BossScene',
+        continueData: {
+          rhythmResult: {
+            ...this.scoreState,
+            berlinScore: this.berlinScore,
+            accuracy: calculateAccuracy(this.scoreState),
+            success: true,
+          },
+        },
+      } satisfies LevelCompleteSceneData);
     });
   }
 

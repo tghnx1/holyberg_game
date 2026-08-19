@@ -14,6 +14,7 @@ import {
   GROUND_SEGMENTS,
 } from '../level/berlin/berlinLevelConfig';
 import { applyCollectibleReward } from '../level/berlin/berlinRules';
+import { getBerlinMaxScore } from '../level/berlin/berlinMaxScore';
 import { canAcceptTutorialJumpInput, resolveIntroStart } from '../level/berlin/controlsTutorial';
 import {
   isCollectible,
@@ -37,6 +38,7 @@ import { HudSystem } from '../systems/HudSystem';
 // editor is dropped from a production bundle rather than shipped as dead code.
 import type { LayerDebugSystem } from '../systems/LayerDebugSystem';
 import type { LevelEditorSystem } from '../systems/LevelEditorSystem';
+import type { LevelCompleteSceneData } from './LevelCompleteScene';
 import { SectionTracker } from '../systems/SectionTracker';
 import type { BerlinProgress } from '../types/game';
 
@@ -74,8 +76,14 @@ export class BerlinScene extends Phaser.Scene {
   private pendingActivations: PendingActivation[] = [];
   private culling!: CullingSystem;
   private tutorial!: ControlsTutorialSystem;
-  private readonly scoreSystem = new BerlinScoreSystem();
-  private readonly sections = new SectionTracker();
+  /**
+   * Reassigned fresh in `create()`, not a field initializer: initializers run
+   * once when the Scene object is constructed, not on every `scene.start`, so
+   * a stale instance here would carry the previous attempt's breakdown/index
+   * into a retry and double-count or suppress clean-section bonuses.
+   */
+  private scoreSystem!: BerlinScoreSystem;
+  private sections!: SectionTracker;
   private layerDebug?: LayerDebugSystem;
   private editor?: LevelEditorSystem;
   private editorKey?: Phaser.Input.Keyboard.Key;
@@ -88,6 +96,8 @@ export class BerlinScene extends Phaser.Scene {
 
   create(): void {
     this.progress = { state: 'intro', seconds: START_TIME, score: 0, hasUsb: false };
+    this.scoreSystem = new BerlinScoreSystem();
+    this.sections = new SectionTracker();
     this.finishTriggered = false;
     this.trainsStarted = false;
     this.inputSuspended = false;
@@ -370,10 +380,16 @@ export class BerlinScene extends Phaser.Scene {
       1800,
     );
     this.time.delayedCall(2200, () => {
-      this.scene.start('DialogueScene', {
-        scriptId: 'metro-magician',
-        payload: { score: this.progress.score },
-      });
+      this.scene.start('LevelCompleteScene', {
+        score: this.progress.score,
+        maxScore: getBerlinMaxScore(),
+        retryScene: 'BerlinScene',
+        continueScene: 'DialogueScene',
+        continueData: {
+          scriptId: 'metro-magician',
+          payload: { score: this.progress.score },
+        },
+      } satisfies LevelCompleteSceneData);
     });
   }
 
