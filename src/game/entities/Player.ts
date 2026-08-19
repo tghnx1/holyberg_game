@@ -159,14 +159,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // which reads stale for one frame right after a crouch/stand toggle
     // (the body only resyncs on Phaser's next automatic preUpdate).
     const targetFrameKey = this.resolveVisualFrameKey(now);
-    const visualScale = this.crouched ? ATMOS_VISUAL_SCALE * 0.64 : ATMOS_VISUAL_SCALE;
     this.visual.x = this.x;
-    this.visual.y = this.y + this.getVisualFootOffset(targetFrameKey, visualScale);
+    this.visual.y = this.y + this.getVisualFootOffset(targetFrameKey, ATMOS_VISUAL_SCALE);
     if (targetFrameKey !== this.currentVisualFrameKey) {
       this.visual.setTexture(targetFrameKey);
       this.currentVisualFrameKey = targetFrameKey;
     }
-    this.visual.setScale(1, visualScale);
+    this.visual.setScale(ATMOS_VISUAL_SCALE);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);
   }
