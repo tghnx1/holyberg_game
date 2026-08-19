@@ -22,10 +22,10 @@
     "label": "HOMELESS",
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 69.5,
-      "height": 48,
+      "width": 52.1,
+      "height": 36.0,
       "offsetX": 0,
-      "offsetY": 10
+      "offsetY": 16.0
     }
   },
   {
@@ -357,10 +357,10 @@
     "height": 181,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 120,
+      "width": 102.0,
+      "height": 90.0,
       "offsetX": 0,
-      "offsetY": 13
+      "offsetY": 28.0
     }
   },
   {
@@ -374,10 +374,10 @@
     "height": 130,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 125,
-      "height": 87,
+      "width": 93.8,
+      "height": 65.2,
       "offsetX": 0,
-      "offsetY": 9
+      "offsetY": 19.9
     }
   },
   {
@@ -391,10 +391,10 @@
     "height": 181,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 120,
+      "width": 102.0,
+      "height": 90.0,
       "offsetX": 0,
-      "offsetY": 13
+      "offsetY": 28.0
     }
   },
   {
@@ -408,10 +408,10 @@
     "height": 149,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 148,
-      "height": 99,
+      "width": 111.0,
+      "height": 74.2,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.4
     }
   },
   {
@@ -425,10 +425,10 @@
     "height": 148,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 140,
-      "height": 99,
+      "width": 105.0,
+      "height": 74.2,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.4
     }
   },
   {
@@ -476,10 +476,10 @@
     "height": 147,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 98,
+      "width": 102.0,
+      "height": 73.5,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.2
     }
   },
   {
@@ -493,10 +493,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -510,10 +510,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -527,10 +527,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -544,10 +544,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -561,10 +561,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -578,10 +578,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -595,10 +595,10 @@
     "height": 93,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 85,
-      "height": 62,
+      "width": 63.8,
+      "height": 46.5,
       "offsetX": 0,
-      "offsetY": 7
+      "offsetY": 14.8
     }
   },
   {
@@ -612,10 +612,10 @@
     "height": 107,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 105,
-      "height": 71,
+      "width": 78.8,
+      "height": 53.2,
       "offsetX": 0,
-      "offsetY": 8
+      "offsetY": 16.9
     }
   },
   {
@@ -697,10 +697,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -714,10 +714,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -731,10 +731,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -748,10 +748,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -765,10 +765,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -782,10 +782,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -799,10 +799,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
@@ -816,10 +816,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 136,
-      "height": 96,
+      "width": 102.0,
+      "height": 72.0,
       "offsetX": 0,
-      "offsetY": 11
+      "offsetY": 23.0
     }
   },
   {
