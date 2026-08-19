@@ -34,9 +34,12 @@ type AtmosFrameKey =
   | (typeof ATMOS_JUMP_FRAME_KEYS)[number];
 const ATMOS_VISUAL_SCALE = 0.8;
 const ATMOS_RUN_FRAME_DURATION_MS = 92;
-/** Frames 1-4 play out over the ascent; the last one holds through the apex. */
+/** Frames 1-4 are the airborne poses; the last one holds through the fall. */
 const ATMOS_JUMP_FRAME_DURATION_MS = 70;
 const ATMOS_JUMP_ASCENT_FRAME_COUNT = 4;
+/** Frame 5 is the landing pose, shown only once the feet are back down. */
+const ATMOS_JUMP_LANDING_FRAME_KEY = ATMOS_JUMP_FRAME_KEYS[4];
+const ATMOS_JUMP_LANDING_DURATION_MS = 120;
 /**
  * Transparent padding under the drawn feet in each source PNG, so the visual
  * sits on the same line as the (invisible) physics body's feet.
@@ -76,6 +79,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private currentVisualFrameKey?: string;
   /** When the current airborne pose started, so jump frames play in order. */
   private jumpAnimStartedAt = -Infinity;
+  /** Holds the landing pose for a beat after the feet touch down. */
+  private landingAnimUntil = -Infinity;
+  private wasGrounded = true;
 
   constructor(scene: Phaser.Scene, x: number) {
     super(scene, x, GROUND_Y, 'dj');
@@ -139,6 +145,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             : 'fall';
     // Restart the jump frames on every impulse, including the second one.
     if (jumpedThisFrame) this.jumpAnimStartedAt = now;
+    // Touching down starts the landing pose; jumping again cuts it short.
+    if (grounded && !this.wasGrounded) this.landingAnimUntil = now + ATMOS_JUMP_LANDING_DURATION_MS;
+    if (jumpedThisFrame) this.landingAnimUntil = -Infinity;
+    this.wasGrounded = grounded;
     this.rotation = this.crouched ? 0 : Math.sin(now / 80) * 0.025;
     this.syncVisual(now);
   }
@@ -164,17 +174,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private resolveVisualFrameKey(now: number): AtmosFrameKey {
     switch (this.animationState) {
       case 'run':
-        return ATMOS_RUN_FRAME_KEYS[
-          Math.floor(now / ATMOS_RUN_FRAME_DURATION_MS) % ATMOS_RUN_FRAME_KEYS.length
-        ];
+        return now < this.landingAnimUntil
+          ? ATMOS_JUMP_LANDING_FRAME_KEY
+          : ATMOS_RUN_FRAME_KEYS[
+            Math.floor(now / ATMOS_RUN_FRAME_DURATION_MS) % ATMOS_RUN_FRAME_KEYS.length
+          ];
       case 'jump':
       case 'doubleJump':
       case 'fall': {
         const step = Math.floor((now - this.jumpAnimStartedAt) / ATMOS_JUMP_FRAME_DURATION_MS);
-        // Ascending walks frames 1-4; once falling the pose holds on the last
-        // frame so the apex and the descent read as one continuous motion.
+        // Ascending walks frames 1-4; the fall holds on frame 4. Frame 5 is
+        // the landing pose and never plays while the player is still airborne.
         const index = this.animationState === 'fall'
-          ? Math.min(ATMOS_JUMP_FRAME_KEYS.length - 1, Math.max(ATMOS_JUMP_ASCENT_FRAME_COUNT - 1, step))
+          ? ATMOS_JUMP_ASCENT_FRAME_COUNT - 1
           : Math.min(ATMOS_JUMP_ASCENT_FRAME_COUNT - 1, Math.max(0, step));
         return ATMOS_JUMP_FRAME_KEYS[index];
       }
