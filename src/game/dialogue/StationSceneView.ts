@@ -1,25 +1,35 @@
 import Phaser from 'phaser';
 import { ATMOS_RUN_STATIC_FRAME_KEY, ATMOS_VISUAL_SCALE, getAtmosFootOffset } from '../entities/atmosFrames';
+import { computeCoverFit } from './dialogueLayoutMetrics';
 
 /**
  * The left-hand panel: Atmos waiting on a metro platform when a green cloud
  * rolls in and the Magician steps out of it.
  *
  * Built from textures BootScene already loads plus primitives, so this scene
- * adds no new assets.
+ * adds no new assets. All the environment art is laid out once against the
+ * panel's first-layout size (its "reference" box); `resize()` then uniformly
+ * covers whatever the panel's current size is, so the composition and the
+ * cloud/arrival animation never have to be rebuilt or reset.
  */
 export class StationSceneView {
   readonly root: Phaser.GameObjects.Container;
+  /** Everything drawn at reference-box coordinates; scaled to cover by resize(). */
+  private readonly content: Phaser.GameObjects.Container;
   private readonly cloud: Phaser.GameObjects.Graphics;
   private readonly magicianShape: Phaser.GameObjects.Container;
   private readonly mask: Phaser.GameObjects.Graphics;
+  private readonly referenceWidth: number;
+  private readonly referenceHeight: number;
   private readonly platformY: number;
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly width: number,
-    private readonly height: number,
+    width: number,
+    height: number,
   ) {
+    this.referenceWidth = width;
+    this.referenceHeight = height;
     this.platformY = height * 0.82;
     const children: Phaser.GameObjects.GameObject[] = [];
 
@@ -44,60 +54,61 @@ export class StationSceneView {
       children.push(train);
     }
 
-    children.push(...this.buildPlatform());
-    children.push(this.buildHero());
+    children.push(...this.buildPlatform(width, height));
+    children.push(this.buildHero(width));
 
     this.cloud = scene.add.graphics();
-    this.magicianShape = this.buildMagicianSilhouette();
+    this.magicianShape = this.buildMagicianSilhouette(width);
     children.push(this.cloud, this.magicianShape);
 
-    this.root = scene.add.container(0, 0, children);
+    this.content = scene.add.container(0, 0, children);
+    this.root = scene.add.container(0, 0, [this.content]);
     this.mask = scene.make.graphics({}, false);
-    this.mask.fillStyle(0xffffff).fillRect(0, 0, width, height);
     this.root.setMask(this.mask.createGeometryMask());
+    this.resize(width, height);
   }
 
-  private buildPlatform(): Phaser.GameObjects.GameObject[] {
+  private buildPlatform(width: number, height: number): Phaser.GameObjects.GameObject[] {
     const platform = this.scene.add
-      .rectangle(0, this.platformY, this.width, this.height - this.platformY, 0x1c1230)
+      .rectangle(0, this.platformY, width, height - this.platformY, 0x1c1230)
       .setOrigin(0, 0);
     const edge = this.scene.add
-      .rectangle(0, this.platformY, this.width, 6, 0xffdf57, 0.75)
+      .rectangle(0, this.platformY, width, 6, 0xffdf57, 0.75)
       .setOrigin(0, 0);
     const pillars: Phaser.GameObjects.GameObject[] = [];
     for (let index = 0; index < 3; index += 1) {
       pillars.push(
         this.scene.add
-          .rectangle(60 + index * (this.width / 3), this.platformY, 26, -this.height * 0.5, 0x150e24)
+          .rectangle(60 + index * (width / 3), this.platformY, 26, -height * 0.5, 0x150e24)
           .setOrigin(0.5, 1)
           .setAlpha(0.9),
       );
     }
     // Cold platform lighting, so the green cloud reads as foreign.
     const lamp = this.scene.add
-      .rectangle(this.width * 0.24, this.platformY - this.height * 0.42, 90, 10, 0x9fd8ff, 0.5)
+      .rectangle(width * 0.24, this.platformY - height * 0.42, 90, 10, 0x9fd8ff, 0.5)
       .setOrigin(0.5);
     return [platform, edge, ...pillars, lamp];
   }
 
   /** Atmos, using the same shared frame and floor alignment as the levels. */
-  private buildHero(): Phaser.GameObjects.GameObject {
+  private buildHero(width: number): Phaser.GameObjects.GameObject {
     const key = this.scene.textures.exists(ATMOS_RUN_STATIC_FRAME_KEY)
       ? ATMOS_RUN_STATIC_FRAME_KEY
       : undefined;
     if (!key) {
       return this.scene.add
-        .rectangle(this.width * 0.3, this.platformY, 60, 150, 0xffc74e)
+        .rectangle(width * 0.3, this.platformY, 60, 150, 0xffc74e)
         .setOrigin(0.5, 1);
     }
     return this.scene.add
-      .sprite(this.width * 0.3, this.platformY + getAtmosFootOffset(key), key)
+      .sprite(width * 0.3, this.platformY + getAtmosFootOffset(key), key)
       .setOrigin(0.5, 1)
       .setScale(ATMOS_VISUAL_SCALE * 0.9);
   }
 
-  private buildMagicianSilhouette(): Phaser.GameObjects.Container {
-    const x = this.width * 0.68;
+  private buildMagicianSilhouette(width: number): Phaser.GameObjects.Container {
+    const x = width * 0.68;
     const robe = this.scene.add
       .triangle(0, 0, 0, 0, -66, -150, 66, -150, 0x0f2a1c)
       .setStrokeStyle(3, 0x7cff9b, 0.85);
@@ -110,6 +121,17 @@ export class StationSceneView {
       .container(x, this.platformY, [robe, head, hat, eyes])
       .setAlpha(0)
       .setScale(1, 0.2);
+  }
+
+  /**
+   * Refits the environment to a new panel size by covering it with the
+   * reference-box composition (uniform scale, centred, cropping overflow
+   * rather than leaving gaps) and repositions the mask to match.
+   */
+  resize(width: number, height: number): void {
+    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width, height);
+    const fit = computeCoverFit(this.referenceWidth, this.referenceHeight, width, height);
+    this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
   }
 
   /**
@@ -141,11 +163,17 @@ export class StationSceneView {
     this.cloudProgress = progress;
   }
 
-  /** Keeps the cloud roiling for as long as the dialogue is on screen. */
+  /**
+   * Keeps the cloud roiling for as long as the dialogue is on screen, and
+   * keeps the mask tracking the panel's current on-screen position (a
+   * GeometryMask follows its own graphics object, not the container it
+   * masks, so this has to run every frame the panel moves).
+   */
   update(nowMs: number): void {
+    this.mask.setPosition(this.root.x, this.root.y);
     this.cloud.clear();
     if (this.cloudProgress <= 0) return;
-    const centerX = this.width * 0.68;
+    const centerX = this.referenceWidth * 0.68;
     const centerY = this.platformY - 70;
     const scale = this.cloudProgress;
     for (let index = 0; index < 11; index += 1) {

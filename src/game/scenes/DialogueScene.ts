@@ -1,6 +1,11 @@
 import Phaser from 'phaser';
 import { DialogueDepth, DialogueLayout, DialoguePalette } from '../dialogue/dialogueConstants';
 import { DialoguePanels } from '../dialogue/DialoguePanels';
+import {
+  buildDiagonalStripPoints,
+  computeDialogueLayout,
+  type DialogueLayoutMetrics,
+} from '../dialogue/dialogueLayoutMetrics';
 import { getDialogueScript, METRO_MAGICIAN_DIALOGUE } from '../dialogue/dialogueScripts';
 import {
   DIALOGUE_TIMING,
@@ -14,6 +19,7 @@ import { StationSceneView } from '../dialogue/StationSceneView';
 import type { DialogueScript } from '../dialogue/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import type { ViewportInfo } from '../responsive/ViewportInfo';
 
 export interface DialogueSceneData {
   /** Id from dialogueScripts; defaults to the metro/Magician dialogue. */
@@ -26,12 +32,16 @@ type DialoguePhase = 'slidingIn' | 'typing' | 'holding' | 'glitching' | 'sliding
 
 /**
  * Inter-level dialogue, in the Hotline Miami presentation style: black bars top
- * and bottom, the scene on the left, a big talking portrait on the right, all
- * four sliding into place at once.
+ * and bottom, the scene on the left, a big talking portrait on the right
+ * split by a diagonal seam, all four sliding into place at once.
  *
  * Content lives in `dialogue/dialogueScripts.ts` and pacing in
  * `dialogue/dialogueTiming.ts`, so adding another dialogue needs no changes
- * here beyond passing a different `scriptId`.
+ * here beyond passing a different `scriptId`. Panel geometry lives in
+ * `dialogue/dialogueLayoutMetrics.ts`, which this scene recomputes from
+ * `this.cameras.main` every time `OrientationController` reports a layout
+ * change, the same responsive pattern Berlin and Rhythm use — none of the
+ * dialogue timing/typewriter/skip logic depends on layout at all.
  */
 export class DialogueScene extends Phaser.Scene {
   private script!: DialogueScript;
@@ -39,11 +49,18 @@ export class DialogueScene extends Phaser.Scene {
   private panels!: DialoguePanels;
   private stationScene?: StationSceneView;
   private portrait?: MagicianPortrait;
+  private topBarShape!: Phaser.GameObjects.Rectangle;
+  private topBarTitle!: Phaser.GameObjects.Text;
+  private topBarContainer!: Phaser.GameObjects.Container;
+  private bottomBarShape!: Phaser.GameObjects.Rectangle;
+  private bottomBarContainer!: Phaser.GameObjects.Container;
+  private divider!: Phaser.GameObjects.Graphics;
   private speakerText!: Phaser.GameObjects.Text;
   private bodyText!: Phaser.GameObjects.Text;
   private glitchOverlay!: Phaser.GameObjects.Rectangle;
   private skipHint!: Phaser.GameObjects.Text;
   private skipFill!: Phaser.GameObjects.Rectangle;
+  private layout!: DialogueLayoutMetrics;
   private lineIndex = 0;
   private phase: DialoguePhase = 'slidingIn';
   private phaseStartedAt = 0;
@@ -65,31 +82,32 @@ export class DialogueScene extends Phaser.Scene {
   }
 
   create(): void {
-    new OrientationController(this);
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#000000');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
 
-    const { width, height } = this.cameras.main;
-    const bodyTop = DialogueLayout.topBarHeight;
-    const bodyHeight = height - DialogueLayout.topBarHeight - DialogueLayout.bottomBarHeight;
-    const sceneWidth = Math.round(width * DialogueLayout.scenePanelWidthRatio);
-    const portraitWidth = width - sceneWidth;
-
+    this.layout = computeDialogueLayout(this.cameras.main.width, this.cameras.main.height);
     this.panels = new DialoguePanels(this);
-    this.buildScenePanel(sceneWidth, bodyHeight, bodyTop);
-    this.buildPortraitPanel(portraitWidth, bodyHeight, sceneWidth, bodyTop);
-    this.buildTopBar(width);
-    this.buildBottomBar(width, height);
+    this.buildTopBar();
+    this.buildBottomBar();
+    this.buildScenePanel();
+    this.buildPortraitPanel();
+    this.buildDivider();
 
     this.glitchOverlay = this.add
-      .rectangle(0, 0, width, height, DialoguePalette.glitch)
+      .rectangle(0, 0, this.layout.width, this.layout.height, DialoguePalette.glitch)
       .setOrigin(0, 0)
       .setDepth(DialogueDepth.GLITCH)
       .setAlpha(0);
 
-    this.buildSkipHint(width, height);
+    this.buildSkipHint();
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    // Built with OrientationController last, matching Berlin/Rhythm: it fires
+    // an immediate onLayout pass, then one on every later viewport change.
+    new OrientationController(this, {
+      onLayout: (viewport) => this.applyResponsiveLayout(viewport),
+    });
 
     this.panels.slideIn(() => {
       this.stationScene?.playArrival();
@@ -97,61 +115,101 @@ export class DialogueScene extends Phaser.Scene {
     });
   }
 
-  private buildScenePanel(width: number, height: number, top: number): void {
+  private buildScenePanel(): void {
+    const { x, y, width, height } = this.layout.scenePanel;
     this.stationScene = new StationSceneView(this, width, height);
     this.stationScene.root.setDepth(DialogueDepth.SCENE);
-    this.panels.add({
-      target: this.stationScene.root,
-      restX: 0,
-      restY: top,
+    this.panels.add('scene', this.stationScene.root, {
+      restX: x,
+      restY: y,
       // Enters from the left, entirely off-screen.
       offX: -width,
-      offY: top,
+      offY: y,
     });
   }
 
-  private buildPortraitPanel(width: number, height: number, left: number, top: number): void {
+  private buildPortraitPanel(): void {
+    const { x, y, width, height } = this.layout.portraitPanel;
     this.portrait = new MagicianPortrait(this, width, height);
     this.portrait.root.setDepth(DialogueDepth.PORTRAIT);
-    this.panels.add({
-      target: this.portrait.root,
-      restX: left,
-      restY: top,
+    this.panels.add('portrait', this.portrait.root, {
+      restX: x,
+      restY: y,
       // Enters from the right.
-      offX: this.cameras.main.width,
-      offY: top,
+      offX: this.layout.width,
+      offY: y,
     });
   }
 
-  private buildTopBar(width: number): void {
-    const bar = this.add
-      .rectangle(0, 0, width, DialogueLayout.topBarHeight, DialoguePalette.bar)
-      .setOrigin(0, 0);
-    const title = this.add
-      .text(DialogueLayout.textPaddingX, DialogueLayout.topBarHeight / 2, 'BERLIN — UNDERGROUND', {
+  /** Strong diagonal seam that rides in with the portrait panel. */
+  private buildDivider(): void {
+    this.divider = this.add.graphics().setDepth(DialogueDepth.DIVIDER);
+    this.redrawDivider();
+    const { x, y } = this.layout.portraitPanel;
+    this.panels.add('divider', this.divider, {
+      restX: x,
+      restY: y,
+      offX: this.layout.width,
+      offY: y,
+    });
+  }
+
+  private redrawDivider(): void {
+    const bodyHeight = this.layout.scenePanel.height;
+    this.divider.clear();
+    this.divider.fillStyle(DialoguePalette.dividerCore, 0.94);
+    this.divider.fillPoints(
+      this.toPoints(
+        buildDiagonalStripPoints(DialogueLayout.dividerThickness, DialogueLayout.dividerSkew, bodyHeight),
+      ),
+      true,
+    );
+    this.divider.fillStyle(DialoguePalette.dividerAccent, 0.85);
+    this.divider.fillPoints(
+      this.toPoints(
+        buildDiagonalStripPoints(
+          DialogueLayout.dividerThickness * 0.22,
+          DialogueLayout.dividerSkew,
+          bodyHeight,
+        ),
+      ),
+      true,
+    );
+  }
+
+  private toPoints(flat: readonly number[]): Phaser.Geom.Point[] {
+    const points: Phaser.Geom.Point[] = [];
+    for (let index = 0; index < flat.length; index += 2) {
+      points.push(new Phaser.Geom.Point(flat[index], flat[index + 1]));
+    }
+    return points;
+  }
+
+  private buildTopBar(): void {
+    const { width, height } = this.layout.topBar;
+    this.topBarShape = this.add.rectangle(0, 0, width, height, DialoguePalette.bar).setOrigin(0, 0);
+    this.topBarTitle = this.add
+      .text(DialogueLayout.textPaddingX, height / 2, 'BERLIN — UNDERGROUND', {
         fontFamily: 'Archivo Black',
         fontSize: '30px',
         color: '#ffdf57',
       })
       .setOrigin(0, 0.5);
-    const container = this.add
-      .container(0, 0, [bar, title])
+    this.topBarContainer = this.add
+      .container(0, 0, [this.topBarShape, this.topBarTitle])
       .setDepth(DialogueDepth.BARS);
-    this.panels.add({
-      target: container,
+    this.panels.add('topBar', this.topBarContainer, {
       restX: 0,
       restY: 0,
       offX: 0,
       // Enters from the top.
-      offY: -DialogueLayout.topBarHeight,
+      offY: -height,
     });
   }
 
-  private buildBottomBar(width: number, height: number): void {
-    const top = height - DialogueLayout.bottomBarHeight;
-    const bar = this.add
-      .rectangle(0, 0, width, DialogueLayout.bottomBarHeight, DialoguePalette.bar)
-      .setOrigin(0, 0);
+  private buildBottomBar(): void {
+    const { width, height } = this.layout.bottomBar;
+    this.bottomBarShape = this.add.rectangle(0, 0, width, height, DialoguePalette.bar).setOrigin(0, 0);
     this.speakerText = this.add
       .text(DialogueLayout.textPaddingX, DialogueLayout.speakerOffsetY, this.script.speaker, {
         fontFamily: 'Archivo Black',
@@ -162,25 +220,25 @@ export class DialogueScene extends Phaser.Scene {
     this.bodyText = this.add
       .text(DialogueLayout.textPaddingX, DialogueLayout.textOffsetY, '', {
         fontFamily: 'Archivo Black',
-        fontSize: '34px',
+        fontSize: '26px',
         color: DialoguePalette.text,
-        lineSpacing: 6,
+        lineSpacing: 5,
       })
       .setOrigin(0, 0);
-    const container = this.add
-      .container(0, top, [bar, this.speakerText, this.bodyText])
+    this.bottomBarContainer = this.add
+      .container(0, this.layout.bottomBar.y, [this.bottomBarShape, this.speakerText, this.bodyText])
       .setDepth(DialogueDepth.BARS);
-    this.panels.add({
-      target: container,
+    this.panels.add('bottomBar', this.bottomBarContainer, {
       restX: 0,
-      restY: top,
+      restY: this.layout.bottomBar.y,
       offX: 0,
       // Enters from the bottom.
-      offY: height,
+      offY: this.layout.height,
     });
   }
 
-  private buildSkipHint(width: number, height: number): void {
+  private buildSkipHint(): void {
+    const { width, height } = this.layout;
     this.skipHint = this.add
       .text(width - DialogueLayout.textPaddingX, height - 26, 'HOLD SPACE TO SKIP', {
         fontFamily: 'Space Mono',
@@ -194,6 +252,76 @@ export class DialogueScene extends Phaser.Scene {
       .rectangle(width - DialogueLayout.textPaddingX, height - 20, 0, 3, 0xffdf57)
       .setOrigin(1, 0)
       .setDepth(DialogueDepth.SKIP);
+  }
+
+  /**
+   * Recomputes every panel's geometry and reapplies it. Dialogue timing,
+   * progression and skip behaviour are untouched — this only ever repositions
+   * and resizes what is already on screen.
+   */
+  private applyResponsiveLayout(viewport: ViewportInfo): void {
+    const layout = computeDialogueLayout(this.cameras.main.width, this.cameras.main.height);
+    this.layout = layout;
+
+    this.topBarShape.setSize(layout.topBar.width, layout.topBar.height);
+    this.panels.updateGeometry('topBar', {
+      restX: 0,
+      restY: 0,
+      offX: 0,
+      offY: -layout.topBar.height,
+    });
+
+    this.bottomBarShape.setSize(layout.bottomBar.width, layout.bottomBar.height);
+    this.panels.updateGeometry('bottomBar', {
+      restX: 0,
+      restY: layout.bottomBar.y,
+      offX: 0,
+      offY: layout.height,
+    });
+
+    this.stationScene?.resize(layout.scenePanel.width, layout.scenePanel.height);
+    this.panels.updateGeometry('scene', {
+      restX: layout.scenePanel.x,
+      restY: layout.scenePanel.y,
+      offX: -layout.scenePanel.width,
+      offY: layout.scenePanel.y,
+    });
+
+    this.portrait?.resize(layout.portraitPanel.width, layout.portraitPanel.height);
+    this.panels.updateGeometry('portrait', {
+      restX: layout.portraitPanel.x,
+      restY: layout.portraitPanel.y,
+      offX: layout.width,
+      offY: layout.portraitPanel.y,
+    });
+
+    this.redrawDivider();
+    this.panels.updateGeometry('divider', {
+      restX: layout.portraitPanel.x,
+      restY: layout.portraitPanel.y,
+      offX: layout.width,
+      offY: layout.portraitPanel.y,
+    });
+
+    this.glitchOverlay.setSize(layout.width, layout.height);
+    this.repositionSkipHint(layout, viewport);
+    this.applyTextScale(viewport);
+  }
+
+  private repositionSkipHint(layout: DialogueLayoutMetrics, viewport: ViewportInfo): void {
+    const x = layout.width - DialogueLayout.textPaddingX;
+    this.skipHint.setPosition(x, layout.height - 26).setScale(viewport.hudScale);
+    this.skipFill.setPosition(x, layout.height - 20);
+    // The width itself tracks SPACE-hold progress each frame in updateSkip();
+    // only the anchor moves here, and only while the hint is still showing.
+    if (!this.skipHint.visible) this.skipFill.width = 0;
+  }
+
+  /** Matches the responsive scaling convention other HUDs use (viewport.hudScale). */
+  private applyTextScale(viewport: ViewportInfo): void {
+    this.speakerText.setScale(viewport.hudScale);
+    this.bodyText.setScale(viewport.hudScale);
+    this.topBarTitle.setScale(viewport.hudScale);
   }
 
   private startLine(index: number): void {
@@ -267,10 +395,11 @@ export class DialogueScene extends Phaser.Scene {
       alpha: 0,
       duration: DIALOGUE_TIMING.glitchMs,
     });
-    this.bodyText.setX(DialogueLayout.textPaddingX + 10);
+    const baseX = DialogueLayout.textPaddingX;
+    this.bodyText.setX(baseX + 10);
     this.tweens.add({
       targets: this.bodyText,
-      x: DialogueLayout.textPaddingX,
+      x: baseX,
       duration: DIALOGUE_TIMING.glitchMs,
     });
   }

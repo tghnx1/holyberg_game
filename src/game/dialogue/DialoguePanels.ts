@@ -1,36 +1,60 @@
 import Phaser from 'phaser';
 import { DIALOGUE_TIMING } from './dialogueTiming';
 
-export interface SlidingPanel {
-  target: Phaser.GameObjects.Container;
-  /** Where the panel rests once it has slid in. */
+export type DialoguePanelId = 'topBar' | 'bottomBar' | 'scene' | 'portrait' | 'divider';
+
+export interface PanelGeometry {
   restX: number;
   restY: number;
-  /** Where it sits off-screen, before sliding in and after sliding out. */
   offX: number;
   offY: number;
 }
 
+interface SlidingPanel extends PanelGeometry {
+  target: Phaser.GameObjects.Container | Phaser.GameObjects.Graphics;
+}
+
 /**
- * Drives the four panels of the composition as one unit.
+ * Drives every panel of the composition as one unit, keyed by id so a resize
+ * can update each panel's geometry independently of the slide animation.
  *
- * All four move together — top bar from the top, bottom bar from the bottom,
- * scene from the left, portrait from the right — and there is deliberately no
- * fade: the panels are opaque and simply arrive.
+ * All panels move together — top bar from the top, bottom bar from the
+ * bottom, scene from the left, portrait (and the divider riding with it)
+ * from the right — and there is deliberately no fade: panels are opaque and
+ * simply arrive.
  */
 export class DialoguePanels {
-  private readonly panels: SlidingPanel[] = [];
+  private readonly panels = new Map<DialoguePanelId, SlidingPanel>();
+  /** Whether panels are currently resting at their `rest` position or their `off` one. */
+  private state: 'off' | 'in' = 'off';
 
   constructor(private readonly scene: Phaser.Scene) {}
 
-  add(panel: SlidingPanel): void {
-    panel.target.setPosition(panel.offX, panel.offY);
-    this.panels.push(panel);
+  add(
+    id: DialoguePanelId,
+    target: Phaser.GameObjects.Container | Phaser.GameObjects.Graphics,
+    geometry: PanelGeometry,
+  ): void {
+    const panel: SlidingPanel = { target, ...geometry };
+    this.panels.set(id, panel);
+    target.setPosition(geometry.offX, geometry.offY);
   }
 
-  /** Snaps every panel off-screen without animating. */
-  reset(): void {
-    for (const panel of this.panels) panel.target.setPosition(panel.offX, panel.offY);
+  /**
+   * Updates a panel's rest/off geometry after a viewport change and snaps it
+   * to wherever the composition currently is. Dialogue only progresses while
+   * panels are static, so a resize is always a snap, never a new slide.
+   */
+  updateGeometry(id: DialoguePanelId, geometry: PanelGeometry): void {
+    const panel = this.panels.get(id);
+    if (!panel) return;
+    panel.restX = geometry.restX;
+    panel.restY = geometry.restY;
+    panel.offX = geometry.offX;
+    panel.offY = geometry.offY;
+    this.scene.tweens.killTweensOf(panel.target);
+    const atRest = this.state === 'in';
+    panel.target.setPosition(atRest ? panel.restX : panel.offX, atRest ? panel.restY : panel.offY);
   }
 
   slideIn(onComplete?: () => void): void {
@@ -38,16 +62,21 @@ export class DialoguePanels {
   }
 
   slideOut(onComplete?: () => void): void {
+    // Treated as off immediately: a resize mid-exit should land on the
+    // off-screen geometry rather than pop back to resting mid-flight.
+    this.state = 'off';
     this.slide('out', onComplete);
   }
 
   private slide(direction: 'in' | 'out', onComplete?: () => void): void {
-    let remaining = this.panels.length;
+    const panels = [...this.panels.values()];
+    let remaining = panels.length;
     if (remaining === 0) {
+      if (direction === 'in') this.state = 'in';
       onComplete?.();
       return;
     }
-    for (const panel of this.panels) {
+    for (const panel of panels) {
       this.scene.tweens.add({
         targets: panel.target,
         x: direction === 'in' ? panel.restX : panel.offX,
@@ -57,7 +86,10 @@ export class DialoguePanels {
         ease: direction === 'in' ? 'Quint.easeOut' : 'Quint.easeIn',
         onComplete: () => {
           remaining -= 1;
-          if (remaining === 0) onComplete?.();
+          if (remaining === 0) {
+            if (direction === 'in') this.state = 'in';
+            onComplete?.();
+          }
         },
       });
     }
