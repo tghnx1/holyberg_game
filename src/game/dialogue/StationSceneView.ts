@@ -99,6 +99,7 @@ export class StationSceneView {
     if (this.background) children.push(this.background);
 
     this.train = this.buildTrain();
+    this.recomputeTrainDeparture();
     children.push(this.train);
 
     this.foreground = this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.foreground)
@@ -151,7 +152,6 @@ export class StationSceneView {
     const key = DIALOGUE_STATION_TEXTURE_KEYS.train;
     const image = this.scene.add.image(0, 0, key).setOrigin(0.5, 1);
     this.applyRestTransform(image, this.layout.train, this.nativeHeightOf(key, CHARACTER_CANVAS_HEIGHT));
-    this.recomputeTrainDeparture();
     return image;
   }
 
