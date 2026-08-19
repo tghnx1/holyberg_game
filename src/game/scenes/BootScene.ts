@@ -16,6 +16,10 @@ import {
   ATMOS_RUN_FRAME_KEYS,
 } from '../entities/Player';
 import { getDialogueStationAssetUrls } from '../dialogue/stationAssets';
+import {
+  createObstacleAnimations,
+  getObstacleAnimationAssetUrls,
+} from '../level/berlin/obstacleAnimations';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -81,9 +85,13 @@ export class BootScene extends Phaser.Scene {
     for (const asset of getDialogueStationAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
+    for (const asset of getObstacleAnimationAssetUrls()) {
+      this.load.image(asset.key, asset.url);
+    }
   }
 
   create(): void {
+    createObstacleAnimations(this);
     const graphics = this.make.graphics({ x: 0, y: 0 }, false);
     graphics.fillStyle(0x17101f).fillRoundedRect(0, 0, 80, 98, 18);
     graphics.fillStyle(0xff713c).fillCircle(40, 26, 21);

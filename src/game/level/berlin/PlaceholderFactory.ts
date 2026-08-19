@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Depth } from '../../constants';
-import { textureForSlot } from './ArtSlotRegistry';
+import { animationForSlot, textureForSlot } from './ArtSlotRegistry';
 import { getPlatformSupportLayout, getPlatformVisualLayout } from './platformVisualLayout';
 import type { BerlinEntity } from './types';
 
@@ -25,11 +25,14 @@ export class PlaceholderFactory {
         ? getPlatformVisualLayout(entity)
         : undefined;
     const texture = platformLayout?.textureKey ?? textureForSlot(this.scene, entity.artSlot);
+    const animKey = entity.type === 'obstacle' ? animationForSlot(this.scene, entity.artSlot) : undefined;
     const color = entity.type === 'obstacle' ? colors[entity.action] : colors[entity.type];
     const body = platformLayout
       ? this.scene.add
           .image(platformLayout.imageX, platformLayout.imageY, platformLayout.textureKey)
           .setScale(platformLayout.scaleX, platformLayout.scaleY)
+      : animKey
+        ? this.scene.add.sprite(0, 0, this.scene.anims.get(animKey).frames[0].textureKey).play(animKey).setDisplaySize(entity.width, entity.height)
       : texture
         ? this.scene.add.image(0, 0, texture).setDisplaySize(entity.width, entity.height)
       : this.scene.add
@@ -78,8 +81,14 @@ export class PlaceholderFactory {
         supportLayer.add(this.createSupports(updated, layout));
         return;
       }
+      // Sprite must come before Image: Sprite is not an Image subclass, but
+      // both expose setDisplaySize, so a stable Sprite (animated obstacles)
+      // resizes exactly like a static Image one does.
       if (body instanceof Phaser.GameObjects.Rectangle) body.setSize(updated.width, updated.height);
-      else if (body instanceof Phaser.GameObjects.Image)
+      else if (
+        body instanceof Phaser.GameObjects.Sprite ||
+        body instanceof Phaser.GameObjects.Image
+      )
         body.setDisplaySize(updated.width, updated.height);
     });
     this.layer.add(container);

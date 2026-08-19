@@ -649,5 +649,73 @@
     "height": 48,
     "score": 400,
     "artSlot": "collectible.vinyl"
+  },
+  {
+    "id": "homeless-1",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 1900,
+    "y": 573.5,
+    "width": 95,
+    "height": 90,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 85,
+      "height": 60,
+      "offsetX": 0,
+      "offsetY": 6.5
+    }
+  },
+  {
+    "id": "stinky-cloud-1",
+    "type": "obstacle",
+    "action": "duck",
+    "label": "STINKY CLOUD",
+    "x": 3680,
+    "y": 530,
+    "width": 170,
+    "height": 113,
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 25,
+      "offsetX": 0,
+      "offsetY": -2
+    }
+  },
+  {
+    "id": "stinky-cloud-2",
+    "type": "obstacle",
+    "action": "duck",
+    "label": "STINKY CLOUD",
+    "x": 6800,
+    "y": 530,
+    "width": 170,
+    "height": 113,
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 25,
+      "offsetX": 0,
+      "offsetY": -2
+    }
+  },
+  {
+    "id": "homeless-2",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 10900,
+    "y": 573.5,
+    "width": 95,
+    "height": 90,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 85,
+      "height": 60,
+      "offsetX": 0,
+      "offsetY": 6.5
+    }
   }
 ]
