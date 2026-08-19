@@ -1,7 +1,27 @@
 {
-  "background": { "xRatio": -0.0911, "yRatio": 0, "heightRatio": 1 },
-  "train": { "xRatio": 0.5, "yRatio": 0.7857, "heightRatio": 0.5 },
-  "foreground": { "xRatio": -0.0911, "yRatio": 0, "heightRatio": 1 },
-  "atmos": { "xRatio": 0.24, "yRatio": 0.9083, "heightRatio": 0.4 },
-  "disus": { "xRatio": 0.68, "yRatio": 0.9256, "heightRatio": 0.4 }
+  "background": {
+    "xRatio": -0.0911,
+    "yRatio": 0,
+    "heightRatio": 1
+  },
+  "train": {
+    "xRatio": 0.17007997751568735,
+    "yRatio": 1.2003060024877443,
+    "heightRatio": 1.4374773757208004
+  },
+  "foreground": {
+    "xRatio": -0.08988576921520201,
+    "yRatio": 1.340646671245472e-16,
+    "heightRatio": 1
+  },
+  "atmos": {
+    "xRatio": 0.5566615462736102,
+    "yRatio": 0.7580851677531841,
+    "heightRatio": 0.32878967065955095
+  },
+  "disus": {
+    "xRatio": 0.33804551525115306,
+    "yRatio": 0.7533837939355124,
+    "heightRatio": 0.5137022081472579
+  }
 }

@@ -15,51 +15,35 @@
     "id": "homeless-tutorial",
     "type": "obstacle",
     "action": "jump",
-    "x": 656,
-    "y": 573.5,
-    "width": 95,
-    "height": 90,
+    "x": 630,
+    "y": 557,
+    "width": 155,
+    "height": 145,
     "label": "HOMELESS",
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 85,
-      "height": 60,
+      "width": 69.5,
+      "height": 48.0,
       "offsetX": 0,
-      "offsetY": 6.5
+      "offsetY": 10
     }
   },
   {
     "id": "stinky-cloud-tutorial",
     "type": "obstacle",
     "action": "duck",
-    "x": 1015,
-    "y": 530,
+    "x": 1011,
+    "y": 522,
     "width": 170,
-    "height": 113,
+    "height": 306,
     "label": "STINKY CLOUD",
     "artSlot": "obstacle.stinkyCloud",
     "hitbox": {
       "width": 148,
-      "height": 25,
+      "height": 68,
       "offsetX": 0,
-      "offsetY": -2
+      "offsetY": -5
     }
-  },
-  {
-    "id": "early-moving-platform-1",
-    "type": "movingPlatform",
-    "label": "EARLY-MOVING-PLATFORM-1",
-    "x": 2188,
-    "y": 440,
-    "width": 265,
-    "height": 19,
-    "topY": 431,
-    "axis": "vertical",
-    "movementDistance": 60,
-    "durationMs": 2700,
-    "phaseMs": 0,
-    "artSlot": "platform.early-moving-platform-1",
-    "editorSized": true
   },
   {
     "id": "early-moving-platform-2",
@@ -82,67 +66,12 @@
     "type": "collectible",
     "kind": "headphones",
     "label": "HEADPHONES",
-    "x": 3850,
-    "y": 490,
+    "x": 3704,
+    "y": 580,
     "width": 54,
     "height": 54,
     "score": 200,
     "artSlot": "collectible.headphones"
-  },
-  {
-    "id": "scooter",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 3450,
-    "y": 582.5,
-    "width": 100,
-    "height": 55,
-    "label": "SCOOTER",
-    "artSlot": "obstacle.scooter",
-    "hitbox": {
-      "width": 80,
-      "height": 50,
-      "offsetX": 0,
-      "offsetY": 2.5
-    }
-  },
-  {
-    "id": "cyclist-1",
-    "type": "obstacle",
-    "action": "moving",
-    "label": "CYCLIST",
-    "x": 4239,
-    "y": 569,
-    "width": 105,
-    "height": 78,
-    "hitbox": {
-      "width": 96,
-      "height": 72,
-      "offsetX": 0,
-      "offsetY": 3
-    },
-    "movement": {
-      "distance": 80,
-      "durationMs": 2600
-    },
-    "artSlot": "npc.cyclist"
-  },
-  {
-    "id": "street-barrier",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 4750,
-    "y": 576,
-    "width": 105,
-    "height": 68,
-    "label": "BARRIER",
-    "artSlot": "obstacle.barrier",
-    "hitbox": {
-      "width": 84,
-      "height": 61,
-      "offsetX": 0,
-      "offsetY": 3.5
-    }
   },
   {
     "id": "poster",
@@ -157,61 +86,6 @@
     "artSlot": "collectible.poster"
   },
   {
-    "id": "bridge-cable",
-    "type": "obstacle",
-    "action": "duck",
-    "x": 5204,
-    "y": 533,
-    "width": 160,
-    "height": 25,
-    "label": "BRIDGE CABLE",
-    "artSlot": "obstacle.cable",
-    "hitbox": {
-      "width": 141,
-      "height": 29,
-      "offsetX": 0,
-      "offsetY": -2
-    }
-  },
-  {
-    "id": "bridge-crate",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 5600,
-    "y": 580,
-    "width": 90,
-    "height": 60,
-    "label": "CRATE",
-    "artSlot": "obstacle.trash",
-    "hitbox": {
-      "width": 72,
-      "height": 54,
-      "offsetX": 0,
-      "offsetY": 3
-    }
-  },
-  {
-    "id": "wanderer-1",
-    "type": "obstacle",
-    "action": "moving",
-    "label": "NIGHT WANDERER",
-    "x": 6150,
-    "y": 560,
-    "width": 70,
-    "height": 100,
-    "hitbox": {
-      "width": 61,
-      "height": 94,
-      "offsetX": 0,
-      "offsetY": 3
-    },
-    "movement": {
-      "distance": 70,
-      "durationMs": 2800
-    },
-    "artSlot": "npc.wanderer"
-  },
-  {
     "id": "night-bonus",
     "type": "collectible",
     "kind": "energy",
@@ -224,23 +98,6 @@
     "artSlot": "collectible.energy"
   },
   {
-    "id": "puddle",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 7050,
-    "y": 591,
-    "width": 130,
-    "height": 38,
-    "label": "PUDDLE",
-    "artSlot": "obstacle.puddle",
-    "hitbox": {
-      "width": 104,
-      "height": 34,
-      "offsetX": 0,
-      "offsetY": 2
-    }
-  },
-  {
     "id": "platform-1",
     "type": "platform",
     "label": "PLATFORM-1",
@@ -251,57 +108,6 @@
     "topY": 490,
     "artSlot": "platform.platform-1",
     "editorSized": true
-  },
-  {
-    "id": "night-pipe",
-    "type": "obstacle",
-    "action": "duck",
-    "x": 8100,
-    "y": 534,
-    "width": 160,
-    "height": 30,
-    "label": "LOW PIPE",
-    "artSlot": "obstacle.pipe",
-    "hitbox": {
-      "width": 139,
-      "height": 31,
-      "offsetX": 0,
-      "offsetY": -0.5
-    }
-  },
-  {
-    "id": "taxi",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 8400,
-    "y": 569,
-    "width": 175,
-    "height": 82,
-    "label": "TAXI",
-    "artSlot": "obstacle.taxi",
-    "hitbox": {
-      "width": 140,
-      "height": 74,
-      "offsetX": 0,
-      "offsetY": 4
-    }
-  },
-  {
-    "id": "scaffold-barrier",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 8750,
-    "y": 574,
-    "width": 115,
-    "height": 72,
-    "label": "BARRIER",
-    "artSlot": "obstacle.barrier",
-    "hitbox": {
-      "width": 92,
-      "height": 65,
-      "offsetX": 0,
-      "offsetY": 3.5
-    }
   },
   {
     "id": "platform-2",
@@ -338,61 +144,6 @@
     "height": 48,
     "score": 400,
     "artSlot": "collectible.vinyl"
-  },
-  {
-    "id": "cyclist-2",
-    "type": "obstacle",
-    "action": "moving",
-    "label": "CYCLIST",
-    "x": 9846,
-    "y": 568,
-    "width": 105,
-    "height": 78,
-    "hitbox": {
-      "width": 96,
-      "height": 72,
-      "offsetX": 0,
-      "offsetY": 3
-    },
-    "movement": {
-      "distance": 70,
-      "durationMs": 2900
-    },
-    "artSlot": "npc.cyclist"
-  },
-  {
-    "id": "rooftop-cable",
-    "type": "obstacle",
-    "action": "duck",
-    "x": 10600,
-    "y": 535.5,
-    "width": 160,
-    "height": 25,
-    "label": "ROOFTOP CABLE",
-    "artSlot": "obstacle.cable",
-    "hitbox": {
-      "width": 141,
-      "height": 29,
-      "offsetX": 0,
-      "offsetY": -2
-    }
-  },
-  {
-    "id": "rooftop-crate",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 11100,
-    "y": 577.5,
-    "width": 100,
-    "height": 65,
-    "label": "ROOFTOP CRATE",
-    "artSlot": "obstacle.trash",
-    "hitbox": {
-      "width": 80,
-      "height": 59,
-      "offsetX": 0,
-      "offsetY": 3
-    }
   },
   {
     "id": "platform-5",
@@ -500,61 +251,6 @@
     "editorSized": true
   },
   {
-    "id": "final-barrier",
-    "type": "obstacle",
-    "action": "jump",
-    "x": 13915,
-    "y": 574,
-    "width": 115,
-    "height": 72,
-    "label": "BARRIER",
-    "artSlot": "obstacle.barrier",
-    "hitbox": {
-      "width": 92,
-      "height": 65,
-      "offsetX": 0,
-      "offsetY": 3.5
-    }
-  },
-  {
-    "id": "club-awning",
-    "type": "obstacle",
-    "action": "duck",
-    "x": 14400,
-    "y": 536,
-    "width": 160,
-    "height": 28,
-    "label": "CLUB AWNING",
-    "artSlot": "obstacle.lowSign",
-    "hitbox": {
-      "width": 139,
-      "height": 29,
-      "offsetX": 0,
-      "offsetY": -0.5
-    }
-  },
-  {
-    "id": "final-wanderer",
-    "type": "obstacle",
-    "action": "moving",
-    "label": "NIGHT WANDERER",
-    "x": 14800,
-    "y": 560,
-    "width": 70,
-    "height": 100,
-    "hitbox": {
-      "width": 61,
-      "height": 94,
-      "offsetX": 0,
-      "offsetY": 3
-    },
-    "movement": {
-      "distance": 60,
-      "durationMs": 3000
-    },
-    "artSlot": "npc.wanderer"
-  },
-  {
     "id": "club-pass",
     "type": "collectible",
     "kind": "pass",
@@ -655,8 +351,8 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 1887,
-    "y": 540,
+    "x": 1886,
+    "y": 542,
     "width": 152,
     "height": 181,
     "artSlot": "obstacle.homeless",
@@ -668,54 +364,547 @@
     }
   },
   {
-    "id": "stinky-cloud-1",
-    "type": "obstacle",
-    "action": "duck",
-    "label": "STINKY CLOUD",
-    "x": 3680,
-    "y": 530,
-    "width": 170,
-    "height": 113,
-    "artSlot": "obstacle.stinkyCloud",
-    "hitbox": {
-      "width": 148,
-      "height": 25,
-      "offsetX": 0,
-      "offsetY": -2
-    }
-  },
-  {
-    "id": "stinky-cloud-2",
-    "type": "obstacle",
-    "action": "duck",
-    "label": "STINKY CLOUD",
-    "x": 6800,
-    "y": 530,
-    "width": 170,
-    "height": 113,
-    "artSlot": "obstacle.stinkyCloud",
-    "hitbox": {
-      "width": 148,
-      "height": 25,
-      "offsetX": 0,
-      "offsetY": -2
-    }
-  },
-  {
     "id": "homeless-2",
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 10900,
-    "y": 573.5,
+    "x": 10919,
+    "y": 565,
+    "width": 140,
+    "height": 130,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 125,
+      "height": 87,
+      "offsetX": 0,
+      "offsetY": 9
+    }
+  },
+  {
+    "id": "homeless-1-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 3423,
+    "y": 534,
+    "width": 152,
+    "height": 181,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 120,
+      "offsetX": 0,
+      "offsetY": 13
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 4168,
+    "y": 554,
+    "width": 165,
+    "height": 149,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 148,
+      "height": 99,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 4900,
+    "y": 555,
+    "width": 156,
+    "height": 148,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 140,
+      "height": 99,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 3703,
+    "y": 518,
+    "width": 170,
+    "height": 306,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 68,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-copy",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 5203,
+    "y": 525,
+    "width": 170,
+    "height": 306,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 68,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 6083,
+    "y": 560,
+    "width": 152,
+    "height": 147,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 98,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7053,
+    "y": 551,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 8418,
+    "y": 547,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 8743,
+    "y": 546,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 9907,
+    "y": 549,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 9971,
+    "y": 560,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-copy-copy-copy-14",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 9837,
+    "y": 560,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-2-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 13854,
+    "y": 571,
     "width": 95,
-    "height": 90,
+    "height": 93,
     "artSlot": "obstacle.homeless",
     "hitbox": {
       "width": 85,
-      "height": 60,
+      "height": 62,
       "offsetX": 0,
-      "offsetY": 6.5
+      "offsetY": 7
+    }
+  },
+  {
+    "id": "homeless-2-copy-copy-copy",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 14788,
+    "y": 562,
+    "width": 117,
+    "height": 107,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 105,
+      "height": 71,
+      "offsetX": 0,
+      "offsetY": 8
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 6786,
+    "y": 521,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 10603,
+    "y": 524,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-copy",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 14407,
+    "y": 527,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-2",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 8097,
+    "y": 525,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-2",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7053,
+    "y": 520,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-3",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7049,
+    "y": 488,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-4",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7051,
+    "y": 459,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-5",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7131,
+    "y": 561,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-6",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7130,
+    "y": 523,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-7",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 6977,
+    "y": 566,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-8",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7117,
+    "y": 495,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "homeless-1-copy-copy-copy-copy-copy-copy-copy-9",
+    "type": "obstacle",
+    "action": "jump",
+    "label": "HOMELESS",
+    "x": 7213,
+    "y": 557,
+    "width": 152,
+    "height": 144,
+    "artSlot": "obstacle.homeless",
+    "hitbox": {
+      "width": 136,
+      "height": 96,
+      "offsetX": 0,
+      "offsetY": 11
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-3",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 7160,
+    "y": 459,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-4",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 7208,
+    "y": 517,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-4-copy",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 7248,
+    "y": 557,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-4-copy-5",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 7322,
+    "y": 597,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
+    }
+  },
+  {
+    "id": "stinky-cloud-tutorial-copy-2-copy-4-copy-6",
+    "type": "obstacle",
+    "action": "duck",
+    "x": 7085,
+    "y": 428,
+    "width": 170,
+    "height": 313,
+    "label": "STINKY CLOUD",
+    "artSlot": "obstacle.stinkyCloud",
+    "hitbox": {
+      "width": 148,
+      "height": 70,
+      "offsetX": 0,
+      "offsetY": -5
     }
   }
 ]
