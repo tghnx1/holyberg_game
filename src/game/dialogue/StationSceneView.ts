@@ -1,5 +1,13 @@
 import Phaser from 'phaser';
+import type { EditableObject, EditableTransform } from '../systems/SceneEditor';
 import { computeCoverFit } from './dialogueLayoutMetrics';
+import {
+  DEFAULT_STATION_LAYOUT,
+  resolveStationTransform,
+  toStationObjectLayout,
+  type DialogueStationLayoutConfig,
+  type StationObjectKey,
+} from './dialogueStationLayout';
 import {
   ATMOS_SIT_METRO_KEY,
   DISUS_APPEAR_FRAME_KEYS,
@@ -15,11 +23,7 @@ const DEPART_DURATION_MS = 2200;
 const DISUS_TRIGGER_PROGRESS = 0.82;
 /** Within the requested 80-100ms/frame window. */
 const DISUS_FRAME_DURATION_MS = 90;
-/** Vertical nudge for the train, relative to the shared floor line. Negative moves it up. */
-const TRAIN_Y_OFFSET = -40;
 
-/** Fraction of the reference panel height a seated/standing figure renders at. */
-const CHARACTER_HEIGHT_RATIO = 0.4;
 /** Native canvas size shared by every Atmos/Disus dialogue frame. */
 const CHARACTER_CANVAS_HEIGHT = 184;
 
@@ -40,7 +44,9 @@ const DISUS_APPEAR_FOOT_GAPS: Record<(typeof DISUS_APPEAR_FRAME_KEYS)[number], n
   'disus-appear-9': 15,
 };
 const DISUS_STAY_FOOT_GAP = 21;
-const ATMOS_SIT_FOOT_GAP = 13;
+
+/** background/foreground share the same source art, so 1px = 1px between the two. */
+const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
 
 /**
  * The left-hand panel for Dialogue 1: a metro platform where a train departs
@@ -49,64 +55,64 @@ const ATMOS_SIT_FOOT_GAP = 13;
  * Layers, back to front: background_metro, the train, first_plan_metro, then
  * the characters (Atmos seated, Disus once revealed) on top, so both stay
  * visible over the foreground art. Everything is laid out once against the
- * panel's first-layout ("reference") size; `resize()`
- * uniformly covers whatever the panel's current size is, so the departure/
- * appearance sequence never has to be rebuilt or reset mid-animation.
+ * panel's first-layout ("reference") size; `resize()` uniformly covers
+ * whatever the panel's current size is, so the departure/appearance sequence
+ * never has to be rebuilt or reset mid-animation.
+ *
+ * Every object's *rest pose* (position + scale) comes from
+ * `dialogueStationLayout.ts`/`dialogueStationLayout.json` rather than
+ * hardcoded numbers, and is editable at runtime via `getEditableObjects()`
+ * (see DialogueScene's dev-only SceneEditor wiring). Train departure and
+ * Disus's per-frame foot alignment are *derived* from that rest pose each
+ * time it changes, so editing it live can't desync the animations.
  */
 export class StationSceneView {
   readonly root: Phaser.GameObjects.Container;
   private readonly content: Phaser.GameObjects.Container;
+  private readonly background?: Phaser.GameObjects.Image;
   private readonly train: Phaser.GameObjects.Image;
+  private readonly foreground?: Phaser.GameObjects.Image;
+  private readonly atmos: Phaser.GameObjects.Image;
   private readonly disus: Phaser.GameObjects.Sprite;
   private readonly mask: Phaser.GameObjects.Graphics;
-  private readonly referenceWidth: number;
-  private readonly referenceHeight: number;
-  private readonly floorY: number;
-  private readonly trainRestX: number;
-  private readonly trainDepartX: number;
-  private readonly disusX: number;
-  private readonly characterScale: number;
+  private referenceWidth: number;
+  private referenceHeight: number;
+  /** Recomputed from the train's current rest transform on every edit. */
+  private trainDepartX = 0;
+  /** Recomputed from Disus's current (stay-pose) rest transform on every edit. */
+  private disusFloorY = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
     width: number,
     height: number,
+    private readonly layout: DialogueStationLayoutConfig = DEFAULT_STATION_LAYOUT,
   ) {
     this.referenceWidth = width;
     this.referenceHeight = height;
-    this.floorY = height * 0.88;
-    this.characterScale = (height * CHARACTER_HEIGHT_RATIO) / CHARACTER_CANVAS_HEIGHT;
 
     const children: Phaser.GameObjects.GameObject[] = [];
 
-    const backdropFit = this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.background)
-      ? this.buildBackdropLayer(DIALOGUE_STATION_TEXTURE_KEYS.background)
+    this.background = this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.background)
+      ? this.buildBackdropLayer(DIALOGUE_STATION_TEXTURE_KEYS.background, layout.background)
       : undefined;
-    if (backdropFit) children.push(backdropFit.image);
+    if (this.background) children.push(this.background);
 
     this.train = this.buildTrain();
-    this.trainRestX = width * 0.5;
-    const trainDisplayWidth = this.train.displayWidth;
-    this.trainDepartX = width + trainDisplayWidth;
-    this.train.setPosition(this.trainRestX, this.floorY + TRAIN_Y_OFFSET);
     children.push(this.train);
 
-    if (backdropFit && this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.foreground)) {
-      const foreground = scene.add
-        .image(0, 0, DIALOGUE_STATION_TEXTURE_KEYS.foreground)
-        .setOrigin(0, 0)
-        .setScale(backdropFit.scale)
-        .setPosition(backdropFit.offsetX, backdropFit.offsetY);
-      children.push(foreground);
-    }
+    this.foreground = this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.foreground)
+      ? this.buildBackdropLayer(DIALOGUE_STATION_TEXTURE_KEYS.foreground, layout.foreground)
+      : undefined;
+    if (this.foreground) children.push(this.foreground);
 
     // Characters go last so Atmos and Disus stay visible above first_plan_metro.
-    const atmos = this.buildAtmos();
-    this.disusX = width * 0.68;
-    children.push(atmos);
+    this.atmos = this.buildAtmos();
+    children.push(this.atmos);
 
     this.disus = this.buildDisus();
     children.push(this.disus);
+    this.recomputeDisusFloor();
 
     this.content = scene.add.container(0, 0, children);
     this.root = scene.add.container(0, 0, [this.content]);
@@ -119,55 +125,68 @@ export class StationSceneView {
     return this.scene.textures.exists(key);
   }
 
+  private nativeHeightOf(key: string, fallback: number): number {
+    return this.hasTexture(key) ? this.scene.textures.get(key).getSourceImage().height : fallback;
+  }
+
+  private applyRestTransform(
+    image: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite,
+    entry: import('./dialogueStationLayout').StationObjectLayout,
+    nativeHeight: number,
+  ): void {
+    const resolved = resolveStationTransform(entry, this.referenceWidth, this.referenceHeight, nativeHeight);
+    image.setPosition(resolved.x, resolved.y).setScale(resolved.scale);
+  }
+
   private buildBackdropLayer(
     key: string,
-  ): { image: Phaser.GameObjects.Image; scale: number; offsetX: number; offsetY: number } {
-    const source = this.scene.textures.get(key).getSourceImage();
-    const fit = computeCoverFit(source.width, source.height, this.referenceWidth, this.referenceHeight);
-    const image = this.scene.add
-      .image(0, 0, key)
-      .setOrigin(0, 0)
-      .setScale(fit.scale)
-      .setPosition(fit.offsetX, fit.offsetY);
-    return { image, ...fit };
+    entry: import('./dialogueStationLayout').StationObjectLayout,
+  ): Phaser.GameObjects.Image {
+    const image = this.scene.add.image(0, 0, key).setOrigin(0, 0);
+    this.applyRestTransform(image, entry, this.nativeHeightOf(key, BACKDROP_NATIVE_HEIGHT_FALLBACK));
+    return image;
   }
 
   private buildTrain(): Phaser.GameObjects.Image {
     const key = DIALOGUE_STATION_TEXTURE_KEYS.train;
-    const image = this.scene.add.image(0, 0, key).setOrigin(0.5, 1.25);
-    if (this.hasTexture(key)) {
-      const source = this.scene.textures.get(key).getSourceImage();
-      const targetHeight = this.referenceHeight * 0.5;
-      image.setScale(targetHeight / source.height);
-    }
+    const image = this.scene.add.image(0, 0, key).setOrigin(0.5, 1);
+    this.applyRestTransform(image, this.layout.train, this.nativeHeightOf(key, CHARACTER_CANVAS_HEIGHT));
+    this.recomputeTrainDeparture();
     return image;
   }
 
   /** Atmos, seated for the whole scene. */
   private buildAtmos(): Phaser.GameObjects.Image {
-    const x = this.referenceWidth * 0.24;
-    const key = ATMOS_SIT_METRO_KEY;
-    return this.scene.add
-      .image(x, this.floorY + ATMOS_SIT_FOOT_GAP * this.characterScale, key)
-      .setOrigin(0.5, 1)
-      .setScale(this.characterScale);
+    const image = this.scene.add.image(0, 0, ATMOS_SIT_METRO_KEY).setOrigin(0.5, 1);
+    this.applyRestTransform(image, this.layout.atmos, CHARACTER_CANVAS_HEIGHT);
+    return image;
   }
 
-  /** Disus, hidden until the appearing sequence starts. */
+  /** Disus, hidden until the appearing sequence starts. Rest pose is its `stay` pose. */
   private buildDisus(): Phaser.GameObjects.Sprite {
-    const firstKey = DISUS_APPEAR_FRAME_KEYS[0];
-    return this.scene.add
-      .sprite(this.disusX, this.floorForFrame(firstKey), firstKey)
+    const sprite = this.scene.add
+      .sprite(0, 0, DISUS_APPEAR_FRAME_KEYS[0])
       .setOrigin(0.5, 1)
-      .setScale(this.characterScale)
       .setVisible(false);
+    this.applyRestTransform(sprite, this.layout.disus, CHARACTER_CANVAS_HEIGHT);
+    return sprite;
+  }
+
+  /** Train's departure target follows its current rest position/scale, so editing it live stays correct. */
+  private recomputeTrainDeparture(): void {
+    this.trainDepartX = this.referenceWidth + this.train.displayWidth;
+  }
+
+  /** The floor line every Disus appear-frame's foot gap is measured from, derived from its stay pose. */
+  private recomputeDisusFloor(): void {
+    this.disusFloorY = this.disus.y - DISUS_STAY_FOOT_GAP * this.disus.scaleY;
   }
 
   private floorForFrame(
     key: (typeof DISUS_APPEAR_FRAME_KEYS)[number] | typeof DISUS_STAY_KEY,
   ): number {
     const gap = key === DISUS_STAY_KEY ? DISUS_STAY_FOOT_GAP : DISUS_APPEAR_FOOT_GAPS[key];
-    return this.floorY + gap * this.characterScale;
+    return this.disusFloorY + gap * this.disus.scaleY;
   }
 
   /**
@@ -225,6 +244,54 @@ export class StationSceneView {
       });
     };
     showFrame();
+  }
+
+  /**
+   * Registers this scene's five objects with the dev-only generic
+   * SceneEditor. Only meaningful in DEV builds; callers gate the import.
+   */
+  getEditableObjects(): EditableObject[] {
+    const entries: { id: StationObjectKey; label: string; target?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; nativeHeight: number; onChange?: (t: EditableTransform) => void }[] = [
+      { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
+      { id: 'train', label: 'train', target: this.train, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT), onChange: () => this.recomputeTrainDeparture() },
+      { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
+      { id: 'atmos', label: 'Atmos', target: this.atmos, nativeHeight: CHARACTER_CANVAS_HEIGHT },
+      { id: 'disus', label: 'Disus', target: this.disus, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeDisusFloor() },
+    ];
+    return entries
+      .filter((entry): entry is typeof entry & { target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite } => entry.target !== undefined)
+      .map((entry) => ({
+        id: entry.id,
+        target: entry.target,
+        label: entry.label,
+        getNativeSize: () => ({ width: entry.target.width, height: entry.nativeHeight }),
+        onChange: entry.onChange,
+      }));
+  }
+
+  /** Converts the editor's absolute-pixel snapshot back into the panel-relative ratio config it saves. */
+  buildLayoutFromSnapshot(
+    snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
+  ): DialogueStationLayoutConfig {
+    const heightById: Record<StationObjectKey, number> = {
+      background: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK),
+      train: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT),
+      foreground: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK),
+      atmos: CHARACTER_CANVAS_HEIGHT,
+      disus: CHARACTER_CANVAS_HEIGHT,
+    };
+    const next: DialogueStationLayoutConfig = structuredClone(this.layout);
+    for (const entry of snapshot) {
+      const id = entry.id as StationObjectKey;
+      if (!(id in heightById)) continue;
+      next[id] = toStationObjectLayout(
+        { x: entry.x, y: entry.y, scale: entry.scaleY },
+        this.referenceWidth,
+        this.referenceHeight,
+        heightById[id],
+      );
+    }
+    return next;
   }
 
   /** Keeps the mask tracking the panel's current on-screen position (a

@@ -18,6 +18,7 @@ import { MagicianPortrait } from '../dialogue/MagicianPortrait';
 import { StationSceneView } from '../dialogue/StationSceneView';
 import type { DialogueScript } from '../dialogue/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
+import type { SceneEditor } from '../systems/SceneEditor';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 
@@ -67,6 +68,9 @@ export class DialogueScene extends Phaser.Scene {
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private spaceHeldSince?: number;
   private finished = false;
+  /** Dev-only visual layout editor; never created outside `import.meta.env.DEV`. */
+  private editor?: SceneEditor;
+  private editorKey?: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super('DialogueScene');
@@ -117,6 +121,39 @@ export class DialogueScene extends Phaser.Scene {
       } else {
         this.startLine(0);
       }
+    });
+
+    void this.createDevelopmentTools();
+  }
+
+  /**
+   * Dev-only: lets `?scene=dialogue` (or any dialogue launch) open the same
+   * generic scene editor Berlin uses its own bespoke one for, registered
+   * against the station scene's five objects. Guarded so production bundles
+   * never include it, matching BerlinScene's `createDevelopmentTools`.
+   */
+  private async createDevelopmentTools(): Promise<void> {
+    if (!import.meta.env.DEV) return;
+    const { SceneEditor } = await import('../systems/SceneEditor');
+    const editor = new SceneEditor(this, {
+      onSave: (snapshot) => this.saveStationLayout(snapshot),
+    });
+    for (const object of this.stationScene?.getEditableObjects() ?? []) editor.register(object);
+    this.editor = editor;
+    this.editorKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+  }
+
+  private saveStationLayout(
+    snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
+  ): void {
+    if (!this.stationScene) return;
+    const layout = this.stationScene.buildLayoutFromSnapshot(snapshot);
+    void fetch('/__dialogue-editor/save-station', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(layout),
+    }).catch((error: unknown) => {
+      console.error('[DialogueScene] failed to save station layout', error);
     });
   }
 
@@ -349,6 +386,8 @@ export class DialogueScene extends Phaser.Scene {
     this.stationScene?.update();
     this.portrait?.update(now);
     this.updateSkip(now);
+    if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
+    this.editor?.update();
     if (this.finished) return;
 
     const elapsed = now - this.phaseStartedAt;
@@ -438,6 +477,8 @@ export class DialogueScene extends Phaser.Scene {
   private cleanup(): void {
     this.tweens.killAll();
     this.time.removeAllEvents();
+    this.editor?.destroy();
+    this.editor = undefined;
     this.stationScene?.destroy();
     this.portrait?.destroy();
     this.stationScene = undefined;

@@ -1,0 +1,7 @@
+{
+  "background": { "xRatio": -0.0911, "yRatio": 0, "heightRatio": 1 },
+  "train": { "xRatio": 0.5, "yRatio": 0.7857, "heightRatio": 0.5 },
+  "foreground": { "xRatio": -0.0911, "yRatio": 0, "heightRatio": 1 },
+  "atmos": { "xRatio": 0.24, "yRatio": 0.9083, "heightRatio": 0.4 },
+  "disus": { "xRatio": 0.68, "yRatio": 0.9256, "heightRatio": 0.4 }
+}
