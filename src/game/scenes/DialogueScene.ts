@@ -71,6 +71,10 @@ export class DialogueScene extends Phaser.Scene {
   /** Dev-only visual layout editor; never created outside `import.meta.env.DEV`. */
   private editor?: SceneEditor;
   private editorKey?: Phaser.Input.Keyboard.Key;
+  /** True while the SceneEditor is open; freezes dialogue progression, not the editor itself. */
+  private dialoguePaused = false;
+  /** this.time.now at the moment the editor opened, so resuming can shift phaseStartedAt by exactly how long it was open. */
+  private pausedAtNow?: number;
 
   constructor() {
     super('DialogueScene');
@@ -83,6 +87,8 @@ export class DialogueScene extends Phaser.Scene {
     this.phase = 'slidingIn';
     this.spaceHeldSince = undefined;
     this.finished = false;
+    this.dialoguePaused = false;
+    this.pausedAtNow = undefined;
   }
 
   create(): void {
@@ -137,10 +143,42 @@ export class DialogueScene extends Phaser.Scene {
     const { SceneEditor } = await import('../systems/SceneEditor');
     const editor = new SceneEditor(this, {
       onSave: (snapshot) => this.saveStationLayout(snapshot),
+      onEnable: () => this.pauseDialogue(),
+      onDisable: () => this.resumeDialogue(),
     });
     for (const object of this.stationScene?.getEditableObjects() ?? []) editor.register(object);
     this.editor = editor;
     this.editorKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+  }
+
+  /**
+   * Freezes every time-based thing the dialogue drives — tweens (train
+   * departure, glitch flashes, panel slides if mid-flight), delayed calls
+   * (the stationary pause before departure, Disus's frame-by-frame
+   * appearance), and this scene's own typewriter/hold/glitch state machine
+   * and skip-hold — while leaving SceneEditor's own pointer/keyboard-driven
+   * selection, drag, resize, nudge and save completely unaffected, since
+   * none of those read the scene clock.
+   */
+  private pauseDialogue(): void {
+    this.dialoguePaused = true;
+    this.pausedAtNow = this.time.now;
+    this.tweens.pauseAll();
+    this.time.paused = true;
+    // A skip-hold in progress when the editor opens shouldn't carry over.
+    this.spaceHeldSince = undefined;
+    this.skipFill.width = 0;
+  }
+
+  /** Resumes exactly where things left off; the paused duration never counts as elapsed dialogue time. */
+  private resumeDialogue(): void {
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    if (this.pausedAtNow !== undefined) {
+      this.phaseStartedAt += this.time.now - this.pausedAtNow;
+      this.pausedAtNow = undefined;
+    }
+    this.dialoguePaused = false;
   }
 
   private saveStationLayout(
@@ -384,10 +422,12 @@ export class DialogueScene extends Phaser.Scene {
   update(): void {
     const now = this.time.now;
     this.stationScene?.update();
-    this.portrait?.update(now);
-    this.updateSkip(now);
     if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
     this.editor?.update();
+    if (this.dialoguePaused) return;
+
+    this.portrait?.update(now);
+    this.updateSkip(now);
     if (this.finished) return;
 
     const elapsed = now - this.phaseStartedAt;
@@ -475,6 +515,9 @@ export class DialogueScene extends Phaser.Scene {
   }
 
   private cleanup(): void {
+    // Scene instances are reused across scene.start; a stale paused clock
+    // would otherwise freeze every timer on the next time this scene runs.
+    this.time.paused = false;
     this.tweens.killAll();
     this.time.removeAllEvents();
     this.editor?.destroy();

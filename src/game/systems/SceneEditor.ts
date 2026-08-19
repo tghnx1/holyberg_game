@@ -65,6 +65,17 @@ export interface SceneEditorOptions {
   onSave?: (snapshot: EditableSnapshot[]) => void;
   /** Camera the editor pans/zooms; omit to disable that behaviour. Defaults to scene.cameras.main. */
   camera?: Phaser.Cameras.Scene2D.Camera | null;
+  /**
+   * Called right after E turns the editor on/off. Scenes with their own time-
+   * based progression (tweens, delayed calls, a hand-rolled state machine
+   * driven by `scene.time.now`) can use these to pause/resume that
+   * progression while editing, so an object's own selection/drag/resize/
+   * nudge/save inside SceneEditor is never affected by the host scene being
+   * paused — those keep working purely off pointer/keyboard input, not the
+   * scene clock. See DialogueScene for a worked example.
+   */
+  onEnable?: () => void;
+  onDisable?: () => void;
 }
 
 const NUDGE_STEP = 1;
@@ -196,6 +207,8 @@ export class SceneEditor {
       this.drag = undefined;
       this.resize = undefined;
     }
+    if (this.enabled) this.options.onEnable?.();
+    else this.options.onDisable?.();
   }
 
   getSnapshot(): EditableSnapshot[] {
