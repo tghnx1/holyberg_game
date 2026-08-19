@@ -7,6 +7,11 @@ import {
   type ResizeBounds,
   type ResizeHandle,
 } from './levelEditorResize';
+import {
+  worldPointToParentLocal,
+  worldRectToParentLocal,
+  type AncestorTransform,
+} from './sceneEditorCoords';
 
 /**
  * Generic, reusable dev-only visual editor core.
@@ -222,6 +227,40 @@ export class SceneEditor {
     return { x: object.target.x, y: object.target.y, scaleX: object.target.scaleX, scaleY: object.target.scaleY };
   }
 
+  /**
+   * Walks `target`'s parentContainer chain (immediate parent first, root
+   * last) into the plain translate/scale records `sceneEditorCoords`'s pure
+   * math operates on. Every one of this editor's containers only translates
+   * and scales — never rotates — so that's all this chain carries.
+   */
+  private getAncestorChain(target: EditableTarget): AncestorTransform[] {
+    const chain: AncestorTransform[] = [];
+    let container = target.parentContainer;
+    while (container) {
+      chain.push({ x: container.x, y: container.y, scaleX: container.scaleX, scaleY: container.scaleY });
+      container = container.parentContainer;
+    }
+    return chain;
+  }
+
+  /**
+   * Converts a world-space point into the coordinate space of `target`'s own
+   * parent container — i.e. the same space `target.x`/`target.y` are already
+   * expressed in. Every drag/resize computation must go through this before
+   * touching a target's position, or mixing world bounds/pointer coordinates
+   * with a target's local x/y makes the object jump or fly away the moment
+   * its parent container is moved, scaled, or nested. With no parent
+   * container the two spaces coincide.
+   */
+  private worldToParentLocal(target: EditableTarget, worldX: number, worldY: number): { x: number; y: number } {
+    return worldPointToParentLocal(worldX, worldY, this.getAncestorChain(target));
+  }
+
+  /** Re-expresses a world-space AABB (from `target.getBounds()`) in `target`'s parent-local space. */
+  private worldBoundsToParentLocal(target: EditableTarget, bounds: Phaser.Geom.Rectangle): ResizeBounds {
+    return worldRectToParentLocal(bounds, this.getAncestorChain(target));
+  }
+
   private applyTransform(object: EditableObject, transform: EditableTransform): void {
     object.target.setPosition(transform.x, transform.y);
     object.target.setScale(transform.scaleX, transform.scaleY);
@@ -322,11 +361,10 @@ export class SceneEditor {
     const handleHit = this.hitTestHandle(pointer);
     if (handleHit) {
       const object = handleHit.object;
-      const bounds = object.target.getBounds();
       this.resize = {
         object,
         handle: handleHit.handle,
-        originalBounds: { left: bounds.left, right: bounds.right, top: bounds.top, bottom: bounds.bottom },
+        originalBounds: this.worldBoundsToParentLocal(object.target, object.target.getBounds()),
         before: this.transformOf(object),
       };
       return;
@@ -338,10 +376,11 @@ export class SceneEditor {
       return;
     }
     this.selectedId = object.id;
+    const local = this.worldToParentLocal(object.target, pointer.worldX, pointer.worldY);
     this.drag = {
       object,
-      offsetX: pointer.worldX - object.target.x,
-      offsetY: pointer.worldY - object.target.y,
+      offsetX: local.x - object.target.x,
+      offsetY: local.y - object.target.y,
       before: this.transformOf(object),
     };
   }
@@ -353,10 +392,11 @@ export class SceneEditor {
       return;
     }
     if (this.drag) {
+      const local = this.worldToParentLocal(this.drag.object.target, pointer.worldX, pointer.worldY);
       const transform = {
         ...this.transformOf(this.drag.object),
-        x: pointer.worldX - this.drag.offsetX,
-        y: pointer.worldY - this.drag.offsetY,
+        x: local.x - this.drag.offsetX,
+        y: local.y - this.drag.offsetY,
       };
       this.applyTransform(this.drag.object, transform);
     }
@@ -370,13 +410,8 @@ export class SceneEditor {
   private applyResize(state: ResizeState, pointer: Phaser.Input.Pointer): void {
     const { object, handle, originalBounds } = state;
     const preserveAspect = !object.allowNonUniformScale;
-    const newBounds = resizeBoundsFromPointer(
-      originalBounds,
-      handle,
-      { x: pointer.worldX, y: pointer.worldY },
-      MIN_SIZE,
-      preserveAspect,
-    );
+    const local = this.worldToParentLocal(object.target, pointer.worldX, pointer.worldY);
+    const newBounds = resizeBoundsFromPointer(originalBounds, handle, local, MIN_SIZE, preserveAspect);
     const originalSize = resizeBoundsSize(originalBounds);
     const newSize = resizeBoundsSize(newBounds);
     const native = object.getNativeSize();
