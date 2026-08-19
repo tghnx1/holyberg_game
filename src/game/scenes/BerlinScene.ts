@@ -384,11 +384,8 @@ export class BerlinScene extends Phaser.Scene {
         score: this.progress.score,
         maxScore: getBerlinMaxScore(),
         retryScene: 'BerlinScene',
-        continueScene: 'DialogueScene',
-        continueData: {
-          scriptId: 'metro-magician',
-          payload: { score: this.progress.score },
-        },
+        continueScene: 'RhythmScene',
+        continueData: { score: this.progress.score },
       } satisfies LevelCompleteSceneData);
     });
   }

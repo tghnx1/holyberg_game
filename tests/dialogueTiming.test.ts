@@ -75,8 +75,8 @@ describe('dialogue scripts', () => {
     ]);
   });
 
-  it('continues into Level 2 when it ends', () => {
-    expect(METRO_MAGICIAN_DIALOGUE.nextScene).toBe('RhythmScene');
+  it('continues into Level 1 when it ends', () => {
+    expect(METRO_MAGICIAN_DIALOGUE.nextScene).toBe('BerlinScene');
     expect(METRO_MAGICIAN_DIALOGUE.sceneId).toBe('metroStation');
     expect(METRO_MAGICIAN_DIALOGUE.portraitId).toBe('magician');
   });

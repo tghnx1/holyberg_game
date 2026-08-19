@@ -21,7 +21,7 @@ export const METRO_MAGICIAN_DIALOGUE: DialogueScript = {
     // The closing beat lands harder with a longer hold than its length earns.
     { text: 'PLACE.\nDATE.\nTIME.', holdMsOverride: 1400 },
   ],
-  nextScene: 'RhythmScene',
+  nextScene: 'BerlinScene',
 };
 
 export const DIALOGUE_SCRIPTS: Record<string, DialogueScript> = {

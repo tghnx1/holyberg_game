@@ -111,12 +111,12 @@ export class BootScene extends Phaser.Scene {
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
-      this.scene.start('DialogueScene', {
-        scriptId: 'metro-magician',
-        payload: { score: 500 },
-      });
+      this.scene.start('DialogueScene', { scriptId: 'metro-magician' });
       return;
     }
-    this.scene.start('BerlinScene');
+    // DialogueScene only ever plays before BerlinScene; from there the level
+    // sequence is BerlinScene -> LevelCompleteScene -> RhythmScene ->
+    // LevelCompleteScene -> BossScene -> ResultScene.
+    this.scene.start('DialogueScene', { scriptId: 'metro-magician' });
   }
 }
