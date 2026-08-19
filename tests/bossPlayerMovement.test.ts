@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BOSS_PLAYER } from '../src/game/boss/bossConfig';
 import {
   applyKnockback,
-  canDash,
   createBossPlayerMotion,
-  getDashCooldownProgress,
-  isDashing,
-  startDash,
   stepBossPlayer,
 } from '../src/game/boss/bossPlayerMovement';
 import type { ArenaBounds } from '../src/game/boss/types';
@@ -44,40 +40,8 @@ describe('boss player movement', () => {
     expect(right.motion.x).toBe(bounds.maxX);
   });
 
-  it('dashes faster than running, for the configured duration only', () => {
-    const dashing = startDash(createBossPlayerMotion(600), 1000, 1);
-    expect(isDashing(dashing, 1000)).toBe(true);
-    expect(isDashing(dashing, 1000 + BOSS_PLAYER.dashDurationMs)).toBe(false);
-
-    const stepped = stepBossPlayer(dashing, 16, 0, 1010, bounds);
-    // Travels at dash speed even with no input held.
-    expect(stepped.x - 600).toBeCloseTo((BOSS_PLAYER.dashSpeed * 16) / 1000);
-    expect(BOSS_PLAYER.dashSpeed).toBeGreaterThan(BOSS_PLAYER.moveSpeed);
-  });
-
-  it('enforces the dash cooldown', () => {
-    const motion = startDash(createBossPlayerMotion(600), 1000, 1);
-    expect(canDash(motion, 1050)).toBe(false);
-    const readyAt = 1000 + BOSS_PLAYER.dashDurationMs + BOSS_PLAYER.dashCooldownMs;
-    expect(canDash(motion, readyAt - 1)).toBe(false);
-    expect(canDash(motion, readyAt)).toBe(true);
-    expect(getDashCooldownProgress(motion, readyAt)).toBe(1);
-    expect(getDashCooldownProgress(motion, 1050)).toBeLessThan(1);
-
-    // A second dash request during cooldown is ignored, not queued.
-    expect(startDash(motion, 1050, -1)).toBe(motion);
-  });
-
-  it('dashes in the travel direction when no direction is held', () => {
-    const movingLeft = { ...createBossPlayerMotion(600), velocityX: -200 };
-    expect(startDash(movingLeft, 1000, 0).dashDirection).toBe(-1);
-    expect(startDash(createBossPlayerMotion(600), 1000, 0).dashDirection).toBe(1);
-  });
-
-  it('knocks the player away from the beam and cancels the dash', () => {
-    const dashing = startDash(createBossPlayerMotion(600), 1000, 1);
-    const knocked = applyKnockback(dashing, 1000, 700);
-    expect(isDashing(knocked, 1000)).toBe(false);
+  it('knocks the player away from the beam that hit them', () => {
+    const knocked = applyKnockback(createBossPlayerMotion(600), 1000, 700);
     expect(knocked.knockbackVelocityX).toBe(-BOSS_PLAYER.knockbackSpeed);
 
     const fromLeft = applyKnockback(createBossPlayerMotion(600), 1000, 500);

@@ -7,14 +7,13 @@
  *    recovery plus the phase gap, so at most one attack can damage the player
  *    at any instant and no combination can be unavoidable.
  * 2. Every attack is escapable. A `laserWall` always leaves exactly one full
- *    slot open, and a `sweepLaser` crosses the arena slower than the player
- *    runs, so it can always be outrun to the far side.
+ *    slot open, wide enough to stand in, and an `aimedLaser` locks its target
+ *    when the telegraph starts, so moving away always works.
  */
 import {
   ATTACK_SHAPES,
   ATTACK_TIMINGS,
   BOSS_PHASES,
-  BOSS_PLAYER,
   MINIMUM_TELEGRAPH_MS,
 } from './bossConfig';
 import { getAttackDurationMs } from './attackRuntime';
@@ -25,7 +24,6 @@ import type {
   BossAttackType,
   BossPhaseDefinition,
   ScheduledAttack,
-  SweepDirection,
 } from './types';
 
 /**
@@ -44,10 +42,6 @@ export function createRandom(seed: number): () => number {
 }
 
 export const getArenaWidth = (bounds: ArenaBounds): number => bounds.maxX - bounds.minX;
-
-/** How long a sweep needs to cross the arena at its configured speed. */
-export const getSweepTravelMs = (bounds: ArenaBounds, speedPxPerSecond: number): number =>
-  Math.round((getArenaWidth(bounds) / speedPxPerSecond) * 1000);
 
 /**
  * Splits the arena into `columnCount + 1` equal slots and opens exactly one of
@@ -86,35 +80,17 @@ function buildParams(
     // the moment the telegraph starts.
     return { type: 'aimedLaser', targetX: 0, halfWidth: ATTACK_SHAPES.aimedLaser.halfWidthPx };
   }
-  if (type === 'sweepLaser') {
-    const direction: SweepDirection = random() < 0.5 ? 'leftToRight' : 'rightToLeft';
-    return {
-      type: 'sweepLaser',
-      direction,
-      halfWidth: ATTACK_SHAPES.sweepLaser.halfWidthPx,
-      speed: ATTACK_SHAPES.sweepLaser.speedPxPerSecond,
-    };
-  }
   return buildLaserWall(bounds, random);
 }
 
-function buildTiming(
-  type: BossAttackType,
-  phase: BossPhaseDefinition,
-  bounds: ArenaBounds,
-): AttackTiming {
+function buildTiming(type: BossAttackType, phase: BossPhaseDefinition): AttackTiming {
   const base = ATTACK_TIMINGS[type];
   return {
     telegraphMs: Math.max(
       MINIMUM_TELEGRAPH_MS,
       Math.round(base.telegraphMs * phase.telegraphScale),
     ),
-    // A sweep is damaging for exactly as long as it takes to cross the arena,
-    // so its on-screen speed always matches ATTACK_SHAPES.sweepLaser.
-    activeMs:
-      type === 'sweepLaser'
-        ? getSweepTravelMs(bounds, ATTACK_SHAPES.sweepLaser.speedPxPerSecond)
-        : base.activeMs,
+    activeMs: base.activeMs,
     recoveryMs: base.recoveryMs,
   };
 }
@@ -147,7 +123,7 @@ export function buildFightPlan(
     cursorMs += phase.gapMs;
     for (;;) {
       const type = phase.pattern[patternIndex % phase.pattern.length];
-      const timing = buildTiming(type, phase, bounds);
+      const timing = buildTiming(type, phase);
       const attack: ScheduledAttack = {
         id,
         type,
@@ -181,9 +157,3 @@ export function getPhaseAt(
   }
   return phases[phases.length - 1];
 }
-
-/** True when a sweep can be outrun, i.e. the fight is fair by configuration. */
-export const isSweepOutrunnable = (
-  speedPxPerSecond = ATTACK_SHAPES.sweepLaser.speedPxPerSecond,
-  playerSpeed = BOSS_PLAYER.moveSpeed,
-): boolean => speedPxPerSecond < playerSpeed;

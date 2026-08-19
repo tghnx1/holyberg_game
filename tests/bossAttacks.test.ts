@@ -5,14 +5,13 @@ import {
   getAttackBeams,
   getAttackDurationMs,
   getAttackPhase,
-  getSweepCenterX,
+  getBeamPolygon,
   getTelegraphProgress,
   isAttackDamagingPlayer,
   isPlayerHitByBeams,
 } from '../src/game/boss/attackRuntime';
-import type { ArenaBounds, ScheduledAttack } from '../src/game/boss/types';
-
-const bounds: ArenaBounds = { minX: 70, maxX: 1210 };
+import { BOSS_ARENA } from '../src/game/boss/bossConfig';
+import type { ScheduledAttack } from '../src/game/boss/types';
 
 const aimed: ScheduledAttack = {
   id: 0,
@@ -45,9 +44,9 @@ describe('attack phases', () => {
 
   it('never damages the player outside the active window', () => {
     // Standing exactly in the beam the whole time.
-    expect(isAttackDamagingPlayer(aimed, 1400, bounds, 500, 22)).toBe(false);
-    expect(isAttackDamagingPlayer(aimed, 1850, bounds, 500, 22)).toBe(true);
-    expect(isAttackDamagingPlayer(aimed, 2100, bounds, 500, 22)).toBe(false);
+    expect(isAttackDamagingPlayer(aimed, 1400, 500, 22)).toBe(false);
+    expect(isAttackDamagingPlayer(aimed, 1850, 500, 22)).toBe(true);
+    expect(isAttackDamagingPlayer(aimed, 2100, 500, 22)).toBe(false);
   });
 });
 
@@ -62,32 +61,63 @@ describe('laser collision', () => {
   });
 
   it('telegraph geometry matches the beam that fires', () => {
-    const warning = getAttackBeams(aimed, 1400, bounds);
-    const live = getAttackBeams(aimed, 1850, bounds);
-    expect(warning).toEqual(live);
+    expect(getAttackBeams(aimed)).toEqual(getAttackBeams(aimed));
   });
 });
 
-describe('sweep geometry', () => {
-  it('travels edge to edge in the requested direction', () => {
-    expect(getSweepCenterX(bounds, 'leftToRight', 0)).toBe(70);
-    expect(getSweepCenterX(bounds, 'leftToRight', 1)).toBe(1210);
-    expect(getSweepCenterX(bounds, 'rightToLeft', 0)).toBe(1210);
-    expect(getSweepCenterX(bounds, 'rightToLeft', 1)).toBe(70);
-    expect(getSweepCenterX(bounds, 'leftToRight', 0.5)).toBe(640);
+describe('beam origin', () => {
+  const bossX = 640;
+
+  it('starts every beam at the boss muzzle, not in mid-air', () => {
+    const polygon = getBeamPolygon({ centerX: 200, halfWidth: 30 }, bossX);
+    const [leftX, leftY, rightX, rightY] = polygon.points;
+    expect(leftY).toBe(BOSS_ARENA.laserOriginY);
+    expect(rightY).toBe(BOSS_ARENA.laserOriginY);
+    expect(leftX).toBe(bossX - BOSS_ARENA.laserOriginHalfWidth);
+    expect(rightX).toBe(bossX + BOSS_ARENA.laserOriginHalfWidth);
+    expect(polygon.originX).toBe(bossX);
   });
 
-  it('parks the sweep at its starting edge while telegraphing', () => {
-    const sweep: ScheduledAttack = {
-      id: 1,
-      type: 'sweepLaser',
-      phaseIndex: 2,
+  it('lands on the footprint the collision test uses', () => {
+    const beam = { centerX: 200, halfWidth: 30 };
+    const [, , , , farRightX, farRightY, farLeftX, farLeftY] = getBeamPolygon(beam, bossX).points;
+    expect(farRightX).toBe(beam.centerX + beam.halfWidth);
+    expect(farLeftX).toBe(beam.centerX - beam.halfWidth);
+    expect(farRightY).toBe(BOSS_ARENA.floorY);
+    expect(farLeftY).toBe(BOSS_ARENA.floorY);
+  });
+
+  it('fans out: narrow at the boss, full width at the floor', () => {
+    const beam = { centerX: 1000, halfWidth: 30 };
+    expect(BOSS_ARENA.laserOriginHalfWidth).toBeLessThan(beam.halfWidth);
+    const polygon = getBeamPolygon(beam, bossX);
+    const muzzleWidth = polygon.points[2] - polygon.points[0];
+    const floorWidth = polygon.points[4] - polygon.points[6];
+    expect(muzzleWidth).toBeLessThan(floorWidth);
+  });
+
+  it('anchors every column of a laser wall to the same boss muzzle', () => {
+    const wall: ScheduledAttack = {
+      id: 2,
+      type: 'laserWall',
+      phaseIndex: 1,
       startMs: 0,
-      timing: { telegraphMs: 1000, activeMs: 3800, recoveryMs: 400 },
-      params: { type: 'sweepLaser', direction: 'leftToRight', halfWidth: 34, speed: 300 },
+      timing: { telegraphMs: 900, activeMs: 600, recoveryMs: 300 },
+      params: {
+        type: 'laserWall',
+        columnCenters: [200, 500, 900],
+        halfWidth: 26,
+        safeGapCenterX: 700,
+        safeGapHalfWidth: 78,
+      },
     };
-    expect(getAttackBeams(sweep, 500, bounds)[0].centerX).toBe(70);
-    expect(getAttackBeams(sweep, 1000, bounds)[0].centerX).toBe(70);
-    expect(getAttackBeams(sweep, 4800, bounds)[0].centerX).toBe(1210);
+    const polygons = getAttackBeams(wall).map((beam) => getBeamPolygon(beam, bossX));
+    expect(polygons).toHaveLength(3);
+    for (const polygon of polygons) {
+      expect(polygon.originX).toBe(bossX);
+      expect(polygon.points[1]).toBe(BOSS_ARENA.laserOriginY);
+    }
+    // They fan to different places on the floor.
+    expect(polygons.map((polygon) => polygon.footprintCenterX)).toEqual([200, 500, 900]);
   });
 });

@@ -1,6 +1,6 @@
 /** Level 3 boss-fight domain types. Kept free of Phaser so they stay testable. */
 
-export type BossAttackType = 'aimedLaser' | 'sweepLaser' | 'laserWall';
+export type BossAttackType = 'aimedLaser' | 'laserWall';
 
 /**
  * Every attack runs the same three phases. Only `active` deals damage, so a
@@ -8,18 +8,31 @@ export type BossAttackType = 'aimedLaser' | 'sweepLaser' | 'laserWall';
  */
 export type AttackPhase = 'telegraph' | 'active' | 'recovery' | 'done';
 
-export type SweepDirection = 'leftToRight' | 'rightToLeft';
-
 /** Horizontal band [minX, maxX) the player may occupy and lasers may cover. */
 export interface ArenaBounds {
   minX: number;
   maxX: number;
 }
 
-/** A single damaging vertical laser column, resolved for one instant in time. */
+/**
+ * One damaging laser, resolved for an instant in time.
+ *
+ * Every laser is fired by the boss and lands on a column of the floor, so a
+ * beam is described by where it lands. `centerX`/`halfWidth` are the footprint
+ * at the player's feet, which is also where collision is resolved.
+ */
 export interface LaserBeam {
   centerX: number;
   halfWidth: number;
+}
+
+/** Screen-space quad of a beam, from the boss muzzle down to its footprint. */
+export interface LaserPolygon {
+  /** x,y pairs: muzzle left, muzzle right, floor right, floor left. */
+  points: readonly number[];
+  originX: number;
+  originY: number;
+  footprintCenterX: number;
 }
 
 export interface AimedLaserParams {
@@ -27,14 +40,6 @@ export interface AimedLaserParams {
   /** Player X sampled when the telegraph started; the beam fires through it. */
   targetX: number;
   halfWidth: number;
-}
-
-export interface SweepLaserParams {
-  type: 'sweepLaser';
-  direction: SweepDirection;
-  halfWidth: number;
-  /** Pixels per second. Must stay under the player's run speed to be fair. */
-  speed: number;
 }
 
 export interface LaserWallParams {
@@ -47,7 +52,7 @@ export interface LaserWallParams {
   safeGapHalfWidth: number;
 }
 
-export type AttackParams = AimedLaserParams | SweepLaserParams | LaserWallParams;
+export type AttackParams = AimedLaserParams | LaserWallParams;
 
 /** Phase durations in milliseconds, resolved per attack from tuning data. */
 export interface AttackTiming {

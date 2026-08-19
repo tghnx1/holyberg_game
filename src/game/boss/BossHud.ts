@@ -3,7 +3,7 @@ import { BOSS_PLAYER } from './bossConfig';
 import { BossDepth, BossPalette } from './bossConstants';
 import type { BossFightSnapshot } from './BossFightDirector';
 
-/** HP pips, score, combo, phase label, fight timer and the dash cooldown pip. */
+/** HP pips, score, combo, phase label and the fight timer. */
 export class BossHud {
   private readonly hearts: Phaser.GameObjects.Arc[] = [];
   private readonly scoreText: Phaser.GameObjects.Text;
@@ -11,8 +11,6 @@ export class BossHud {
   private readonly phaseText: Phaser.GameObjects.Text;
   private readonly timerBar: Phaser.GameObjects.Rectangle;
   private readonly timerTrack: Phaser.GameObjects.Rectangle;
-  private readonly dashPip: Phaser.GameObjects.Rectangle;
-  private readonly dashLabel: Phaser.GameObjects.Text;
   private readonly flashText: Phaser.GameObjects.Text;
 
   constructor(private readonly scene: Phaser.Scene) {
@@ -45,14 +43,6 @@ export class BossHud {
       .rectangle(width / 2 - 210, 60, 0, 10, BossPalette.safeGap)
       .setOrigin(0, 0.5)
       .setDepth(BossDepth.UI);
-    this.dashLabel = scene.add
-      .text(width - 20, 34, 'DASH', { ...label, fontSize: '14px' })
-      .setOrigin(1, 0.5)
-      .setDepth(BossDepth.UI);
-    this.dashPip = scene.add
-      .rectangle(width - 20, 56, 96, 8, BossPalette.safeGap)
-      .setOrigin(1, 0.5)
-      .setDepth(BossDepth.UI);
     this.flashText = scene.add
       .text(width / 2, 250, '', {
         fontFamily: 'Archivo Black',
@@ -65,7 +55,7 @@ export class BossHud {
       .setAlpha(0);
   }
 
-  update(snapshot: BossFightSnapshot, dashProgress: number): void {
+  update(snapshot: BossFightSnapshot): void {
     this.hearts.forEach((heart, index) => {
       const alive = index < snapshot.hitPoints;
       heart.setFillStyle(alive ? BossPalette.laser : 0x2a1440);
@@ -76,9 +66,6 @@ export class BossHud {
     this.phaseText.setText(snapshot.phase.label);
     const total = Math.max(1, snapshot.elapsedMs + snapshot.remainingMs);
     this.timerBar.width = 420 * Math.min(1, snapshot.elapsedMs / total);
-    this.dashPip.width = 96 * dashProgress;
-    this.dashPip.setFillStyle(dashProgress >= 1 ? BossPalette.safeGap : 0x5a3a70);
-    this.dashLabel.setAlpha(dashProgress >= 1 ? 1 : 0.55);
   }
 
   flash(message: string, color = '#ffffff'): void {
@@ -96,8 +83,6 @@ export class BossHud {
     this.phaseText.setX(width / 2);
     this.timerTrack.setX(width / 2);
     this.timerBar.setX(width / 2 - 210);
-    this.dashLabel.setX(width - 20);
-    this.dashPip.setX(width - 20);
     this.flashText.setX(width / 2);
   }
 }

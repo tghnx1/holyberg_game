@@ -3,20 +3,17 @@ import { BossDepth } from './bossConstants';
 import type { MoveDirection } from './bossPlayerMovement';
 
 /**
- * Movement and dash input for the boss arena, desktop and touch behind one
- * interface so the scene never branches on device.
+ * Movement input for the boss arena, desktop and touch behind one interface so
+ * the scene never branches on device.
  *
- * Desktop: arrows or A/D to move, Space/Shift to dash — the same keys Level 1
- * already uses for movement and its jump.
- * Touch: hold the left or right half of the arena to move, tap DASH to dash.
+ * Left and right are the only inputs the fight has.
+ * Desktop: arrows or A/D. Touch: hold the left or right half of the arena.
  */
 export class BossInput {
   private readonly cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
   private readonly keyA?: Phaser.Input.Keyboard.Key;
   private readonly keyD?: Phaser.Input.Keyboard.Key;
   private touchDirection: MoveDirection = 0;
-  private dashQueued = false;
-  private dashButton?: Phaser.GameObjects.Container;
   private readonly movePointers = new Map<number, MoveDirection>();
 
   constructor(
@@ -27,18 +24,12 @@ export class BossInput {
     this.cursors = keyboard?.createCursorKeys();
     this.keyA = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.A);
     this.keyD = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-    keyboard?.on('keydown-SPACE', this.queueDash);
-    keyboard?.on('keydown-SHIFT', this.queueDash);
     if (touchEnabled) this.createTouchControls();
   }
 
-  private queueDash = (): void => {
-    this.dashQueued = true;
-  };
-
   private createTouchControls(): void {
-    // Extra pointers so a held movement side and a dash tap register together.
-    this.scene.input.addPointer(2);
+    // A second pointer so switching sides mid-hold is never dropped.
+    this.scene.input.addPointer(1);
     const { width, height } = this.scene.cameras.main;
 
     const zone = this.scene.add
@@ -60,30 +51,6 @@ export class BossInput {
     };
     zone.on('pointerup', clearPointer);
     zone.on('pointerout', clearPointer);
-
-    const label = this.scene.add
-      .text(0, 0, 'DASH', {
-        fontFamily: 'Archivo Black',
-        fontSize: '22px',
-        color: '#090611',
-      })
-      .setOrigin(0.5);
-    const pad = this.scene.add.circle(0, 0, 52, 0xffdf57, 0.9).setStrokeStyle(4, 0xff477e);
-    this.dashButton = this.scene.add
-      .container(width - 96, height - 96, [pad, label])
-      .setDepth(BossDepth.UI)
-      .setSize(104, 104)
-      .setInteractive({ useHandCursor: true });
-    this.dashButton.on('pointerdown', (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData) => {
-      this.dashQueued = true;
-      pad.setAlpha(0.55);
-      // Keep the dash tap from also being read as a movement press.
-      event.stopPropagation();
-      this.movePointers.delete(pointer.id);
-      this.resolveTouchDirection();
-    });
-    this.dashButton.on('pointerup', () => pad.setAlpha(0.9));
-    this.dashButton.on('pointerout', () => pad.setAlpha(0.9));
   }
 
   /** Latest press wins, so sliding a thumb across the middle turns Atmos around. */
@@ -99,22 +66,7 @@ export class BossInput {
     return this.touchDirection;
   }
 
-  /** True once per dash request; reading it clears the queue. */
-  consumeDash(): boolean {
-    if (!this.dashQueued) return false;
-    this.dashQueued = false;
-    return true;
-  }
-
-  reposition(width: number, height: number): void {
-    this.dashButton?.setPosition(width - 96, height - 96);
-  }
-
   destroy(): void {
-    const keyboard = this.scene.input.keyboard;
-    keyboard?.off('keydown-SPACE', this.queueDash);
-    keyboard?.off('keydown-SHIFT', this.queueDash);
-    this.dashButton?.destroy(true);
     this.movePointers.clear();
   }
 

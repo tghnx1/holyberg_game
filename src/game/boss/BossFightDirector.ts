@@ -168,7 +168,7 @@ export class BossFightDirector {
     // One hit per attack: a wall you are standing in should cost one HP, not
     // one per frame.
     if (attack.hitPlayer || this.isInvulnerable(now)) return;
-    const beams = getAttackBeams(attack, now, this.bounds);
+    const beams = getAttackBeams(attack);
     if (!isPlayerHitByBeams(beams, playerCenterX, BOSS_PLAYER.hitHalfWidth)) return;
 
     attack.hitPlayer = true;

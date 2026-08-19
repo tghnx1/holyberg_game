@@ -41,6 +41,8 @@ export class BossScene extends Phaser.Scene {
   private controls!: BossInput;
   private hud!: BossHud;
   private bounds!: ArenaBounds;
+  /** Boss stays at the top centre; every laser is emitted from here. */
+  private bossX = 0;
   private running = false;
   private finished = false;
   private introText?: Phaser.GameObjects.Text;
@@ -84,6 +86,7 @@ export class BossScene extends Phaser.Scene {
 
     const { width } = this.cameras.main;
     this.bounds = BossArena.getBounds(width);
+    this.bossX = width / 2;
     this.director = new BossFightDirector(this.bounds, this.seed);
     this.arena = new BossArena(this);
     this.arena.redraw(this.bounds);
@@ -100,8 +103,8 @@ export class BossScene extends Phaser.Scene {
   private showIntro(): void {
     const { width, height } = this.cameras.main;
     const hint = this.controls.isTouch
-      ? 'HOLD LEFT / RIGHT TO MOVE\nTAP DASH TO DASH'
-      : 'ARROWS OR A / D TO MOVE\nSPACE TO DASH';
+      ? 'HOLD LEFT OR RIGHT TO MOVE'
+      : 'ARROWS OR A / D TO MOVE';
     this.introText = this.add
       .text(width / 2, height / 2 - 40, `DODGE THE BOSS\n\n${hint}\n\nSURVIVE THE FIGHT`, {
         fontFamily: 'Archivo Black',
@@ -128,10 +131,8 @@ export class BossScene extends Phaser.Scene {
    * walls the player is dodging between. Only the presentation reflows.
    */
   private handleResize(): void {
-    const { width, height } = this.cameras.main;
     this.arena.redraw(this.bounds);
-    this.hud.reposition(width);
-    this.controls.reposition(width, height);
+    this.hud.reposition(this.cameras.main.width);
   }
 
   update(_time: number, delta: number): void {
@@ -143,21 +144,21 @@ export class BossScene extends Phaser.Scene {
     if (!this.running) {
       // Still let Atmos idle and the boss hover during the intro.
       this.player.update(0, 0, now, this.bounds);
-      this.boss.update(now, this.cameras.main.width / 2, this.player.x);
+      this.boss.update(now, this.bossX, this.player.x);
       return;
     }
 
     const direction = this.controls.direction;
-    if (this.controls.consumeDash()) this.player.requestDash(direction, now);
     this.player.update(step, direction, now, this.bounds);
 
     const events = this.director.update(step, this.player.x);
     for (const event of events) this.handleFightEvent(event);
 
     const snapshot = this.director.snapshot;
-    this.attacks.redraw(snapshot.activeAttacks, snapshot.elapsedMs, this.bounds);
-    this.boss.update(now, this.cameras.main.width / 2, this.player.x);
-    this.hud.update(snapshot, this.player.dashCooldownProgress);
+    // Lasers are drawn from the boss itself, so the renderer needs its X.
+    this.attacks.redraw(snapshot.activeAttacks, snapshot.elapsedMs, this.bossX);
+    this.boss.update(now, this.bossX, this.player.x);
+    this.hud.update(snapshot);
   }
 
   private handleFightEvent(event: BossFightEvent): void {

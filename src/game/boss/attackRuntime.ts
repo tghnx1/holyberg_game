@@ -4,11 +4,12 @@
  * Pure functions of (attack, elapsed time): the scene only decides *when* to
  * ask, never how an attack behaves, so patterns are tunable and testable.
  */
+import { BOSS_ARENA } from './bossConfig';
 import type {
   ActiveAttack,
-  ArenaBounds,
   AttackPhase,
   LaserBeam,
+  LaserPolygon,
   ScheduledAttack,
 } from './types';
 
@@ -45,47 +46,52 @@ export function getActiveProgress(attack: ScheduledAttack, nowMs: number): numbe
   return Math.min(1, Math.max(0, elapsed / attack.timing.activeMs));
 }
 
-/** Center X of a sweep at `progress` (0..1) across the arena. */
-export function getSweepCenterX(
-  bounds: ArenaBounds,
-  direction: 'leftToRight' | 'rightToLeft',
-  progress: number,
-): number {
-  const clamped = Math.min(1, Math.max(0, progress));
-  return direction === 'leftToRight'
-    ? bounds.minX + (bounds.maxX - bounds.minX) * clamped
-    : bounds.maxX - (bounds.maxX - bounds.minX) * clamped;
-}
-
 /**
- * The beams an attack projects at `nowMs`.
+ * The beams an attack projects at `nowMs`, as floor footprints.
  *
- * During `telegraph` these are the *warning* positions (identical geometry to
- * the damaging beams, which is what makes the telegraph trustworthy). Callers
- * decide whether to render them as a warning or apply damage from them.
+ * These are fixed for the whole attack: the geometry a telegraph shows is
+ * exactly the geometry that damages, which is what makes a warning
+ * trustworthy. Callers decide whether to draw them as a warning or apply
+ * damage from them.
  */
-export function getAttackBeams(
-  attack: ScheduledAttack,
-  nowMs: number,
-  bounds: ArenaBounds,
-): LaserBeam[] {
+export function getAttackBeams(attack: ScheduledAttack): LaserBeam[] {
   const params = attack.params;
   if (params.type === 'aimedLaser') {
     return [{ centerX: params.targetX, halfWidth: params.halfWidth }];
   }
-  if (params.type === 'sweepLaser') {
-    // While telegraphing, park the guide at the start edge so the player can
-    // see where the sweep begins and which way it will travel.
-    const phase = getAttackPhase(attack, nowMs);
-    const progress = phase === 'telegraph' ? 0 : getActiveProgress(attack, nowMs);
-    return [
-      {
-        centerX: getSweepCenterX(bounds, params.direction, progress),
-        halfWidth: params.halfWidth,
-      },
-    ];
-  }
   return params.columnCenters.map((centerX) => ({ centerX, halfWidth: params.halfWidth }));
+}
+
+/**
+ * Builds the quad a beam occupies on screen: it leaves the boss as a narrow
+ * muzzle and fans out to its floor footprint.
+ *
+ * Every laser is anchored to `bossX` here, so nothing can ever be drawn
+ * dropping out of empty air. Only the footprint is used for collision, so this
+ * is presentation geometry derived from the same beam.
+ */
+export function getBeamPolygon(
+  beam: LaserBeam,
+  bossX: number,
+  originY: number = BOSS_ARENA.laserOriginY,
+  floorY: number = BOSS_ARENA.floorY,
+  originHalfWidth: number = BOSS_ARENA.laserOriginHalfWidth,
+): LaserPolygon {
+  return {
+    points: [
+      bossX - originHalfWidth,
+      originY,
+      bossX + originHalfWidth,
+      originY,
+      beam.centerX + beam.halfWidth,
+      floorY,
+      beam.centerX - beam.halfWidth,
+      floorY,
+    ],
+    originX: bossX,
+    originY,
+    footprintCenterX: beam.centerX,
+  };
 }
 
 /** True when the player's horizontal hit box overlaps any damaging beam. */
@@ -106,16 +112,11 @@ export function isPlayerHitByBeams(
 export function isAttackDamagingPlayer(
   attack: ScheduledAttack,
   nowMs: number,
-  bounds: ArenaBounds,
   playerCenterX: number,
   playerHalfWidth: number,
 ): boolean {
   if (getAttackPhase(attack, nowMs) !== 'active') return false;
-  return isPlayerHitByBeams(
-    getAttackBeams(attack, nowMs, bounds),
-    playerCenterX,
-    playerHalfWidth,
-  );
+  return isPlayerHitByBeams(getAttackBeams(attack), playerCenterX, playerHalfWidth);
 }
 
 export const toActiveAttack = (attack: ScheduledAttack): ActiveAttack => ({

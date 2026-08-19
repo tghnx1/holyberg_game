@@ -12,19 +12,18 @@ export const BOSS_ARENA = {
   floorY: 640,
   /** Boss sits above this, the player below it. */
   bossCenterY: 130,
-  /** Lasers are drawn from here down to the floor. */
-  laserTopY: 180,
+  /** Every laser is emitted from this point on the boss, never from mid-air. */
+  laserOriginY: 186,
+  /** Half-width of the beam where it leaves the boss, before it fans out. */
+  laserOriginHalfWidth: 11,
 } as const;
 
 export const BOSS_PLAYER = {
   hitPoints: 3,
-  /** Horizontal run speed in px/s. Every sweep must be slower than this. */
+  /** Horizontal run speed in px/s; the only way the player avoids a laser. */
   moveSpeed: 430,
   /** Acceleration ramp keeps input responsive without feeling slippery. */
   accelerationPxPerSecond2: 4200,
-  dashSpeed: 1150,
-  dashDurationMs: 130,
-  dashCooldownMs: 620,
   /** Half-width of the damage box; narrower than the sprite so hits feel fair. */
   hitHalfWidth: 22,
   knockbackSpeed: 300,
@@ -35,21 +34,12 @@ export const BOSS_PLAYER = {
 /** Base phase durations per attack type, before per-phase telegraph scaling. */
 export const ATTACK_TIMINGS: Record<BossAttackType, AttackTiming> = {
   aimedLaser: { telegraphMs: 820, activeMs: 260, recoveryMs: 260 },
-  sweepLaser: { telegraphMs: 1000, activeMs: 2600, recoveryMs: 420 },
   laserWall: { telegraphMs: 950, activeMs: 620, recoveryMs: 340 },
 };
 
 export const ATTACK_SHAPES = {
   aimedLaser: {
     halfWidthPx: 30,
-  },
-  sweepLaser: {
-    halfWidthPx: 34,
-    /**
-     * Must stay meaningfully below BOSS_PLAYER.moveSpeed: the sweep crosses the
-     * whole arena, so the player can only ever escape by outrunning it.
-     */
-    speedPxPerSecond: 300,
   },
   laserWall: {
     halfWidthPx: 26,
@@ -84,7 +74,7 @@ export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
     index: 2,
     label: 'PHASE 3',
     durationMs: 26_000,
-    pattern: ['sweepLaser', 'aimedLaser', 'laserWall', 'aimedLaser'],
+    pattern: ['aimedLaser', 'laserWall', 'aimedLaser', 'laserWall'],
     gapMs: 480,
     telegraphScale: 0.95,
   },
@@ -92,7 +82,7 @@ export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
     index: 3,
     label: 'FINAL',
     durationMs: 14_000,
-    pattern: ['aimedLaser', 'laserWall', 'sweepLaser'],
+    pattern: ['aimedLaser', 'laserWall', 'aimedLaser'],
     gapMs: 360,
     telegraphScale: 0.85,
   },

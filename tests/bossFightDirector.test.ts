@@ -12,17 +12,16 @@ const FRAME_MS = 16;
  * projecting. It reads the director's own live attacks, so an aimed laser is
  * dodged the way a player dodges one: react after the telegraph locks on.
  *
- * Movement speed is ignored on purpose — sweep outrunnability and wall gap
- * width have dedicated fairness tests — so this isolates "does a safe spot
- * exist at all?".
+ * Movement speed is ignored on purpose — wall gap width has a dedicated
+ * fairness test — so this isolates "does a safe spot exist at all?".
  */
-function findSafestX(live: readonly ScheduledAttack[], nowMs: number): number {
+function findSafestX(live: readonly ScheduledAttack[]): number {
   let best = bounds.minX;
   let bestClearance = -Infinity;
   for (let x = bounds.minX; x <= bounds.maxX; x += 10) {
     let clearance = Infinity;
     for (const attack of live) {
-      for (const beam of getAttackBeams(attack, nowMs, bounds)) {
+      for (const beam of getAttackBeams(attack)) {
         clearance = Math.min(clearance, Math.abs(beam.centerX - x) - beam.halfWidth);
       }
     }
@@ -54,7 +53,7 @@ describe('boss fight director', () => {
     let guard = 0;
     while (!director.snapshot.finished && guard < 100_000) {
       const snapshot = director.snapshot;
-      const x = findSafestX(snapshot.activeAttacks, snapshot.elapsedMs);
+      const x = findSafestX(snapshot.activeAttacks);
       elapsed += FRAME_MS;
       director.update(FRAME_MS, x);
       guard += 1;
@@ -121,7 +120,7 @@ describe('boss fight director', () => {
     let guard = 0;
     while (!director.snapshot.finished && guard < 100_000) {
       const snapshot = director.snapshot;
-      const x = findSafestX(snapshot.activeAttacks, snapshot.elapsedMs);
+      const x = findSafestX(snapshot.activeAttacks);
       for (const event of director.update(FRAME_MS, x)) {
         if (event.kind === 'phaseChanged') phases.push(event.phase.index);
       }

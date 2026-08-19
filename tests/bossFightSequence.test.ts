@@ -7,14 +7,12 @@ import {
   BOSS_PLAYER,
   MINIMUM_TELEGRAPH_MS,
 } from '../src/game/boss/bossConfig';
+import type { BossAttackType } from '../src/game/boss/types';
 import {
   buildFightPlan,
   buildLaserWall,
   createRandom,
-  getArenaWidth,
   getPhaseAt,
-  getSweepTravelMs,
-  isSweepOutrunnable,
 } from '../src/game/boss/fightSequence';
 import type { ArenaBounds } from '../src/game/boss/types';
 
@@ -24,6 +22,18 @@ describe('fight plan', () => {
   it('is deterministic for a given seed', () => {
     expect(buildFightPlan(bounds, 7)).toEqual(buildFightPlan(bounds, 7));
     expect(buildFightPlan(bounds, 7)).not.toEqual(buildFightPlan(bounds, 8));
+  });
+
+  it('only ever schedules aimed lasers and laser walls', () => {
+    const allowed: BossAttackType[] = ['aimedLaser', 'laserWall'];
+    for (let seed = 1; seed <= 20; seed += 1) {
+      for (const attack of buildFightPlan(bounds, seed).attacks) {
+        expect(allowed).toContain(attack.type);
+      }
+    }
+    for (const phase of BOSS_PHASES) {
+      for (const type of phase.pattern) expect(allowed).toContain(type);
+    }
   });
 
   it('schedules attacks across every configured phase', () => {
@@ -82,22 +92,6 @@ describe('laser wall fairness', () => {
         expect(separation).toBeGreaterThan(wall.halfWidth + BOSS_PLAYER.hitHalfWidth);
       }
     }
-  });
-});
-
-describe('sweep fairness', () => {
-  it('crosses the arena slower than the player runs', () => {
-    expect(isSweepOutrunnable()).toBe(true);
-    expect(ATTACK_SHAPES.sweepLaser.speedPxPerSecond).toBeLessThan(BOSS_PLAYER.moveSpeed);
-  });
-
-  it('stays damaging for exactly the time it needs to cross', () => {
-    const travelMs = getSweepTravelMs(bounds, ATTACK_SHAPES.sweepLaser.speedPxPerSecond);
-    const effectiveSpeed = (getArenaWidth(bounds) / travelMs) * 1000;
-    expect(effectiveSpeed).toBeLessThan(BOSS_PLAYER.moveSpeed);
-
-    const sweep = buildFightPlan(bounds, 5).attacks.find((attack) => attack.type === 'sweepLaser');
-    expect(sweep?.timing.activeMs).toBe(travelMs);
   });
 });
 
