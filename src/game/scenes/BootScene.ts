@@ -17,6 +17,7 @@ import {
   ATMOS_STAY_FRAME_KEY,
 } from '../entities/Player';
 import { getDialogueStationAssetUrls } from '../dialogue/stationAssets';
+import { getDialoguePortraitAssetUrls } from '../dialogue/dialoguePortraitAssets';
 import {
   createObstacleAnimations,
   getObstacleAnimationAssetUrls,
@@ -85,6 +86,9 @@ export class BootScene extends Phaser.Scene {
     );
     this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/level_2/Deck L.svg');
     for (const asset of getDialogueStationAssetUrls()) {
+      this.load.image(asset.key, asset.url);
+    }
+    for (const asset of getDialoguePortraitAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
     for (const asset of getObstacleAnimationAssetUrls()) {

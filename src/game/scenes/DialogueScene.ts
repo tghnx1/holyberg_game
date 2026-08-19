@@ -15,7 +15,9 @@ import {
   getTypedCharacterCount,
 } from '../dialogue/dialogueTiming';
 import { MagicianPortrait } from '../dialogue/MagicianPortrait';
+import { getSpeakerPortrait } from '../dialogue/speakerPortraits';
 import { StationSceneView } from '../dialogue/StationSceneView';
+import { TalkingPortrait } from '../dialogue/TalkingPortrait';
 import type { DialogueScript } from '../dialogue/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import type { SceneEditor } from '../systems/SceneEditor';
@@ -49,7 +51,8 @@ export class DialogueScene extends Phaser.Scene {
   private payload: Record<string, unknown> = {};
   private panels!: DialoguePanels;
   private stationScene?: StationSceneView;
-  private portrait?: MagicianPortrait;
+  /** Either the hand-drawn placeholder or a reusable 2-frame talking portrait, per this.script.portraitId. */
+  private portrait?: MagicianPortrait | TalkingPortrait;
   private topBarShape!: Phaser.GameObjects.Rectangle;
   private topBarTitle!: Phaser.GameObjects.Text;
   private topBarContainer!: Phaser.GameObjects.Container;
@@ -210,7 +213,13 @@ export class DialogueScene extends Phaser.Scene {
 
   private buildPortraitPanel(): void {
     const { x, y, width, height } = this.layout.portraitPanel;
-    this.portrait = new MagicianPortrait(this, width, height);
+    // 'magician' has no talking-portrait config (it's not in speakerPortraits.ts),
+    // so it keeps using the existing hand-drawn portrait untouched; any other
+    // portraitId is a reusable 2-frame talking speaker.
+    const talkingConfig = getSpeakerPortrait(this.script.portraitId);
+    this.portrait = talkingConfig
+      ? new TalkingPortrait(this, width, height, talkingConfig)
+      : new MagicianPortrait(this, width, height);
     this.portrait.root.setDepth(DialogueDepth.PORTRAIT);
     this.panels.add('portrait', this.portrait.root, {
       restX: x,
@@ -407,7 +416,25 @@ export class DialogueScene extends Phaser.Scene {
   private startLine(index: number): void {
     this.lineIndex = index;
     this.bodyText.setText('');
+    this.applySpeakerForCurrentLine();
     this.setPhase('typing');
+  }
+
+  /**
+   * Resolves this line's speaker (its own `speakerId`, or the script's
+   * default) and applies the matching name/portrait. A no-op speaker switch
+   * inside TalkingPortrait.setSpeaker keeps repeated same-speaker lines from
+   * resetting the talk animation.
+   */
+  private applySpeakerForCurrentLine(): void {
+    const speakerId = this.currentLine.speakerId ?? this.script.portraitId;
+    const config = getSpeakerPortrait(speakerId);
+    if (config) {
+      this.speakerText.setText(config.name);
+      if (this.portrait instanceof TalkingPortrait) this.portrait.setSpeaker(config);
+    } else {
+      this.speakerText.setText(this.script.speaker);
+    }
   }
 
   private setPhase(phase: DialoguePhase): void {
@@ -426,6 +453,13 @@ export class DialogueScene extends Phaser.Scene {
     this.editor?.update();
     if (this.dialoguePaused) return;
 
+    if (this.portrait instanceof TalkingPortrait) {
+      // The mouth flaps for as long as the line is on screen (typing it out
+      // and then holding it to be read), and stops immediately otherwise —
+      // "while a speaker's line is active" / "only the active speaker animates".
+      const speaking = this.phase === 'typing' || this.phase === 'holding';
+      this.portrait.setTalking(speaking, now);
+    }
     this.portrait?.update(now);
     this.updateSkip(now);
     if (this.finished) return;
