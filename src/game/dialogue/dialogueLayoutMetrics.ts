@@ -53,6 +53,27 @@ export function buildDiagonalStripPoints(
   ];
 }
 
+/**
+ * Clip polygon for the portrait panel's own content (gradient, glow, noise,
+ * the figure itself): everything to the right of the diagonal divider's left
+ * edge, local to the same origin the divider itself is drawn against, so the
+ * two always line up exactly.
+ *
+ * Without this the panel's rectangular mask lets its content render into the
+ * wedge the diagonal cuts away at the bottom of the seam, showing through
+ * past the divider and into the scene panel underneath it.
+ */
+export function buildPortraitClipPoints(
+  panelWidth: number,
+  panelHeight: number,
+  thickness: number,
+  skew: number,
+): number[] {
+  const leftAtTop = -thickness / 2;
+  const leftAtBottom = skew - thickness / 2;
+  return [leftAtTop, 0, panelWidth, 0, panelWidth, panelHeight, leftAtBottom, panelHeight];
+}
+
 export function computeDialogueLayout(width: number, height: number): DialogueLayoutMetrics {
   const topBarHeight = DialogueLayout.topBarHeight;
   const bottomBarHeight = DialogueLayout.bottomBarHeight;

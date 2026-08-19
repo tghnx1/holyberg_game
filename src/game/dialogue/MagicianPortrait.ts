@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { DialogueLayout } from './dialogueConstants';
-import { computeContainFit } from './dialogueLayoutMetrics';
+import { buildPortraitClipPoints, computeContainFit } from './dialogueLayoutMetrics';
 
 /**
  * The right-hand portrait panel: an animated green/cyan/yellow-green light
@@ -129,7 +129,21 @@ export class MagicianPortrait {
     this.width = width;
     this.height = height;
 
-    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width, height);
+    // Clip to the diagonal, not a plain rectangle: the panel's own box starts
+    // at the divider's top-left, but at the bottom the seam has drifted right
+    // by `dividerSkew`, and everything left of it there belongs to the scene.
+    const clip = buildPortraitClipPoints(
+      width,
+      height,
+      DialogueLayout.dividerThickness,
+      DialogueLayout.dividerSkew,
+    );
+    this.mask.clear().fillStyle(0xffffff);
+    const points: Phaser.Geom.Point[] = [];
+    for (let index = 0; index < clip.length; index += 2) {
+      points.push(new Phaser.Geom.Point(clip[index], clip[index + 1]));
+    }
+    this.mask.fillPoints(points, true);
 
     const fit = computeContainFit(
       this.referenceWidth,

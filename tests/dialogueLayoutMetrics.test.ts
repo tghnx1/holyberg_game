@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DialogueLayout } from '../src/game/dialogue/dialogueConstants';
 import {
   buildDiagonalStripPoints,
+  buildPortraitClipPoints,
   computeCoverFit,
   computeContainFit,
   computeDialogueLayout,
@@ -62,6 +63,34 @@ describe('dialogue layout metrics', () => {
     const layout = computeDialogueLayout(1280, 720);
     expect(DialogueLayout.dividerSkew).toBeGreaterThan(0);
     expect(layout.dividerPoints[4]).not.toBe(layout.dividerPoints[6]);
+  });
+});
+
+describe('portrait clip polygon', () => {
+  it('shares the top-left edge with the divider, so no seam gap appears', () => {
+    const clip = buildPortraitClipPoints(300, 400, 20, 90);
+    const divider = buildDiagonalStripPoints(20, 90, 400);
+    // Clip's top-left x matches the divider band's own left edge at y=0.
+    expect(clip[0]).toBe(divider[0]);
+    expect(clip[1]).toBe(0);
+  });
+
+  it('excludes the wedge left of the diagonal at the bottom of the panel', () => {
+    const clip = buildPortraitClipPoints(300, 400, 20, 90);
+    const divider = buildDiagonalStripPoints(20, 90, 400);
+    // Bottom-left x matches the divider band's own left edge at y=height.
+    expect(clip[6]).toBe(divider[6]);
+    expect(clip[7]).toBe(400);
+    // The clip has drifted right by the skew, same as the divider.
+    expect(clip[6]).toBeGreaterThan(clip[0]);
+  });
+
+  it('always covers the full right edge of the panel', () => {
+    const clip = buildPortraitClipPoints(300, 400, 20, 90);
+    expect(clip[2]).toBe(300);
+    expect(clip[3]).toBe(0);
+    expect(clip[4]).toBe(300);
+    expect(clip[5]).toBe(400);
   });
 });
 
