@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { DESIGN_WIDTH, DESIGN_HEIGHT } from '../constants';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 
@@ -27,6 +26,12 @@ export interface LevelCompleteSceneData {
   continueData?: Record<string, unknown>;
 }
 
+/** Fixed so RETRY and CONTINUE always match, regardless of label length. */
+const BUTTON_WIDTH = 220;
+const BUTTON_HEIGHT = 62;
+const BUTTON_GAP = 22;
+const SEGMENT_GAP = 10;
+
 export class LevelCompleteScene extends Phaser.Scene {
   private levelData!: LevelCompleteSceneData;
 
@@ -42,61 +47,109 @@ export class LevelCompleteScene extends Phaser.Scene {
     new OrientationController(this);
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#090611');
-    for (let index = 0; index < 8; index += 1) {
-      this.add.rectangle(
-        60 + index * (DESIGN_WIDTH / 8),
-        DESIGN_HEIGHT + 40,
-        70,
-        220 + (index % 3) * 50,
-        0x1a0f28,
-      );
-    }
 
+    // Viewport-relative, not the fixed design constants: EXPAND scaling
+    // keeps height pinned but varies width with the actual aspect ratio, so
+    // reading the live camera size is what keeps this centred on any device.
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    const centerX = width / 2;
+
+    // One compact block, vertically centred as a unit rather than pinned to
+    // fixed screen fractions — the block's own content height decides its
+    // position, so title/score/buttons never drift apart on other aspects.
+    const titleHeight = 60;
+    const scoreHeight = 40;
+    const gapTitleToScore = 22;
+    const gapScoreToButtons = 46;
+    const blockHeight = titleHeight + gapTitleToScore + scoreHeight + gapScoreToButtons + BUTTON_HEIGHT;
+    let cursorY = height / 2 - blockHeight / 2;
+
+    const titleY = cursorY + titleHeight / 2;
     this.add
-      .text(DESIGN_WIDTH / 2, DESIGN_HEIGHT * 0.3, 'LEVEL COMPLETE', {
+      .text(centerX, titleY, 'LEVEL COMPLETE', {
         fontFamily: 'Archivo Black',
-        fontSize: '56px',
+        fontSize: '52px',
         color: '#ffdf57',
         stroke: '#55145e',
         strokeThickness: 9,
       })
       .setOrigin(0.5);
+    cursorY += titleHeight + gapTitleToScore;
 
-    this.add
-      .text(
-        DESIGN_WIDTH / 2,
-        DESIGN_HEIGHT * 0.46,
-        `SCORE  ${this.levelData.score} / ${this.levelData.maxScore}`,
-        {
-          fontFamily: 'Space Mono',
-          fontSize: '30px',
-          fontStyle: 'bold',
-          color: '#ffffff',
-        },
-      )
-      .setOrigin(0.5);
+    const scoreY = cursorY + scoreHeight / 2;
+    this.buildScoreLine(centerX, scoreY);
+    cursorY += scoreHeight + gapScoreToButtons;
 
-    this.createButton(DESIGN_WIDTH / 2 - 160, DESIGN_HEIGHT * 0.68, 'RETRY', '#ff477e', () => {
+    const buttonsY = cursorY + BUTTON_HEIGHT / 2;
+    const groupWidth = BUTTON_WIDTH * 2 + BUTTON_GAP;
+    const retryX = centerX - groupWidth / 2 + BUTTON_WIDTH / 2;
+    const continueX = centerX + groupWidth / 2 - BUTTON_WIDTH / 2;
+    this.createButton(retryX, buttonsY, 'RETRY', '#ff477e', () => {
       this.scene.start(this.levelData.retryScene, this.levelData.retryData);
     });
-    this.createButton(DESIGN_WIDTH / 2 + 160, DESIGN_HEIGHT * 0.68, 'CONTINUE', '#ffdf57', () => {
+    this.createButton(continueX, buttonsY, 'CONTINUE', '#ffdf57', () => {
       this.scene.start(this.levelData.continueScene, this.levelData.continueData);
     });
   }
 
-  private createButton(x: number, y: number, label: string, color: string, action: () => void): void {
-    const button = this.add
-      .text(x, y, label, {
+  /**
+   * "SCORE  6600 / 8550" as three adjacent segments instead of one string,
+   * so the earned score can read visually stronger than the label and the
+   * maximum while the whole line still measures and centres as one unit.
+   */
+  private buildScoreLine(centerX: number, y: number): void {
+    const label = this.add
+      .text(0, 0, 'SCORE', { fontFamily: 'Space Mono', fontSize: '22px', color: '#a99bc0' })
+      .setOrigin(0, 0.5);
+    const value = this.add
+      .text(0, 0, `${this.levelData.score}`, {
         fontFamily: 'Archivo Black',
-        fontSize: '26px',
-        color: '#090611',
-        backgroundColor: color,
-        padding: { x: 28, y: 16 },
+        fontSize: '36px',
+        color: '#ffdf57',
       })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    button.on('pointerdown', action);
-    button.on('pointerover', () => button.setScale(1.04));
-    button.on('pointerout', () => button.setScale(1));
+      .setOrigin(0, 0.5);
+    const max = this.add
+      .text(0, 0, `/ ${this.levelData.maxScore}`, {
+        fontFamily: 'Space Mono',
+        fontSize: '22px',
+        color: '#9c8fb0',
+      })
+      .setOrigin(0, 0.5);
+
+    const totalWidth = label.width + SEGMENT_GAP + value.width + SEGMENT_GAP + max.width;
+    let cursorX = centerX - totalWidth / 2;
+    label.setPosition(cursorX, y);
+    cursorX += label.width + SEGMENT_GAP;
+    value.setPosition(cursorX, y);
+    cursorX += value.width + SEGMENT_GAP;
+    max.setPosition(cursorX, y);
+  }
+
+  /** Fixed-size button (background rect + centred label), so RETRY and CONTINUE always match. */
+  private createButton(x: number, y: number, label: string, color: string, action: () => void): void {
+    const background = this.add
+      .rectangle(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT, Phaser.Display.Color.HexStringToColor(color).color)
+      .setOrigin(0.5);
+    const text = this.add
+      .text(0, 0, label, {
+        fontFamily: 'Archivo Black',
+        fontSize: '24px',
+        color: '#090611',
+      })
+      .setOrigin(0.5);
+    const container = this.add
+      .container(x, y, [background, text])
+      .setSize(BUTTON_WIDTH, BUTTON_HEIGHT)
+      .setInteractive({
+        // Children (and so the hit test) are centred on the container's own
+        // origin, not its top-left, so the hit rect must be too.
+        hitArea: new Phaser.Geom.Rectangle(-BUTTON_WIDTH / 2, -BUTTON_HEIGHT / 2, BUTTON_WIDTH, BUTTON_HEIGHT),
+        hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+        useHandCursor: true,
+      });
+    container.on('pointerdown', action);
+    container.on('pointerover', () => container.setScale(1.04));
+    container.on('pointerout', () => container.setScale(1));
   }
 }
