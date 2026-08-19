@@ -15,6 +15,8 @@ const DEPART_DURATION_MS = 2200;
 const DISUS_TRIGGER_PROGRESS = 0.82;
 /** Within the requested 80-100ms/frame window. */
 const DISUS_FRAME_DURATION_MS = 90;
+/** Vertical nudge for the train, relative to the shared floor line. Negative moves it up. */
+const TRAIN_Y_OFFSET = -40;
 
 /** Fraction of the reference panel height a seated/standing figure renders at. */
 const CHARACTER_HEIGHT_RATIO = 0.4;
@@ -44,9 +46,10 @@ const ATMOS_SIT_FOOT_GAP = 13;
  * The left-hand panel for Dialogue 1: a metro platform where a train departs
  * and Disus appears once it has mostly left.
  *
- * Layers, back to front: background_metro, the train, the characters (Atmos
- * seated, Disus once revealed), then first_plan_metro on top. Everything is
- * laid out once against the panel's first-layout ("reference") size; `resize()`
+ * Layers, back to front: background_metro, the train, first_plan_metro, then
+ * the characters (Atmos seated, Disus once revealed) on top, so both stay
+ * visible over the foreground art. Everything is laid out once against the
+ * panel's first-layout ("reference") size; `resize()`
  * uniformly covers whatever the panel's current size is, so the departure/
  * appearance sequence never has to be rebuilt or reset mid-animation.
  */
@@ -85,15 +88,8 @@ export class StationSceneView {
     this.trainRestX = width * 0.5;
     const trainDisplayWidth = this.train.displayWidth;
     this.trainDepartX = width + trainDisplayWidth;
-    this.train.setPosition(this.trainRestX, this.floorY);
+    this.train.setPosition(this.trainRestX, this.floorY + TRAIN_Y_OFFSET);
     children.push(this.train);
-
-    const atmos = this.buildAtmos();
-    this.disusX = width * 0.68;
-    children.push(atmos);
-
-    this.disus = this.buildDisus();
-    children.push(this.disus);
 
     if (backdropFit && this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.foreground)) {
       const foreground = scene.add
@@ -103,6 +99,14 @@ export class StationSceneView {
         .setPosition(backdropFit.offsetX, backdropFit.offsetY);
       children.push(foreground);
     }
+
+    // Characters go last so Atmos and Disus stay visible above first_plan_metro.
+    const atmos = this.buildAtmos();
+    this.disusX = width * 0.68;
+    children.push(atmos);
+
+    this.disus = this.buildDisus();
+    children.push(this.disus);
 
     this.content = scene.add.container(0, 0, children);
     this.root = scene.add.container(0, 0, [this.content]);
@@ -130,7 +134,7 @@ export class StationSceneView {
 
   private buildTrain(): Phaser.GameObjects.Image {
     const key = DIALOGUE_STATION_TEXTURE_KEYS.train;
-    const image = this.scene.add.image(0, 0, key).setOrigin(0.5, 1);
+    const image = this.scene.add.image(0, 0, key).setOrigin(0.5, 1.25);
     if (this.hasTexture(key)) {
       const source = this.scene.textures.get(key).getSourceImage();
       const targetHeight = this.referenceHeight * 0.5;
