@@ -110,8 +110,13 @@ export class DialogueScene extends Phaser.Scene {
     });
 
     this.panels.slideIn(() => {
-      this.stationScene?.playArrival();
-      this.startLine(0);
+      if (this.stationScene) {
+        // The station scene's own departure/appearance sequence gates the
+        // first line: it fires this once Disus has finished appearing.
+        this.stationScene.playArrival(() => this.startLine(0));
+      } else {
+        this.startLine(0);
+      }
     });
   }
 
@@ -341,7 +346,7 @@ export class DialogueScene extends Phaser.Scene {
 
   update(): void {
     const now = this.time.now;
-    this.stationScene?.update(now);
+    this.stationScene?.update();
     this.portrait?.update(now);
     this.updateSkip(now);
     if (this.finished) return;

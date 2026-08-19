@@ -15,6 +15,7 @@ import {
   ATMOS_JUMP_FRAME_KEYS,
   ATMOS_RUN_FRAME_KEYS,
 } from '../entities/Player';
+import { getDialogueStationAssetUrls } from '../dialogue/stationAssets';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -77,6 +78,9 @@ export class BootScene extends Phaser.Scene {
       'assets/level_2/Rhythm Highway (unchanged).svg',
     );
     this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/level_2/Deck L.svg');
+    for (const asset of getDialogueStationAssetUrls()) {
+      this.load.image(asset.key, asset.url);
+    }
   }
 
   create(): void {
