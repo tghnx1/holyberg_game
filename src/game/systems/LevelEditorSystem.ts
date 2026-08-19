@@ -74,7 +74,12 @@ const ART_VISUAL_FRACTIONS: Record<
   string,
   { xRatio: number; yRatio: number; widthRatio: number; heightRatio: number }
 > = {
-  'obstacle.homeless': { xRatio: 0, yRatio: 0.2446, widthRatio: 0.9897, heightRatio: 0.6739 },
+  'obstacle.homeless': {
+  xRatio: 0,
+  yRatio: 0.45,
+  widthRatio: 0.9897,
+  heightRatio: 0.4685
+},
   'obstacle.stinkyCloud': { xRatio: 0.0723, yRatio: 0.374, widthRatio: 0.8691, heightRatio: 0.2227 },
 };
 
