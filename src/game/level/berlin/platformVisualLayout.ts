@@ -49,7 +49,7 @@ export interface PlatformSupportPiece {
 export const PLATFORM_TEXTURES: readonly PlatformTextureMetrics[] = [
   {
     key: 'platform-1',
-    url: 'assets/images/platform_1.png',
+    url: 'assets/level_1/platform_1.png',
     sourceWidth: 272,
     sourceHeight: 272,
     deckLeft: 80,
@@ -59,7 +59,7 @@ export const PLATFORM_TEXTURES: readonly PlatformTextureMetrics[] = [
   },
   {
     key: 'platform-2',
-    url: 'assets/images/platform_2.png',
+    url: 'assets/level_1/platform_2.png',
     sourceWidth: 140,
     sourceHeight: 136,
     deckLeft: 23,
@@ -69,7 +69,7 @@ export const PLATFORM_TEXTURES: readonly PlatformTextureMetrics[] = [
   },
   {
     key: 'platform-3',
-    url: 'assets/images/platform_3.png',
+    url: 'assets/level_1/platform_3.png',
     sourceWidth: 240,
     sourceHeight: 240,
     deckLeft: 38,
@@ -79,7 +79,7 @@ export const PLATFORM_TEXTURES: readonly PlatformTextureMetrics[] = [
   },
   {
     key: 'platform-4',
-    url: 'assets/images/platform_4.png',
+    url: 'assets/level_1/platform_4.png',
     sourceWidth: 152,
     sourceHeight: 152,
     deckLeft: 26,
@@ -89,7 +89,7 @@ export const PLATFORM_TEXTURES: readonly PlatformTextureMetrics[] = [
   },
   {
     key: 'platform-5',
-    url: 'assets/images/platform_5.png',
+    url: 'assets/level_1/platform_5.png',
     sourceWidth: 147,
     sourceHeight: 147,
     deckLeft: 19,
@@ -99,7 +99,7 @@ export const PLATFORM_TEXTURES: readonly PlatformTextureMetrics[] = [
   },
   {
     key: 'platform-6',
-    url: 'assets/images/platform_6.png',
+    url: 'assets/level_1/platform_6.png',
     sourceWidth: 277,
     sourceHeight: 277,
     deckLeft: 55,

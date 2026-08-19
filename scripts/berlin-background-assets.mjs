@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const publicDirectory = resolve(repoRoot, 'public');
-export const generatedBaseUrl = 'assets/backgrounds/generated';
+export const generatedBaseUrl = 'assets/generated';
 export const generatedDirectory = resolve(publicDirectory, generatedBaseUrl);
 
 const manifestPath = resolve(repoRoot, 'src/game/assets/berlinBackgroundAssets.json');

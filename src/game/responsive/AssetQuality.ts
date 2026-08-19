@@ -19,10 +19,10 @@ const PHONE_MAX_LONG_EDGE = 1024;
 const PHONE_MAX_SHORT_EDGE = 600;
 const MOBILE_TEXTURE_LIMIT = 3072;
 const DESKTOP_TEXTURE_LIMIT = 4096;
-const GENERATED_ASSET_DIRECTORY = 'assets/backgrounds/generated';
+const GENERATED_ASSET_DIRECTORY = 'assets/generated';
 
 /**
- * Selects one download profile before Phaser queues any Berlin backgrounds.
+ * Selects one download profile before Phaser queues any Berlin textures.
  *
  * Viewport dimensions are CSS pixels. The short-edge check distinguishes a
  * phone-shaped viewport from tablets that can share the same 1024px long edge;

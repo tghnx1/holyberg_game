@@ -1,6 +1,6 @@
 import streetGroundAsset from '../../assets/berlinStreetGround.json';
 
-const GENERATED_ASSET_DIRECTORY = 'assets/backgrounds/generated';
+const GENERATED_ASSET_DIRECTORY = 'assets/generated';
 
 export interface StreetGroundAssetUrl {
   key: string;

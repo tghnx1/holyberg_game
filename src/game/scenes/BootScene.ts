@@ -60,8 +60,8 @@ export class BootScene extends Phaser.Scene {
     }
     if (import.meta.env.DEV) console.debug('[BootScene] Berlin asset profile', qualityProfile);
 
-    this.load.image('berlin-train-right', 'assets/backgrounds/train-right.png');
-    this.load.image('berlin-train-left', 'assets/backgrounds/train-left.png');
+    this.load.image('berlin-train-right', 'assets/level_1/train-right.png');
+    this.load.image('berlin-train-left', 'assets/level_1/train-left.png');
     for (const [index, key] of ATMOS_RUN_FRAME_KEYS.entries()) {
       this.load.image(key, `assets/players/Atmos/run ${index + 1}.png`);
     }
@@ -74,9 +74,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image(ATMOS_DAMAGE_FRAME_KEY, 'assets/players/Atmos/damage 1.png');
     this.load.svg(
       RHYTHM_HIGHWAY_TEXTURE_KEY,
-      'assets/images/Rhythm Highway (unchanged).svg',
+      'assets/level_2/Rhythm Highway (unchanged).svg',
     );
-    this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/images/Deck L.svg');
+    this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/level_2/Deck L.svg');
   }
 
   create(): void {

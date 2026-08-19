@@ -64,7 +64,7 @@ describe('Berlin street-ground layout', () => {
     expect(urls).toHaveLength(Math.ceil(STREET_GROUND_SOURCE_WIDTH / STREET_GROUND_CHUNK_WIDTH));
     expect(urls[0]).toEqual({
       key: 'berlin-concrete-strip-0',
-      url: 'assets/backgrounds/generated/concrete-strip-0.webp',
+      url: 'assets/generated/concrete-strip-0.webp',
     });
     expect(new Set(urls.map(({ key }) => key)).size).toBe(urls.length);
   });

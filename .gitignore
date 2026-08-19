@@ -2,7 +2,7 @@ node_modules/
 dist/
 coverage/
 .wrangler/
-public/assets/backgrounds/generated/
+public/assets/generated/
 .DS_Store
 .idea/
 *.tsbuildinfo
@@ -10,5 +10,5 @@ vite.config.js
 vite.config.d.ts
 
 # Source house art: multi-hundred-megapixel PNGs kept out of git history.
-# Drop the files in public/assets/backgrounds/ locally; use `git add -f` if a
+# Drop the files in public/assets/level_1/ locally; use `git add -f` if a
 # downscaled, commit-sized version should be tracked.

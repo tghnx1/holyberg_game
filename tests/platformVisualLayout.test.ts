@@ -21,12 +21,12 @@ const platforms = (level as BerlinEntity[]).filter(
 describe('Berlin platform visual layout', () => {
   it('loads all six project-relative PNG assets', () => {
     expect(getPlatformTextureAssets()).toEqual([
-      { key: 'platform-1', url: 'assets/images/platform_1.png' },
-      { key: 'platform-2', url: 'assets/images/platform_2.png' },
-      { key: 'platform-3', url: 'assets/images/platform_3.png' },
-      { key: 'platform-4', url: 'assets/images/platform_4.png' },
-      { key: 'platform-5', url: 'assets/images/platform_5.png' },
-      { key: 'platform-6', url: 'assets/images/platform_6.png' },
+      { key: 'platform-1', url: 'assets/level_1/platform_1.png' },
+      { key: 'platform-2', url: 'assets/level_1/platform_2.png' },
+      { key: 'platform-3', url: 'assets/level_1/platform_3.png' },
+      { key: 'platform-4', url: 'assets/level_1/platform_4.png' },
+      { key: 'platform-5', url: 'assets/level_1/platform_5.png' },
+      { key: 'platform-6', url: 'assets/level_1/platform_6.png' },
     ]);
   });
 

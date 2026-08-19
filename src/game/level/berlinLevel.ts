@@ -75,8 +75,8 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
   if (!scene.textures.exists(railwayLayout.key)) {
     console.error(
       `[berlinLevel] texture "${railwayLayout.key}" is not loaded. ` +
-        'Expected public/assets/backgrounds/railway.png, requested by BootScene as ' +
-        "this.load.image('berlin-railway', 'assets/backgrounds/railway.png').",
+        'Expected public/assets/level_1/railway.png, requested by BootScene as ' +
+        "this.load.image('berlin-railway', 'assets/level_1/railway.png').",
     );
   }
   const railwayStartX = (WORLD_WIDTH - railwayLayout.width) / 2 - 400;

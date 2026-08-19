@@ -82,12 +82,12 @@ describe('Berlin background asset quality', () => {
       expect(selected).toEqual(
         berlinBackgroundAssets.assets.map((asset) => ({
           key: asset.textureKey,
-          url: `assets/backgrounds/generated/${asset.name}.${profile}.webp`,
+          url: `assets/generated/${asset.name}.${profile}.webp`,
         })),
       );
       for (const asset of berlinBackgroundAssets.assets) {
         expect(getOptimizedBerlinBackgroundUrl(asset.name, profile)).toBe(
-          `assets/backgrounds/generated/${asset.name}.${profile}.webp`,
+          `assets/generated/${asset.name}.${profile}.webp`,
         );
       }
     },
