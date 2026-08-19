@@ -57,6 +57,27 @@ const COLOR_SELECTED = 0xffe36d;
 const COLOR_START = 0x7ef0ff;
 const COLOR_END = 0xff7ac1;
 
+/**
+ * Alpha-content fraction of the full display box, per artSlot, for artwork
+ * whose source PNG has transparent padding baked into a canvas larger than
+ * the drawn art (measured directly from the source images). Editor outline,
+ * hit-testing and resize handles use this to stay tight to what is actually
+ * visible; entity.config.width/height (and so the rendered sprite's real
+ * display size) are untouched — this only changes what the editor draws and
+ * measures against, never the artwork itself.
+ *
+ * Anything not listed here (collectibles, platforms, and any other obstacle
+ * whose art fills its box) falls back to the full config.width/height box
+ * exactly as before.
+ */
+const ART_VISUAL_FRACTIONS: Record<
+  string,
+  { xRatio: number; yRatio: number; widthRatio: number; heightRatio: number }
+> = {
+  'obstacle.homeless': { xRatio: 0, yRatio: 0.2446, widthRatio: 0.9897, heightRatio: 0.6739 },
+  'obstacle.stinkyCloud': { xRatio: 0.0723, yRatio: 0.374, widthRatio: 0.8691, heightRatio: 0.2227 },
+};
+
 interface EditableEntity {
   /** Mutable working copy of the authored config; `P` saves these. */
   config: EditableConfig;
@@ -401,7 +422,7 @@ export class LevelEditorSystem {
    * path as pointer handles so visuals, config and physics cannot diverge.
    */
   private resize(entity: EditableEntity, factor: number): void {
-    const originalBounds = this.entityBounds(entity);
+    const originalBounds = this.visualBoundsOf(entity);
     const { width, height } = resizeBoundsSize(originalBounds);
     const operation: ResizeOperation = {
       entity,
@@ -409,12 +430,13 @@ export class LevelEditorSystem {
       before: structuredClone(entity.config),
       originalBounds,
     };
-    this.applyResizeBounds(operation, {
+    const grown: ResizeBounds = {
       left: originalBounds.left - (width * factor - width) / 2,
       right: originalBounds.right + (width * factor - width) / 2,
       top: originalBounds.top - (height * factor - height) / 2,
       bottom: originalBounds.bottom + (height * factor - height) / 2,
-    });
+    };
+    this.applyResizeBounds(operation, this.fullBoundsFromVisual(entity, grown));
   }
 
   private entityBounds(entity: EditableEntity): ResizeBounds {
@@ -438,6 +460,46 @@ export class LevelEditorSystem {
     };
   }
 
+  /**
+   * `entityBounds`, narrowed to the actually-visible art for any artSlot
+   * registered in ART_VISUAL_FRACTIONS. Selection, hit-testing, the drawn
+   * outline and resize handles all read this instead of `entityBounds`
+   * directly, so a padded PNG's transparent margin never inflates any of
+   * them. Falls back to the full box unchanged when no fraction applies.
+   */
+  private visualBoundsOf(entity: EditableEntity): ResizeBounds {
+    const full = this.entityBounds(entity);
+    const fraction = ART_VISUAL_FRACTIONS[entity.config.artSlot];
+    if (!fraction) return full;
+    const fullWidth = full.right - full.left;
+    const fullHeight = full.bottom - full.top;
+    return {
+      left: full.left + fraction.xRatio * fullWidth,
+      right: full.left + (fraction.xRatio + fraction.widthRatio) * fullWidth,
+      top: full.top + fraction.yRatio * fullHeight,
+      bottom: full.top + (fraction.yRatio + fraction.heightRatio) * fullHeight,
+    };
+  }
+
+  /**
+   * Inverse of `visualBoundsOf`: expands a resized *visual* bounds box back
+   * out to the equivalent full display-box bounds, so a drag on the tight
+   * handles still resizes the whole artwork (and `config.width/height`, the
+   * real display size) proportionally, rather than shrinking the config down
+   * to just the visible-content box.
+   */
+  private fullBoundsFromVisual(entity: EditableEntity, visual: ResizeBounds): ResizeBounds {
+    const fraction = ART_VISUAL_FRACTIONS[entity.config.artSlot];
+    if (!fraction) return visual;
+    const visualWidth = visual.right - visual.left;
+    const visualHeight = visual.bottom - visual.top;
+    const fullWidth = visualWidth / fraction.widthRatio;
+    const fullHeight = visualHeight / fraction.heightRatio;
+    const fullLeft = visual.left - fraction.xRatio * fullWidth;
+    const fullTop = visual.top - fraction.yRatio * fullHeight;
+    return { left: fullLeft, right: fullLeft + fullWidth, top: fullTop, bottom: fullTop + fullHeight };
+  }
+
   private minimumSize(config: EditableConfig): MinimumResizeSize {
     if (config.type === 'platform' || config.type === 'movingPlatform') {
       return { width: 48, height: MIN_SIZE };
@@ -448,7 +510,7 @@ export class LevelEditorSystem {
 
   private resizeHandleAt(world: Point, entity: EditableEntity): ResizeHandle | undefined {
     const tolerance = (RESIZE_HANDLE_SCREEN + 4) / this.scene.cameras.main.zoom;
-    const points = resizeHandlePoints(this.entityBounds(entity));
+    const points = resizeHandlePoints(this.visualBoundsOf(entity));
     return RESIZE_HANDLES.find(
       (handle) =>
         Phaser.Math.Distance.Between(world.x, world.y, points[handle].x, points[handle].y) <=
@@ -650,7 +712,7 @@ export class LevelEditorSystem {
         entity: selected,
         handle: resizeHandle,
         before: structuredClone(selected.config),
-        originalBounds: this.entityBounds(selected),
+        originalBounds: this.visualBoundsOf(selected),
       };
       this.dragging = undefined;
       this.panning = undefined;
@@ -715,7 +777,7 @@ export class LevelEditorSystem {
         this.minimumSize(this.resizing.before),
         this.shiftKey.isDown,
       );
-      this.applyResizeBounds(this.resizing, bounds);
+      this.applyResizeBounds(this.resizing, this.fullBoundsFromVisual(this.resizing.entity, bounds));
       return;
     }
 
@@ -733,7 +795,7 @@ export class LevelEditorSystem {
 
   private onPointerUp(): void {
     if (this.resizing) {
-      const { width, height } = resizeBoundsSize(this.entityBounds(this.resizing.entity));
+      const { width, height } = resizeBoundsSize(this.visualBoundsOf(this.resizing.entity));
       this.status = `resized ${this.resizing.entity.config.id} to ${Math.round(width)} × ${Math.round(height)}`;
     }
     this.dragging = undefined;
@@ -779,24 +841,31 @@ export class LevelEditorSystem {
   }
 
   /**
-   * Half-width/height an entity occupies for drawing and picking, never
-   * smaller than MIN_PICK_SCREEN once the zoom is taken into account.
+   * `visualBoundsOf`, floored to MIN_PICK_SCREEN (about the tight box's own
+   * centre, not the entity's authored x/y — a padded PNG's visible content
+   * is not necessarily centred in its box) so nothing becomes unpickable
+   * zoomed out.
    */
-  private pickExtents(config: EditableConfig): { halfWidth: number; halfHeight: number } {
+  private pickBounds(entity: EditableEntity): ResizeBounds {
+    const bounds = this.visualBoundsOf(entity);
     const minimum = MIN_PICK_SCREEN / this.scene.cameras.main.zoom;
+    const growX = Math.max(0, minimum - (bounds.right - bounds.left)) / 2;
+    const growY = Math.max(0, minimum - (bounds.bottom - bounds.top)) / 2;
     return {
-      halfWidth: Math.max(config.width, minimum) / 2,
-      halfHeight: Math.max(config.height, minimum) / 2,
+      left: bounds.left - growX,
+      right: bounds.right + growX,
+      top: bounds.top - growY,
+      bottom: bounds.bottom + growY,
     };
   }
 
   /** Topmost editable entity whose marker rectangle contains the point. */
   private entityAt(world: Point): EditableEntity | undefined {
     for (let index = this.entities.length - 1; index >= 0; index -= 1) {
-      const { config } = this.entities[index];
-      const { halfWidth, halfHeight } = this.pickExtents(config);
-      if (Math.abs(world.x - config.x) <= halfWidth && Math.abs(world.y - config.y) <= halfHeight) {
-        return this.entities[index];
+      const entity = this.entities[index];
+      const bounds = this.pickBounds(entity);
+      if (world.x >= bounds.left && world.x <= bounds.right && world.y >= bounds.top && world.y <= bounds.bottom) {
+        return entity;
       }
     }
     return undefined;
@@ -818,16 +887,16 @@ export class LevelEditorSystem {
     // few pixels, so the marker is what you actually see and click.
     graphics.fillStyle(COLOR_IDLE, 0.18);
     graphics.lineStyle(stroke, COLOR_IDLE, 0.5);
-    for (const { config } of this.entities) {
-      const { halfWidth, halfHeight } = this.pickExtents(config);
-      graphics.fillRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
-      graphics.strokeRect(config.x - halfWidth, config.y - halfHeight, halfWidth * 2, halfHeight * 2);
+    for (const entity of this.entities) {
+      const bounds = this.pickBounds(entity);
+      graphics.fillRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+      graphics.strokeRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
     }
 
     const selected = this.selected;
     if (selected) {
       const { config } = selected;
-      const bounds = this.entityBounds(selected);
+      const bounds = this.visualBoundsOf(selected);
       const { width, height } = resizeBoundsSize(bounds);
       graphics.fillStyle(COLOR_SELECTED, 0.3);
       graphics.fillRect(bounds.left, bounds.top, width, height);
@@ -893,7 +962,7 @@ export class LevelEditorSystem {
       return lines.join('\n');
     }
     const { config } = selected;
-    const size = resizeBoundsSize(this.entityBounds(selected));
+    const size = resizeBoundsSize(this.visualBoundsOf(selected));
     lines.push(
       '',
       `${config.id}  (${config.type})`,
