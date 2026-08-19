@@ -655,16 +655,16 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 1900,
-    "y": 573.5,
-    "width": 95,
-    "height": 90,
+    "x": 1887,
+    "y": 540,
+    "width": 152,
+    "height": 181,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 85,
-      "height": 60,
+      "width": 136,
+      "height": 120,
       "offsetX": 0,
-      "offsetY": 6.5
+      "offsetY": 13
     }
   },
   {
