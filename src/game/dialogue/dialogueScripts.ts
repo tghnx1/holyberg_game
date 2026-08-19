@@ -9,17 +9,28 @@ import type { DialogueScript } from './types';
 export const METRO_MAGICIAN_DIALOGUE: DialogueScript = {
   id: 'metro-magician',
   sceneId: 'metroStation',
-  portraitId: 'magician',
+  portraitId: 'disus',
   speaker: 'THE MAGICIAN',
   lines: [
-    { text: 'I KNOW YOU!' },
-    { text: "YOU'RE NOT FROM THIS WORLD.\nLITERALLY." },
+    { text: 'I KNOW YOU!', speakerId: 'disus', speakerName: 'THE MAGICIAN' },
+    {
+      text: "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.",
+      speakerId: 'disus',
+      speakerName: 'THE MAGICIAN',
+    },
     {
       text: "I CAN OPEN YOU A PORTAL HOME,\nBUT YOU NEED TO PROVE YOU'RE\nCOOL ENOUGH FOR IT.",
+      speakerId: 'disus',
+      speakerName: 'THE MAGICIAN',
     },
-    { text: 'LOCK IT IN:' },
+    { text: 'LOCK IT IN:', speakerId: 'disus', speakerName: 'THE MAGICIAN' },
     // The closing beat lands harder with a longer hold than its length earns.
-    { text: 'PLACE.\nDATE.\nTIME.', holdMsOverride: 1400 },
+    {
+      text: 'PLACE.\nDATE.\nTIME.',
+      holdMsOverride: 1400,
+      speakerId: 'disus',
+      speakerName: 'THE MAGICIAN',
+    },
   ],
   nextScene: 'BerlinScene',
 };

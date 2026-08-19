@@ -13,6 +13,12 @@ export interface DialogueLine {
    * that never set this are completely unaffected.
    */
   speakerId?: DialoguePortraitId;
+  /**
+   * Overrides the displayed speaker name for just this line (e.g. keeping
+   * "THE MAGICIAN" as the label while the portrait itself is Disus).
+   * Falls back to the portrait config's own name, then the script's default.
+   */
+  speakerName?: string;
 }
 
 /** Which prebuilt left-hand scene a dialogue plays over. */

@@ -429,12 +429,8 @@ export class DialogueScene extends Phaser.Scene {
   private applySpeakerForCurrentLine(): void {
     const speakerId = this.currentLine.speakerId ?? this.script.portraitId;
     const config = getSpeakerPortrait(speakerId);
-    if (config) {
-      this.speakerText.setText(config.name);
-      if (this.portrait instanceof TalkingPortrait) this.portrait.setSpeaker(config);
-    } else {
-      this.speakerText.setText(this.script.speaker);
-    }
+    this.speakerText.setText(this.currentLine.speakerName ?? config?.name ?? this.script.speaker);
+    if (config && this.portrait instanceof TalkingPortrait) this.portrait.setSpeaker(config);
   }
 
   private setPhase(phase: DialoguePhase): void {
