@@ -109,7 +109,8 @@ export class BootScene extends Phaser.Scene {
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
-      this.scene.start('DialogueScene', { scriptId: 'metro-magician' });
+      const scriptId = new URLSearchParams(window.location.search).get('script') ?? 'metro-magician';
+      this.scene.start('DialogueScene', { scriptId });
       return;
     }
     // DialogueScene only ever plays before BerlinScene; from there the level

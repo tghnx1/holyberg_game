@@ -24,8 +24,24 @@ export const METRO_MAGICIAN_DIALOGUE: DialogueScript = {
   nextScene: 'BerlinScene',
 };
 
+/** Dev-only script for exercising the Atmos/Disus talking portraits (`?scene=dialogue&script=atmos-disus-test`). */
+export const ATMOS_DISUS_TEST_DIALOGUE: DialogueScript = {
+  id: 'atmos-disus-test',
+  sceneId: 'metroStation',
+  portraitId: 'atmos',
+  speaker: 'ATMOS',
+  lines: [
+    { text: "HEY DISUS, YOU SEEING\nTHIS TRAIN?", speakerId: 'atmos' },
+    { text: 'YEAH. WE SHOULD\nPROBABLY RUN.', speakerId: 'disus' },
+    { text: "GIVE ME A SECOND,\nI'M TALKING.", speakerId: 'atmos' },
+    { text: 'THAT WAS NOT\nA SECOND.', speakerId: 'disus' },
+  ],
+  nextScene: 'BerlinScene',
+};
+
 export const DIALOGUE_SCRIPTS: Record<string, DialogueScript> = {
   [METRO_MAGICIAN_DIALOGUE.id]: METRO_MAGICIAN_DIALOGUE,
+  [ATMOS_DISUS_TEST_DIALOGUE.id]: ATMOS_DISUS_TEST_DIALOGUE,
 };
 
 export const getDialogueScript = (id: string): DialogueScript | undefined =>
