@@ -8,8 +8,9 @@ import {
   type ResizeHandle,
 } from './levelEditorResize';
 import {
+  localBoundsFromTransform,
+  positionFromLocalBounds,
   worldPointToParentLocal,
-  worldRectToParentLocal,
   type AncestorTransform,
 } from './sceneEditorCoords';
 
@@ -45,6 +46,9 @@ export interface EditableSnapshot extends EditableTransform {
 type EditableTarget = Phaser.GameObjects.GameObject &
   Phaser.GameObjects.Components.Transform & {
     getBounds: (output?: Phaser.Geom.Rectangle) => Phaser.Geom.Rectangle;
+    /** Absent on plain Containers; treated as (0, 0) — top-left — when missing. */
+    originX?: number;
+    originY?: number;
   };
 
 export interface EditableObject {
@@ -257,8 +261,28 @@ export class SceneEditor {
   }
 
   /** Re-expresses a world-space AABB (from `target.getBounds()`) in `target`'s parent-local space. */
-  private worldBoundsToParentLocal(target: EditableTarget, bounds: Phaser.Geom.Rectangle): ResizeBounds {
-    return worldRectToParentLocal(bounds, this.getAncestorChain(target));
+  /**
+   * The only geometry resize starts from. Built directly from the target's
+   * own local x/y/scale, native size and origin — never from `getBounds()` —
+   * so it is already exactly in the target's parent-local space with no
+   * conversion, and can't inherit any of getBounds()'s own quirks around
+   * nested/masked containers.
+   */
+  private getLocalBounds(object: EditableObject): ResizeBounds {
+    const native = object.getNativeSize();
+    const target = object.target;
+    return localBoundsFromTransform(
+      {
+        x: target.x,
+        y: target.y,
+        scaleX: target.scaleX,
+        scaleY: target.scaleY,
+        originX: target.originX ?? 0,
+        originY: target.originY ?? 0,
+      },
+      native.width,
+      native.height,
+    );
   }
 
   private applyTransform(object: EditableObject, transform: EditableTransform): void {
@@ -364,7 +388,7 @@ export class SceneEditor {
       this.resize = {
         object,
         handle: handleHit.handle,
-        originalBounds: this.worldBoundsToParentLocal(object.target, object.target.getBounds()),
+        originalBounds: this.getLocalBounds(object),
         before: this.transformOf(object),
       };
       return;
@@ -407,25 +431,29 @@ export class SceneEditor {
     this.resize = undefined;
   }
 
+  /**
+   * Resize math runs entirely in `object.target`'s parent-local space, start
+   * to finish: `originalBounds` (from `getLocalBounds`) and `object.target.x/y`
+   * are already there, and the only thing that needs converting in is the
+   * live pointer position. `resizeBoundsFromPointer` keeps the edge/corner
+   * opposite the dragged handle anchored at its exact original coordinate;
+   * `positionFromLocalBounds` then derives x/y from the resized box using
+   * the object's own original origin, so growing or shrinking never moves
+   * that anchored edge.
+   */
   private applyResize(state: ResizeState, pointer: Phaser.Input.Pointer): void {
     const { object, handle, originalBounds } = state;
     const preserveAspect = !object.allowNonUniformScale;
     const local = this.worldToParentLocal(object.target, pointer.worldX, pointer.worldY);
     const newBounds = resizeBoundsFromPointer(originalBounds, handle, local, MIN_SIZE, preserveAspect);
-    const originalSize = resizeBoundsSize(originalBounds);
     const newSize = resizeBoundsSize(newBounds);
     const native = object.getNativeSize();
-    if (originalSize.width <= 0 || originalSize.height <= 0 || native.width <= 0 || native.height <= 0) return;
+    if (native.width <= 0 || native.height <= 0) return;
 
-    // Preserve whatever anchor (origin) the target already renders from,
-    // without needing to know what it is: express it as a fraction of the
-    // pre-resize bounds and reapply that same fraction to the new bounds.
-    const anchorFractionX = (object.target.x - originalBounds.left) / originalSize.width;
-    const anchorFractionY = (object.target.y - originalBounds.top) / originalSize.height;
-
+    const position = positionFromLocalBounds(newBounds, object.target.originX ?? 0, object.target.originY ?? 0);
     const transform: EditableTransform = {
-      x: newBounds.left + anchorFractionX * newSize.width,
-      y: newBounds.top + anchorFractionY * newSize.height,
+      x: position.x,
+      y: position.y,
       scaleX: newSize.width / native.width,
       scaleY: newSize.height / native.height,
     };
