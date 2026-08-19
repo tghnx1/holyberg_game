@@ -10,7 +10,12 @@ import {
   JUMP_VELOCITY,
   RUN_SPEED,
 } from '../constants';
-import { JUMP_BUFFER_MS, playerBodyFor, resolveJumpImpulse } from '../level/berlin/playerPhysics';
+import {
+  computePlayerBodyOffset,
+  JUMP_BUFFER_MS,
+  playerBodyFor,
+  resolveJumpImpulse,
+} from '../level/berlin/playerPhysics';
 import type { PlayerAnimationState } from '../level/berlin/types';
 import {
   ATMOS_CROUCH_FRAME_DURATION_MS,
@@ -260,7 +265,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private applyBody(crouched: boolean): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const spec = playerBodyFor(crouched);
-    body.setSize(spec.width, spec.height).setOffset(spec.offsetX, spec.offsetY);
+    // Aligned against this physics sprite's own current frame (always
+    // ATMOS_STAY_FRAME_KEY's dimensions — its texture never changes; only
+    // the separate `visual` sprite swaps animation frames), not a hardcoded
+    // placeholder size.
+    const offset = computePlayerBodyOffset(this.width, this.height, spec);
+    body.setSize(spec.width, spec.height).setOffset(offset.offsetX, offset.offsetY);
   }
 
   destroy(fromScene?: boolean): void {

@@ -1,24 +1,45 @@
 import type { PlayerBodySpec } from './types';
 
-const PLAYER_FRAME_HEIGHT = 98;
-
 export const STANDING_BODY: PlayerBodySpec = {
   width: 44,
   height: 90,
-  offsetX: 18,
-  offsetY: PLAYER_FRAME_HEIGHT - 90,
 };
 export const CROUCHING_BODY: PlayerBodySpec = {
   width: 44,
   height: 50,
-  offsetX: 18,
-  offsetY: PLAYER_FRAME_HEIGHT - 50,
 };
 export const COYOTE_TIME_MS = 140;
 export const JUMP_BUFFER_MS = 160;
 
 export function playerBodyFor(crouched: boolean): PlayerBodySpec {
   return crouched ? CROUCHING_BODY : STANDING_BODY;
+}
+
+export interface PlayerBodyOffset {
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * Arcade body offset for `body`, aligned against the physics sprite's own
+ * *current* frame dimensions — never a hardcoded placeholder size, so this
+ * can't drift the moment the sprite's texture changes.
+ *
+ * Centering horizontally and grounding the body's bottom edge against the
+ * bottom of the frame means the body's bottom is always exactly at the
+ * sprite's own world y (origin is (0.5, 1)), for any body height — so
+ * standing and crouching share the same feet Y even though they differ in
+ * height, and switching between textures/frame sizes never moves it either.
+ */
+export function computePlayerBodyOffset(
+  frameWidth: number,
+  frameHeight: number,
+  body: PlayerBodySpec,
+): PlayerBodyOffset {
+  return {
+    offsetX: (frameWidth - body.width) / 2,
+    offsetY: frameHeight - body.height,
+  };
 }
 
 export function canConsumeJump(

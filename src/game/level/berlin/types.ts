@@ -95,9 +95,13 @@ export type BerlinEntity =
   | PlatformConfig
   | MovingPlatformConfig;
 
+/**
+ * Body width/height only: the offset that centers/grounds the body against
+ * the physics sprite's actual current frame is computed in Player.applyBody,
+ * not stored here, so it can never drift from whatever texture the physics
+ * sprite is really showing.
+ */
 export interface PlayerBodySpec {
   width: number;
   height: number;
-  offsetX: number;
-  offsetY: number;
 }

@@ -8,12 +8,14 @@ import {
 import { applyCollectibleReward, canFinishBerlin } from '../src/game/level/berlin/berlinRules';
 import {
   canConsumeJump,
+  computePlayerBodyOffset,
   COYOTE_TIME_MS,
   CROUCHING_BODY,
   JUMP_BUFFER_MS,
   playerBodyFor,
   STANDING_BODY,
 } from '../src/game/level/berlin/playerPhysics';
+import { GROUND_Y } from '../src/game/constants';
 import { BerlinScoreSystem } from '../src/game/systems/BerlinScoreSystem';
 import { SectionTracker } from '../src/game/systems/SectionTracker';
 
@@ -115,6 +117,51 @@ describe('Berlin player physics rules', () => {
     expect(playerBodyFor(false)).toEqual(STANDING_BODY);
     expect(playerBodyFor(true)).toEqual(CROUCHING_BODY);
     expect(CROUCHING_BODY.height).toBeLessThan(STANDING_BODY.height);
+  });
+
+  describe('computePlayerBodyOffset (aligned against the actual physics sprite frame)', () => {
+    // The physics sprite's own texture never changes (only the separate
+    // visual sprite swaps animation frames), so this is always
+    // ATMOS_STAY_FRAME_KEY's real dimensions in production.
+    const FRAME_WIDTH = 195;
+    const FRAME_HEIGHT = 184;
+
+    it('spawns with the standing body bottom exactly at GROUND_Y', () => {
+      const offset = computePlayerBodyOffset(FRAME_WIDTH, FRAME_HEIGHT, STANDING_BODY);
+      // With origin (0.5, 1) the frame's own bottom edge (offsetY + height)
+      // is exactly the sprite's own world y — and Player spawns with
+      // `this.y = GROUND_Y` (see Player's constructor), so the body's
+      // bottom lands exactly on GROUND_Y with zero extra drop distance.
+      const bodyBottomInFrame = offset.offsetY + STANDING_BODY.height;
+      expect(bodyBottomInFrame).toBe(FRAME_HEIGHT);
+      const spawnY = GROUND_Y;
+      const bodyBottomWorldY = spawnY - FRAME_HEIGHT + bodyBottomInFrame;
+      expect(bodyBottomWorldY).toBe(GROUND_Y);
+    });
+
+    it('centers the body horizontally on the player', () => {
+      const offset = computePlayerBodyOffset(FRAME_WIDTH, FRAME_HEIGHT, STANDING_BODY);
+      const bodyCenterInFrame = offset.offsetX + STANDING_BODY.width / 2;
+      expect(bodyCenterInFrame).toBe(FRAME_WIDTH / 2);
+    });
+
+    it('keeps standing and crouching bodies on exactly the same feet Y', () => {
+      const standing = computePlayerBodyOffset(FRAME_WIDTH, FRAME_HEIGHT, STANDING_BODY);
+      const crouching = computePlayerBodyOffset(FRAME_WIDTH, FRAME_HEIGHT, CROUCHING_BODY);
+      const standingBottom = standing.offsetY + STANDING_BODY.height;
+      const crouchingBottom = crouching.offsetY + CROUCHING_BODY.height;
+      expect(crouchingBottom).toBe(standingBottom);
+    });
+
+    it('does not move the feet Y when the body spec changes but the frame does not', () => {
+      // Simulates starting to move / switching animation state: the physics
+      // sprite's own texture is unchanged (still the stay frame), so the
+      // feet-Y invariant must hold for whichever body spec is active.
+      for (const body of [STANDING_BODY, CROUCHING_BODY]) {
+        const offset = computePlayerBodyOffset(FRAME_WIDTH, FRAME_HEIGHT, body);
+        expect(offset.offsetY + body.height).toBe(FRAME_HEIGHT);
+      }
+    });
   });
   it('supports coyote and buffered jumps but blocks crouch jumps', () => {
     const now = 1000;
