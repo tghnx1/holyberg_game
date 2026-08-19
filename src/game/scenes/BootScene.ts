@@ -9,7 +9,7 @@ import {
 } from '../rhythm/RhythmAssetLayout';
 import { getStreetGroundAssetUrls } from '../level/berlin/streetGroundLayout';
 import { getPlatformTextureAssets } from '../level/berlin/platformVisualLayout';
-import { ATMOS_RUN_FRAME_KEYS } from '../entities/Player';
+import { ATMOS_JUMP_FRAME_KEYS, ATMOS_RUN_FRAME_KEYS } from '../entities/Player';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -59,6 +59,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image('berlin-train-left', 'assets/backgrounds/train-left.png');
     for (const [index, key] of ATMOS_RUN_FRAME_KEYS.entries()) {
       this.load.image(key, `assets/players/Atmos/run ${index + 1}.png`);
+    }
+    for (const [index, key] of ATMOS_JUMP_FRAME_KEYS.entries()) {
+      this.load.image(key, `assets/players/Atmos/jump ${index + 1}.png`);
     }
     this.load.svg(
       RHYTHM_HIGHWAY_TEXTURE_KEY,

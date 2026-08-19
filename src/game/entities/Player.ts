@@ -22,7 +22,38 @@ export const ATMOS_RUN_FRAME_KEYS = [
   'atmos-run-6',
 ] as const;
 export const ATMOS_RUN_STATIC_FRAME_KEY = ATMOS_RUN_FRAME_KEYS[2];
+export const ATMOS_JUMP_FRAME_KEYS = [
+  'atmos-jump-1',
+  'atmos-jump-2',
+  'atmos-jump-3',
+  'atmos-jump-4',
+  'atmos-jump-5',
+] as const;
+type AtmosFrameKey =
+  | (typeof ATMOS_RUN_FRAME_KEYS)[number]
+  | (typeof ATMOS_JUMP_FRAME_KEYS)[number];
+const ATMOS_VISUAL_SCALE = 0.8;
 const ATMOS_RUN_FRAME_DURATION_MS = 92;
+/** Frames 1-4 play out over the ascent; the last one holds through the apex. */
+const ATMOS_JUMP_FRAME_DURATION_MS = 70;
+const ATMOS_JUMP_ASCENT_FRAME_COUNT = 4;
+/**
+ * Transparent padding under the drawn feet in each source PNG, so the visual
+ * sits on the same line as the (invisible) physics body's feet.
+ */
+const ATMOS_FRAME_FOOT_GAPS: Record<AtmosFrameKey, number> = {
+  'atmos-run-1': 4,
+  'atmos-run-2': 4,
+  'atmos-run-3': 8,
+  'atmos-run-4': 4,
+  'atmos-run-5': 4,
+  'atmos-run-6': 15,
+  'atmos-jump-1': 21,
+  'atmos-jump-2': 11,
+  'atmos-jump-3': 9,
+  'atmos-jump-4': 25,
+  'atmos-jump-5': 19,
+};
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   animationState: PlayerAnimationState = 'run';
@@ -43,6 +74,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private airHolding = false;
   private visual: Phaser.GameObjects.Sprite;
   private currentVisualFrameKey?: string;
+  /** When the current airborne pose started, so jump frames play in order. */
+  private jumpAnimStartedAt = -Infinity;
 
   constructor(scene: Phaser.Scene, x: number) {
     super(scene, x, GROUND_Y, 'dj');
@@ -104,6 +137,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           : body.velocity.y < 0
             ? 'jump'
             : 'fall';
+    // Restart the jump frames on every impulse, including the second one.
+    if (jumpedThisFrame) this.jumpAnimStartedAt = now;
     this.rotation = this.crouched ? 0 : Math.sin(now / 80) * 0.025;
     this.syncVisual(now);
   }
@@ -113,18 +148,43 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // never affected by resizing the physics body, unlike body.y + body.height
     // which reads stale for one frame right after a crouch/stand toggle
     // (the body only resyncs on Phaser's next automatic preUpdate).
+    const targetFrameKey = this.resolveVisualFrameKey(now);
+    const visualScale = this.crouched ? ATMOS_VISUAL_SCALE * 0.64 : ATMOS_VISUAL_SCALE;
     this.visual.x = this.x;
-    this.visual.y = this.y;
-    const targetFrameKey = this.animationState === 'run'
-      ? ATMOS_RUN_FRAME_KEYS[Math.floor(now / ATMOS_RUN_FRAME_DURATION_MS) % ATMOS_RUN_FRAME_KEYS.length]
-      : ATMOS_RUN_STATIC_FRAME_KEY;
+    this.visual.y = this.y + this.getVisualFootOffset(targetFrameKey, visualScale);
     if (targetFrameKey !== this.currentVisualFrameKey) {
       this.visual.setTexture(targetFrameKey);
       this.currentVisualFrameKey = targetFrameKey;
     }
-    this.visual.setScale(1, this.crouched ? 0.64 : 1);
+    this.visual.setScale(1, visualScale);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);
+  }
+
+  private resolveVisualFrameKey(now: number): AtmosFrameKey {
+    switch (this.animationState) {
+      case 'run':
+        return ATMOS_RUN_FRAME_KEYS[
+          Math.floor(now / ATMOS_RUN_FRAME_DURATION_MS) % ATMOS_RUN_FRAME_KEYS.length
+        ];
+      case 'jump':
+      case 'doubleJump':
+      case 'fall': {
+        const step = Math.floor((now - this.jumpAnimStartedAt) / ATMOS_JUMP_FRAME_DURATION_MS);
+        // Ascending walks frames 1-4; once falling the pose holds on the last
+        // frame so the apex and the descent read as one continuous motion.
+        const index = this.animationState === 'fall'
+          ? Math.min(ATMOS_JUMP_FRAME_KEYS.length - 1, Math.max(ATMOS_JUMP_ASCENT_FRAME_COUNT - 1, step))
+          : Math.min(ATMOS_JUMP_ASCENT_FRAME_COUNT - 1, Math.max(0, step));
+        return ATMOS_JUMP_FRAME_KEYS[index];
+      }
+      default:
+        return ATMOS_RUN_STATIC_FRAME_KEY;
+    }
+  }
+
+  private getVisualFootOffset(frameKey: AtmosFrameKey, visualScale: number): number {
+    return ATMOS_FRAME_FOOT_GAPS[frameKey] * visualScale;
   }
 
   requestJump(now: number): void {
