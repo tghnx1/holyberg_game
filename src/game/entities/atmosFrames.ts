@@ -28,12 +28,15 @@ export const ATMOS_CROUCH_FRAME_KEYS = [
   'atmos-crouch-3',
 ] as const;
 export const ATMOS_DAMAGE_FRAME_KEY = 'atmos-damage-1';
+/** Idle pose: shown before the run starts and whenever Atmos is grounded and stationary/frozen. */
+export const ATMOS_STAY_FRAME_KEY = 'atmos-stay';
 
 export type AtmosFrameKey =
   | (typeof ATMOS_RUN_FRAME_KEYS)[number]
   | (typeof ATMOS_JUMP_FRAME_KEYS)[number]
   | (typeof ATMOS_CROUCH_FRAME_KEYS)[number]
-  | typeof ATMOS_DAMAGE_FRAME_KEY;
+  | typeof ATMOS_DAMAGE_FRAME_KEY
+  | typeof ATMOS_STAY_FRAME_KEY;
 
 /** One uniform scale for every Atmos state; no state ever squashes the sprite. */
 export const ATMOS_VISUAL_SCALE = 0.8;
@@ -66,6 +69,7 @@ export const ATMOS_FRAME_FOOT_GAPS: Record<AtmosFrameKey, number> = {
   'atmos-crouch-2': 4,
   'atmos-crouch-3': 5,
   'atmos-damage-1': 10,
+  'atmos-stay': 7,
 };
 
 /** Y offset that puts the drawn feet of `frameKey` on the sprite's feet line. */

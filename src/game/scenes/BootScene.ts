@@ -14,6 +14,7 @@ import {
   ATMOS_DAMAGE_FRAME_KEY,
   ATMOS_JUMP_FRAME_KEYS,
   ATMOS_RUN_FRAME_KEYS,
+  ATMOS_STAY_FRAME_KEY,
 } from '../entities/Player';
 import { getDialogueStationAssetUrls } from '../dialogue/stationAssets';
 import {
@@ -77,6 +78,7 @@ export class BootScene extends Phaser.Scene {
       this.load.image(key, `assets/players/Atmos/crouch ${index + 1}.png`);
     }
     this.load.image(ATMOS_DAMAGE_FRAME_KEY, 'assets/players/Atmos/damage 1.png');
+    this.load.image(ATMOS_STAY_FRAME_KEY, 'assets/players/Atmos/stay.png');
     this.load.svg(
       RHYTHM_HIGHWAY_TEXTURE_KEY,
       'assets/level_2/Rhythm Highway (unchanged).svg',
@@ -92,14 +94,6 @@ export class BootScene extends Phaser.Scene {
 
   create(): void {
     createObstacleAnimations(this);
-    const graphics = this.make.graphics({ x: 0, y: 0 }, false);
-    graphics.fillStyle(0x17101f).fillRoundedRect(0, 0, 80, 98, 18);
-    graphics.fillStyle(0xff713c).fillCircle(40, 26, 21);
-    graphics.fillStyle(0x21182d).fillCircle(40, 26, 12);
-    graphics.fillStyle(0x15121d).fillRect(23, 45, 34, 40);
-    graphics.fillStyle(0xffc74e).fillRect(13, 50, 12, 32);
-    graphics.generateTexture('dj', 80, 98);
-    graphics.destroy();
 
     const developmentScene = new URLSearchParams(window.location.search).get('scene');
     if (import.meta.env.DEV && developmentScene === 'rhythm') {

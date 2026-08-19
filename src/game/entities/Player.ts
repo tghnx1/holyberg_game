@@ -24,6 +24,7 @@ import {
   ATMOS_RUN_FRAME_DURATION_MS,
   ATMOS_RUN_FRAME_KEYS,
   ATMOS_RUN_STATIC_FRAME_KEY,
+  ATMOS_STAY_FRAME_KEY,
   ATMOS_VISUAL_SCALE,
   getAtmosFootOffset,
   getLoopedFrame,
@@ -38,6 +39,7 @@ export {
   ATMOS_JUMP_FRAME_KEYS,
   ATMOS_RUN_FRAME_KEYS,
   ATMOS_RUN_STATIC_FRAME_KEY,
+  ATMOS_STAY_FRAME_KEY,
 } from './atmosFrames';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
@@ -68,7 +70,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private hitAnimUntil = -Infinity;
 
   constructor(scene: Phaser.Scene, x: number) {
-    super(scene, x, GROUND_Y, 'dj');
+    super(scene, x, GROUND_Y, ATMOS_STAY_FRAME_KEY);
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setOrigin(0.5, 1);
@@ -77,8 +79,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setScale(1);
     this.setAlpha(0);
 
-    this.visual = scene.add.sprite(x, GROUND_Y, 'dj');
+    // Shown immediately, before the run starts and before the first run()
+    // call ever fires: without this Atmos would flash whatever placeholder
+    // texture the constructor happened to pass, for the whole intro screen.
+    this.currentVisualFrameKey = ATMOS_STAY_FRAME_KEY;
+    this.visual = scene.add.sprite(x, GROUND_Y, ATMOS_STAY_FRAME_KEY);
     this.visual.setOrigin(0.5, 1);
+    this.visual.setScale(ATMOS_VISUAL_SCALE);
+    this.visual.y = GROUND_Y + getAtmosFootOffset(ATMOS_STAY_FRAME_KEY, ATMOS_VISUAL_SCALE) + 10;
     this.visual.setDepth(Depth.PLAYER);
   }
 
@@ -159,6 +167,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (now < this.hitAnimUntil) return ATMOS_DAMAGE_FRAME_KEY;
     switch (this.animationState) {
       case 'run':
+        if (this.frozen) return ATMOS_STAY_FRAME_KEY;
         return now < this.landingAnimUntil
           ? ATMOS_JUMP_LANDING_FRAME_KEY
           : getLoopedFrame(ATMOS_RUN_FRAME_KEYS, now, ATMOS_RUN_FRAME_DURATION_MS);
