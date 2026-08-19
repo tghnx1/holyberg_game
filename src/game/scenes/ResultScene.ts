@@ -14,7 +14,7 @@ import {
 } from '../leaderboard/domain';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
-import { combineScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
+import { combineAllScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
 import type { RhythmResult } from '../rhythm/types';
 
 const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
@@ -62,7 +62,11 @@ export class ResultScene extends Phaser.Scene {
       this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, 0x22112e);
     }
 
-    this.totalScore = combineScores(this.result.berlinScore, this.result.score);
+    this.totalScore = combineAllScores(
+      this.result.berlinScore,
+      this.result.score,
+      this.result.bossScore,
+    );
     this.storedInstagram = readStoredInstagram(window.localStorage);
     const grade = getPerformanceGrade(this.result.accuracy);
     this.add
@@ -85,7 +89,7 @@ export class ResultScene extends Phaser.Scene {
       .text(
         92,
         188,
-        `BERLIN SCORE       ${this.result.berlinScore}\nRHYTHM SCORE       ${this.result.score}\nTOTAL SCORE        ${this.totalScore}\n\nPERFECT            ${this.result.perfect}\nGOOD               ${this.result.good}\nOK                 ${this.result.ok}\nMISS               ${this.result.miss}\nBAD TAPS           ${this.result.badTap}\nMAX COMBO          ${this.result.maxCombo}\nACCURACY           ${this.result.accuracy.toFixed(1)}%`,
+        this.formatBreakdown(),
         {
           fontFamily: 'Space Mono',
           fontSize: '18px',
@@ -98,6 +102,39 @@ export class ResultScene extends Phaser.Scene {
     this.createLeaderboardPanel();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeClaimModal());
     void this.loadLeaderboard();
+  }
+
+  /**
+   * Level 3 lines only appear once a boss fight has actually been played, so
+   * the Level 1 + Level 2 result reads exactly as it did before.
+   */
+  private formatBreakdown(): string {
+    const lines = [
+      `BERLIN SCORE       ${this.result.berlinScore}`,
+      `RHYTHM SCORE       ${this.result.score}`,
+    ];
+    if (this.result.bossScore !== undefined) {
+      lines.push(`BOSS SCORE         ${this.result.bossScore}`);
+    }
+    lines.push(`TOTAL SCORE        ${this.totalScore}`, '');
+    lines.push(
+      `PERFECT            ${this.result.perfect}`,
+      `GOOD               ${this.result.good}`,
+      `OK                 ${this.result.ok}`,
+      `MISS               ${this.result.miss}`,
+      `BAD TAPS           ${this.result.badTap}`,
+      `MAX COMBO          ${this.result.maxCombo}`,
+      `ACCURACY           ${this.result.accuracy.toFixed(1)}%`,
+    );
+    if (this.result.bossScore !== undefined) {
+      lines.push(
+        '',
+        `BOSS FIGHT         ${this.result.bossSurvived ? 'SURVIVED' : 'DOWNED'}`,
+        `LASER HITS         ${this.result.bossHits ?? 0}`,
+        `BOSS MAX COMBO     ${this.result.bossMaxCombo ?? 0}`,
+      );
+    }
+    return lines.join('\n');
   }
 
   private createLeaderboardPanel(): void {

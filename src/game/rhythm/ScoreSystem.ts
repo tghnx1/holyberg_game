@@ -98,6 +98,13 @@ export function calculateAccuracy(state: ScoreState): number {
 export const combineScores = (berlinScore: number, rhythmScore: number): number =>
   berlinScore + rhythmScore;
 
+/** Leaderboard total across all three levels. Level 3 is 0 until it is played. */
+export const combineAllScores = (
+  berlinScore: number,
+  rhythmScore: number,
+  bossScore = 0,
+): number => combineScores(berlinScore, rhythmScore) + bossScore;
+
 export function getPerformanceGrade(accuracy: number): 'S' | 'A' | 'B' | 'C' | 'D' {
   if (accuracy >= 95) return 'S';
   if (accuracy >= 90) return 'A';

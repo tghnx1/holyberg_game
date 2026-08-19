@@ -94,6 +94,10 @@ export class BootScene extends Phaser.Scene {
       this.scene.start('RhythmScene', { score: 500 });
       return;
     }
+    if (import.meta.env.DEV && developmentScene === 'boss') {
+      this.scene.start('BossScene');
+      return;
+    }
     this.scene.start('BerlinScene');
   }
 }

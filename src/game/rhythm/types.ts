@@ -70,4 +70,9 @@ export interface RhythmResult extends ScoreState {
   berlinScore: number;
   accuracy: number;
   success: boolean;
+  /** Level 3 boss fight. Absent when the result comes from an earlier level. */
+  bossScore?: number;
+  bossSurvived?: boolean;
+  bossHits?: number;
+  bossMaxCombo?: number;
 }

@@ -653,7 +653,8 @@ export class RhythmScene extends Phaser.Scene {
     this.time.delayedCall(1500, () => {
       overlay.destroy(true);
       if (this.activeOverlay === overlay) this.activeOverlay = undefined;
-      this.scene.start('ResultScene', { ...this.scoreState, berlinScore: this.berlinScore, accuracy: calculateAccuracy(this.scoreState), success: true });
+      // Level 3 carries the Berlin and rhythm totals through to the result.
+      this.scene.start('BossScene', { rhythmResult: { ...this.scoreState, berlinScore: this.berlinScore, accuracy: calculateAccuracy(this.scoreState), success: true } });
     });
   }
 
