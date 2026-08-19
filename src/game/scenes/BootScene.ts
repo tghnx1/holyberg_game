@@ -9,7 +9,12 @@ import {
 } from '../rhythm/RhythmAssetLayout';
 import { getStreetGroundAssetUrls } from '../level/berlin/streetGroundLayout';
 import { getPlatformTextureAssets } from '../level/berlin/platformVisualLayout';
-import { ATMOS_JUMP_FRAME_KEYS, ATMOS_RUN_FRAME_KEYS } from '../entities/Player';
+import {
+  ATMOS_CROUCH_FRAME_KEYS,
+  ATMOS_DAMAGE_FRAME_KEY,
+  ATMOS_JUMP_FRAME_KEYS,
+  ATMOS_RUN_FRAME_KEYS,
+} from '../entities/Player';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -63,6 +68,10 @@ export class BootScene extends Phaser.Scene {
     for (const [index, key] of ATMOS_JUMP_FRAME_KEYS.entries()) {
       this.load.image(key, `assets/players/Atmos/jump ${index + 1}.png`);
     }
+    for (const [index, key] of ATMOS_CROUCH_FRAME_KEYS.entries()) {
+      this.load.image(key, `assets/players/Atmos/crouch ${index + 1}.png`);
+    }
+    this.load.image(ATMOS_DAMAGE_FRAME_KEY, 'assets/players/Atmos/damage 1.png');
     this.load.svg(
       RHYTHM_HIGHWAY_TEXTURE_KEY,
       'assets/images/Rhythm Highway (unchanged).svg',

@@ -29,9 +29,17 @@ export const ATMOS_JUMP_FRAME_KEYS = [
   'atmos-jump-4',
   'atmos-jump-5',
 ] as const;
+export const ATMOS_CROUCH_FRAME_KEYS = [
+  'atmos-crouch-1',
+  'atmos-crouch-2',
+  'atmos-crouch-3',
+] as const;
+export const ATMOS_DAMAGE_FRAME_KEY = 'atmos-damage-1';
 type AtmosFrameKey =
   | (typeof ATMOS_RUN_FRAME_KEYS)[number]
-  | (typeof ATMOS_JUMP_FRAME_KEYS)[number];
+  | (typeof ATMOS_JUMP_FRAME_KEYS)[number]
+  | (typeof ATMOS_CROUCH_FRAME_KEYS)[number]
+  | typeof ATMOS_DAMAGE_FRAME_KEY;
 const ATMOS_VISUAL_SCALE = 0.8;
 const ATMOS_RUN_FRAME_DURATION_MS = 92;
 /** Frames 1-4 are the airborne poses; the last one holds through the fall. */
@@ -40,6 +48,7 @@ const ATMOS_JUMP_ASCENT_FRAME_COUNT = 4;
 /** Frame 5 is the landing pose, shown only once the feet are back down. */
 const ATMOS_JUMP_LANDING_FRAME_KEY = ATMOS_JUMP_FRAME_KEYS[4];
 const ATMOS_JUMP_LANDING_DURATION_MS = 120;
+const ATMOS_CROUCH_FRAME_DURATION_MS = 110;
 /**
  * Transparent padding under the drawn feet in each source PNG, so the visual
  * sits on the same line as the (invisible) physics body's feet.
@@ -56,6 +65,10 @@ const ATMOS_FRAME_FOOT_GAPS: Record<AtmosFrameKey, number> = {
   'atmos-jump-3': 9,
   'atmos-jump-4': 25,
   'atmos-jump-5': 19,
+  'atmos-crouch-1': 2,
+  'atmos-crouch-2': 4,
+  'atmos-crouch-3': 5,
+  'atmos-damage-1': 10,
 };
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
@@ -82,6 +95,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** Holds the landing pose for a beat after the feet touch down. */
   private landingAnimUntil = -Infinity;
   private wasGrounded = true;
+  /** Shows the damage pose for the duration of the existing knockback. */
+  private hitAnimUntil = -Infinity;
 
   constructor(scene: Phaser.Scene, x: number) {
     super(scene, x, GROUND_Y, 'dj');
@@ -171,6 +186,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private resolveVisualFrameKey(now: number): AtmosFrameKey {
+    // Obstacle knockback pre-empts whatever pose run()/crouch would show.
+    if (now < this.hitAnimUntil) return ATMOS_DAMAGE_FRAME_KEY;
     switch (this.animationState) {
       case 'run':
         return now < this.landingAnimUntil
@@ -189,6 +206,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
           : Math.min(ATMOS_JUMP_ASCENT_FRAME_COUNT - 1, Math.max(0, step));
         return ATMOS_JUMP_FRAME_KEYS[index];
       }
+      case 'crouch':
+        return ATMOS_CROUCH_FRAME_KEYS[
+          Math.floor(now / ATMOS_CROUCH_FRAME_DURATION_MS) % ATMOS_CROUCH_FRAME_KEYS.length
+        ];
       default:
         return ATMOS_RUN_STATIC_FRAME_KEY;
     }
@@ -243,6 +264,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.speed = HIT_KNOCKBACK_SPEED;
     this.hitSlowUntil = now + HIT_SLOW_DURATION;
     this.hitInputsLockedUntil = now + HIT_INPUT_LOCK_MS;
+    this.hitAnimUntil = now + HIT_KNOCKBACK_DURATION;
     this.setVelocityX(HIT_KNOCKBACK_SPEED);
     this.scene.time.delayedCall(HIT_KNOCKBACK_DURATION, () => {
       this.speed = HIT_SLOW_SPEED;
