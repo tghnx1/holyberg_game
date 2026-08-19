@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { DESIGN_HEIGHT } from './constants';
 import { BerlinScene } from './scenes/BerlinScene';
 import { BossScene } from './scenes/BossScene';
+import { DialogueScene } from './scenes/DialogueScene';
 import { BootScene } from './scenes/BootScene';
 import { ResultScene } from './scenes/ResultScene';
 import { RhythmScene } from './scenes/RhythmScene';
@@ -36,5 +37,5 @@ export const config: Phaser.Types.Core.GameConfig = {
   // does not scale by devicePixelRatio, so this is a 1:1 backing store and a
   // phone renders the same pixel count as a desktop at the same CSS size.
   scale: { mode: Phaser.Scale.EXPAND, autoCenter: Phaser.Scale.CENTER_BOTH, zoom: 1 },
-  scene: [BootScene, BerlinScene, RhythmScene, BossScene, ResultScene],
+  scene: [BootScene, BerlinScene, DialogueScene, RhythmScene, BossScene, ResultScene],
 };

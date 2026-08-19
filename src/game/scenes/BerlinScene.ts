@@ -370,7 +370,10 @@ export class BerlinScene extends Phaser.Scene {
       1800,
     );
     this.time.delayedCall(2200, () => {
-      this.scene.start('RhythmScene', { score: this.progress.score });
+      this.scene.start('DialogueScene', {
+        scriptId: 'metro-magician',
+        payload: { score: this.progress.score },
+      });
     });
   }
 

@@ -98,6 +98,13 @@ export class BootScene extends Phaser.Scene {
       this.scene.start('BossScene');
       return;
     }
+    if (import.meta.env.DEV && developmentScene === 'dialogue') {
+      this.scene.start('DialogueScene', {
+        scriptId: 'metro-magician',
+        payload: { score: 500 },
+      });
+      return;
+    }
     this.scene.start('BerlinScene');
   }
 }
