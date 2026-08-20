@@ -15,18 +15,17 @@ export const METRO_MAGICIAN_DIALOGUE: DialogueScript = {
     { text: 'I KNOW YOU!', speakerId: 'disus', speakerName: 'THE MAGICIAN' },
     {
       text: "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.",
-      speakerId: 'disus',
-      speakerName: 'THE MAGICIAN',
+      speakerId: 'atmos',
+      speakerName: 'ATMOS',
     },
     {
       text: "I CAN OPEN YOU A PORTAL HOME,\nBUT YOU NEED TO PROVE YOU'RE\nCOOL ENOUGH FOR IT.",
       speakerId: 'disus',
       speakerName: 'THE MAGICIAN',
     },
-    { text: 'LOCK IT IN:', speakerId: 'disus', speakerName: 'THE MAGICIAN' },
     // The closing beat lands harder with a longer hold than its length earns.
     {
-      text: 'PLACE.\nDATE.\nTIME.',
+      text: 'LOCK IT IN:\nMADAME CLAUDE\n9 OCTOBER\n22:00',
       holdMsOverride: 1400,
       speakerId: 'disus',
       speakerName: 'THE MAGICIAN',

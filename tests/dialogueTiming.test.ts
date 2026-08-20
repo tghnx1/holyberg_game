@@ -70,8 +70,7 @@ describe('dialogue scripts', () => {
       'I KNOW YOU!',
       "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.",
       "I CAN OPEN YOU A PORTAL HOME,\nBUT YOU NEED TO PROVE YOU'RE\nCOOL ENOUGH FOR IT.",
-      'LOCK IT IN:',
-      'PLACE.\nDATE.\nTIME.',
+      'LOCK IT IN:\nMADAME CLAUDE\n9 OCTOBER\n22:00',
     ]);
   });
 
