@@ -205,6 +205,9 @@ export class DialogueScene extends Phaser.Scene {
       width,
       height,
       undefined,
+      // The seam leans right as it descends, so the station has to keep
+      // rendering past its own vertical edge to stay behind the divider all
+      // the way down. The panel's logical `width` is unchanged.
       DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
     );
     this.stationScene.root.setDepth(DialogueDepth.SCENE);

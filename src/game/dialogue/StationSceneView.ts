@@ -81,6 +81,17 @@ export class StationSceneView {
   private trainDepartX = 0;
   /** Recomputed from Disus's current (stay-pose) rest transform on every edit. */
   private disusFloorY = 0;
+  /**
+   * The backdrop layers' authored rest pose, kept apart from what they are
+   * actually drawn at. `coverRenderWidth()` may scale a backdrop *up* from
+   * this to reach across the divider overlap; keeping the authored pose here
+   * means repeated resizes re-derive that from the same base instead of
+   * ratcheting it upwards, and a live editor edit just rewrites the base.
+   */
+  private readonly backdropRestPose = new Map<
+    Phaser.GameObjects.Image,
+    { x: number; y: number; scale: number }
+  >();
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -88,13 +99,16 @@ export class StationSceneView {
     height: number,
     private readonly layout: DialogueStationLayoutConfig = DEFAULT_STATION_LAYOUT,
     /**
-     * Extra width the scene's clip mask extends past the panel's own width,
-     * so the scene keeps covering the ground underneath the diagonal divider
-     * (which drifts right toward the bottom) instead of leaving a black gap
-     * between the panel's vertical edge and the divider. Purely a clip
-     * extension — the cover-fit composition itself is unaffected.
+     * Extra width this view renders past the panel's own logical width, so
+     * the station keeps covering the ground underneath the diagonal divider
+     * (which drifts right toward the bottom) instead of leaving a black wedge
+     * between the panel's vertical edge and the divider's left edge.
+     *
+     * Only *coverage* is extended: the panel's logical width still drives the
+     * cover-fit composition and every authored rest pose, so the train and
+     * the characters sit exactly where they would with no overlap at all.
      */
-    private readonly maskOverlap: number = 0,
+    private readonly renderOverlap: number = 0,
   ) {
     this.referenceWidth = width;
     this.referenceHeight = height;
@@ -153,6 +167,7 @@ export class StationSceneView {
   ): Phaser.GameObjects.Image {
     const image = this.scene.add.image(0, 0, key).setOrigin(0, 0);
     this.applyRestTransform(image, entry, this.nativeHeightOf(key, BACKDROP_NATIVE_HEIGHT_FALLBACK));
+    this.backdropRestPose.set(image, { x: image.x, y: image.y, scale: image.scaleX });
     return image;
   }
 
@@ -203,9 +218,58 @@ export class StationSceneView {
    * rather than leaving gaps) and repositions the mask to match.
    */
   resize(width: number, height: number): void {
-    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width + this.maskOverlap, height);
+    const renderWidth = width + this.renderOverlap;
+    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, renderWidth, height);
+    // Cover-fit still targets the *logical* panel box, so the composition —
+    // and with it every authored object position — is identical with or
+    // without the overlap.
     const fit = computeCoverFit(this.referenceWidth, this.referenceHeight, width, height);
     this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
+    // ...but the artwork itself has to actually reach across the overlap,
+    // otherwise the widened mask just exposes camera background.
+    if (fit.scale > 0) {
+      const localRight = (renderWidth - fit.offsetX) / fit.scale;
+      this.coverRenderWidth(this.background, localRight);
+      this.coverRenderWidth(this.foreground, localRight);
+    }
+  }
+
+  /**
+   * Grows a backdrop layer just enough that its right edge reaches
+   * `localRight` (in `content`-local pixels), scaling *uniformly* from its
+   * authored rest pose so the art is never stretched, and never shrinking it
+   * below that pose. At the panel aspect ratios this composition was authored
+   * for the art already reaches well past the seam and this is a no-op; it
+   * only engages on wide-and-short viewports, where the backdrop would
+   * otherwise run out before the divider.
+   *
+   * The extra size is taken off the left/top anchor: x stays put so the
+   * growth spills rightwards under the seam, and the bottom edge is pinned so
+   * the platform's ground plane stays where the characters' feet are, with
+   * the overflow cropped by the mask.
+   */
+  private coverRenderWidth(image: Phaser.GameObjects.Image | undefined, localRight: number): void {
+    if (!image) return;
+    const rest = this.backdropRestPose.get(image);
+    if (!rest) return;
+    const needed = image.width > 0 ? (localRight - rest.x) / image.width : rest.scale;
+    const scale = Math.max(rest.scale, needed);
+    const restBottom = rest.y + image.height * rest.scale;
+    image.setScale(scale).setPosition(rest.x, restBottom - image.height * scale);
+  }
+
+  /** A live editor edit re-authors the backdrop's rest pose, so that becomes the new base. */
+  private rebaseBackdrop(
+    image: Phaser.GameObjects.Image | undefined,
+    transform: EditableTransform,
+  ): void {
+    if (image) {
+      this.backdropRestPose.set(image, {
+        x: transform.x,
+        y: transform.y,
+        scale: transform.scaleY,
+      });
+    }
   }
 
   /**
@@ -260,9 +324,9 @@ export class StationSceneView {
    */
   getEditableObjects(): EditableObject[] {
     const entries: { id: StationObjectKey; label: string; target?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; nativeHeight: number; onChange?: (t: EditableTransform) => void }[] = [
-      { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
+      { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK), onChange: (t) => this.rebaseBackdrop(this.background, t) },
       { id: 'train', label: 'train', target: this.train, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT), onChange: () => this.recomputeTrainDeparture() },
-      { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
+      { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK), onChange: (t) => this.rebaseBackdrop(this.foreground, t) },
       { id: 'atmos', label: 'Atmos', target: this.atmos, nativeHeight: CHARACTER_CANVAS_HEIGHT },
       { id: 'disus', label: 'Disus', target: this.disus, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeDisusFloor() },
     ];
@@ -292,8 +356,12 @@ export class StationSceneView {
     for (const entry of snapshot) {
       const id = entry.id as StationObjectKey;
       if (!(id in heightById)) continue;
+      // Backdrops may currently be drawn scaled up to cover the divider
+      // overlap; persist the authored rest scale, never that derived one.
+      const target = id === 'background' ? this.background : id === 'foreground' ? this.foreground : undefined;
+      const rest = target && this.backdropRestPose.get(target);
       next[id] = toStationObjectLayout(
-        { x: entry.x, y: entry.y, scale: entry.scaleY },
+        rest ? { x: rest.x, y: rest.y, scale: rest.scale } : { x: entry.x, y: entry.y, scale: entry.scaleY },
         this.referenceWidth,
         this.referenceHeight,
         heightById[id],
