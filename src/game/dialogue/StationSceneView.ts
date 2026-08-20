@@ -87,6 +87,14 @@ export class StationSceneView {
     width: number,
     height: number,
     private readonly layout: DialogueStationLayoutConfig = DEFAULT_STATION_LAYOUT,
+    /**
+     * Extra width the scene's clip mask extends past the panel's own width,
+     * so the scene keeps covering the ground underneath the diagonal divider
+     * (which drifts right toward the bottom) instead of leaving a black gap
+     * between the panel's vertical edge and the divider. Purely a clip
+     * extension — the cover-fit composition itself is unaffected.
+     */
+    private readonly maskOverlap: number = 0,
   ) {
     this.referenceWidth = width;
     this.referenceHeight = height;
@@ -195,7 +203,7 @@ export class StationSceneView {
    * rather than leaving gaps) and repositions the mask to match.
    */
   resize(width: number, height: number): void {
-    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width, height);
+    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width + this.maskOverlap, height);
     const fit = computeCoverFit(this.referenceWidth, this.referenceHeight, width, height);
     this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
   }

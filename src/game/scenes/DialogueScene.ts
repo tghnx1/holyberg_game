@@ -200,7 +200,13 @@ export class DialogueScene extends Phaser.Scene {
 
   private buildScenePanel(): void {
     const { x, y, width, height } = this.layout.scenePanel;
-    this.stationScene = new StationSceneView(this, width, height);
+    this.stationScene = new StationSceneView(
+      this,
+      width,
+      height,
+      undefined,
+      DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
+    );
     this.stationScene.root.setDepth(DialogueDepth.SCENE);
     this.panels.add('scene', this.stationScene.root, {
       restX: x,
