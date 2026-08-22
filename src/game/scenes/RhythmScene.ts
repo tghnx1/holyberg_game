@@ -176,6 +176,12 @@ export class RhythmScene extends Phaser.Scene {
       );
       this.audio = new AudioTrackPlayer();
       await this.audio.prepare(audioBuffer);
+      // prepare() detaches the buffer, so the cached copy is now an empty
+      // shell that nothing can decode. Dropping it frees the encoded track
+      // (several MB held for the whole level) and makes a retry re-request
+      // the file — served from the HTTP cache — instead of finding a
+      // detached entry it cannot use.
+      this.cache.binary.remove('rhythm-track-audio');
       if (!this.scene.isActive()) return;
       this.playbackWindow = resolveRhythmPlaybackWindow(metadata, this.audio.durationSeconds);
       this.chart = { ...this.chart, notes: selectRhythmNotesInWindow(this.chart.notes, this.playbackWindow.startSeconds, this.playbackWindow.endSeconds) };

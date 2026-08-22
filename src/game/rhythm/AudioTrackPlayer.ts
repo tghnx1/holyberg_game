@@ -17,9 +17,18 @@ export class AudioTrackPlayer implements TrackTimeSource {
   private ended = false;
   onEnded?: () => void;
 
+  /**
+   * Decodes the track. Takes ownership of `encodedAudio`: `decodeAudioData`
+   * detaches the buffer, so the caller must not read it again and should drop
+   * its own reference (see RhythmScene, which clears the loader cache entry).
+   *
+   * Deliberately not copied first. A defensive `slice(0)` here duplicated
+   * several megabytes of encoded audio purely so the detached original could
+   * stay in Phaser's binary cache, where nothing ever read it again.
+   */
   async prepare(encodedAudio: ArrayBuffer): Promise<void> {
     this.context ??= new AudioContext();
-    this.buffer = await this.context.decodeAudioData(encodedAudio.slice(0));
+    this.buffer = await this.context.decodeAudioData(encodedAudio);
   }
 
   async unlock(): Promise<boolean> {
