@@ -45,9 +45,6 @@ const DISUS_APPEAR_FOOT_GAPS: Record<(typeof DISUS_APPEAR_FRAME_KEYS)[number], n
 };
 const DISUS_STAY_FOOT_GAP = 21;
 
-/** Frame name for the 1px right-edge column used by the backdrop bleed. */
-const BLEED_FRAME_KEY = 'metro-background-bleed';
-
 /** background/foreground share the same source art, so 1px = 1px between the two. */
 const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
 
@@ -85,9 +82,9 @@ export class StationSceneView {
   /** Recomputed from Disus's current (stay-pose) rest transform on every edit. */
   private disusFloorY = 0;
   /**
-   * Smear of the background's rightmost pixel column, filling the strip
-   * between where the background art ends and the far edge of the masked
-   * render area. See `updateBleed`.
+   * Mirrored continuation of the background, covering the strip between where
+   * the background art ends and the far edge of the masked render area. See
+   * `updateBleed`.
    */
   private readonly bleed?: Phaser.GameObjects.Image;
 
@@ -174,20 +171,16 @@ export class StationSceneView {
   }
 
   /**
-   * A 1px-wide frame cut from the right edge of the background texture, drawn
-   * stretched across whatever strip the background does not reach. Because the
-   * source is a single column, stretching it produces a continuation of the
-   * edge rather than a distorted copy of the artwork.
+   * A horizontally mirrored copy of the background, used to continue the art
+   * past its own right edge. Drawn at the background's scale, so it is real
+   * pixels of the station rather than anything stretched.
    */
-  private buildBleed(): Phaser.GameObjects.Image | undefined {
-    const key = DIALOGUE_STATION_TEXTURE_KEYS.background;
-    const texture = this.scene.textures.get(key);
-    if (!texture.has(BLEED_FRAME_KEY)) {
-      const source = texture.getSourceImage();
-      if (source.width < 1 || source.height < 1) return undefined;
-      texture.add(BLEED_FRAME_KEY, 0, source.width - 1, 0, 1, source.height);
-    }
-    return this.scene.add.image(0, 0, key, BLEED_FRAME_KEY).setOrigin(0, 0).setVisible(false);
+  private buildBleed(): Phaser.GameObjects.Image {
+    return this.scene.add
+      .image(0, 0, DIALOGUE_STATION_TEXTURE_KEYS.background)
+      .setOrigin(0, 0)
+      .setFlipX(true)
+      .setVisible(false);
   }
 
   private buildTrain(): Phaser.GameObjects.Image {
@@ -260,6 +253,18 @@ export class StationSceneView {
    * it only ever paints where the background does not reach, so the
    * composition is bit-identical to desktop at every viewport.
    *
+   * The mirror is butted directly against the background's right edge at the
+   * background's own scale, so its first column is the background's last one
+   * and the join is continuous. Nothing is stretched: it is the station's own
+   * pixels, reflected. Whatever of it reaches past `localRight` is cropped by
+   * the seam mask that is already in place, so its effective width is exactly
+   * the gap — it can never paint left of the background's edge either, which
+   * is what keeps the composition untouched.
+   *
+   * One reflection covers a gap up to the background's own display width,
+   * which is far more than the widest real device leaves; beyond roughly a
+   * 3.5:1 panel it would run short.
+   *
    * Read live from the background's current transform, so a dev-editor edit
    * to the background is followed automatically. Only the background needs
    * this: the foreground is transparent art layered on top, so where it ends
@@ -270,15 +275,14 @@ export class StationSceneView {
     const bleed = this.bleed;
     if (!background || !bleed) return;
     const right = background.x + background.displayWidth;
-    const gap = localRight - right;
-    if (gap <= 0) {
+    if (localRight <= right) {
       bleed.setVisible(false);
       return;
     }
     bleed
       .setVisible(true)
       .setPosition(right, background.y)
-      .setDisplaySize(gap, background.displayHeight);
+      .setScale(background.scaleX, background.scaleY);
   }
 
   /**
