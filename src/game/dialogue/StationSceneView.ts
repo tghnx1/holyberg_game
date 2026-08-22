@@ -45,6 +45,9 @@ const DISUS_APPEAR_FOOT_GAPS: Record<(typeof DISUS_APPEAR_FRAME_KEYS)[number], n
 };
 const DISUS_STAY_FOOT_GAP = 21;
 
+/** Frame name for the 1px right-edge column used by the backdrop bleed. */
+const BLEED_FRAME_KEY = 'metro-background-bleed';
+
 /** background/foreground share the same source art, so 1px = 1px between the two. */
 const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
 
@@ -82,16 +85,11 @@ export class StationSceneView {
   /** Recomputed from Disus's current (stay-pose) rest transform on every edit. */
   private disusFloorY = 0;
   /**
-   * The backdrop layers' authored rest pose, kept apart from what they are
-   * actually drawn at. `coverRenderWidth()` may scale a backdrop *up* from
-   * this to reach across the divider overlap; keeping the authored pose here
-   * means repeated resizes re-derive that from the same base instead of
-   * ratcheting it upwards, and a live editor edit just rewrites the base.
+   * Smear of the background's rightmost pixel column, filling the strip
+   * between where the background art ends and the far edge of the masked
+   * render area. See `updateBleed`.
    */
-  private readonly backdropRestPose = new Map<
-    Phaser.GameObjects.Image,
-    { x: number; y: number; scale: number }
-  >();
+  private readonly bleed?: Phaser.GameObjects.Image;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -119,6 +117,11 @@ export class StationSceneView {
       ? this.buildBackdropLayer(DIALOGUE_STATION_TEXTURE_KEYS.background, layout.background)
       : undefined;
     if (this.background) children.push(this.background);
+
+    // Sits directly on top of the background and behind everything else, so
+    // it can only ever fill space the background itself does not reach.
+    this.bleed = this.background ? this.buildBleed() : undefined;
+    if (this.bleed) children.push(this.bleed);
 
     this.train = this.buildTrain();
     this.recomputeTrainDeparture();
@@ -167,8 +170,24 @@ export class StationSceneView {
   ): Phaser.GameObjects.Image {
     const image = this.scene.add.image(0, 0, key).setOrigin(0, 0);
     this.applyRestTransform(image, entry, this.nativeHeightOf(key, BACKDROP_NATIVE_HEIGHT_FALLBACK));
-    this.backdropRestPose.set(image, { x: image.x, y: image.y, scale: image.scaleX });
     return image;
+  }
+
+  /**
+   * A 1px-wide frame cut from the right edge of the background texture, drawn
+   * stretched across whatever strip the background does not reach. Because the
+   * source is a single column, stretching it produces a continuation of the
+   * edge rather than a distorted copy of the artwork.
+   */
+  private buildBleed(): Phaser.GameObjects.Image | undefined {
+    const key = DIALOGUE_STATION_TEXTURE_KEYS.background;
+    const texture = this.scene.textures.get(key);
+    if (!texture.has(BLEED_FRAME_KEY)) {
+      const source = texture.getSourceImage();
+      if (source.width < 1 || source.height < 1) return undefined;
+      texture.add(BLEED_FRAME_KEY, 0, source.width - 1, 0, 1, source.height);
+    }
+    return this.scene.add.image(0, 0, key, BLEED_FRAME_KEY).setOrigin(0, 0).setVisible(false);
   }
 
   private buildTrain(): Phaser.GameObjects.Image {
@@ -220,59 +239,46 @@ export class StationSceneView {
   resize(width: number, height: number): void {
     const renderWidth = width + this.renderOverlap;
     this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, renderWidth, height);
-    // Cover-fit still targets the *logical* panel box, so the composition —
-    // and with it every authored object position — is identical with or
-    // without the overlap.
+    // Cover-fit targets the *logical* panel box, so the composition — and with
+    // it every authored object transform — is identical with or without the
+    // overlap. Nothing below touches the station artwork itself.
     const fit = computeCoverFit(this.referenceWidth, this.referenceHeight, width, height);
     this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
-    // ...but the artwork itself has to actually reach across the overlap,
-    // otherwise the widened mask just exposes camera background.
-    if (fit.scale > 0) {
-      const localRight = (renderWidth - fit.offsetX) / fit.scale;
-      this.coverRenderWidth(this.background, localRight);
-      this.coverRenderWidth(this.foreground, localRight);
-    }
+    if (fit.scale > 0) this.updateBleed((renderWidth - fit.offsetX) / fit.scale);
   }
 
   /**
-   * Widens a backdrop layer just enough that its right edge reaches
-   * `localRight` (in `content`-local pixels), so the station keeps covering
-   * the ground under the diagonal seam instead of exposing the camera
-   * background.
+   * Fills the strip between the right edge of the background art and
+   * `localRight` (the far edge of the masked render area, in `content`-local
+   * pixels) by smearing the background's own edge column across it.
    *
-   * Horizontal only: `scaleY` and `y` stay exactly as authored, and `x` stays
-   * put so the extra width spills rightwards under the seam. Scaling the
-   * backdrop *uniformly* here would move the platform's ground plane while
-   * Atmos, Disus and the train kept their authored transforms — which is what
-   * dropped the characters relative to the station on wide mobile layouts.
-   * Vertical geometry is the shared reference the characters are placed
-   * against, so it must not depend on how wide the panel happens to be.
+   * The station artwork is never scaled or moved to reach the seam. Doing that
+   * — uniformly or on one axis — changes the background/foreground geometry
+   * independently of Atmos, Disus and the train, which keep their authored
+   * transforms, and so breaks the authored composition on exactly the wide
+   * mobile layouts where the coverage engages. The bleed is additive instead:
+   * it only ever paints where the background does not reach, so the
+   * composition is bit-identical to desktop at every viewport.
    *
-   * At the panel aspect ratios this composition was authored for, the art
-   * already reaches well past the seam and this is a no-op; it only engages
-   * on wide-and-short viewports, where the backdrop would otherwise run out
-   * before the divider.
+   * Read live from the background's current transform, so a dev-editor edit
+   * to the background is followed automatically. Only the background needs
+   * this: the foreground is transparent art layered on top, so where it ends
+   * the background (and this bleed) still show through.
    */
-  private coverRenderWidth(image: Phaser.GameObjects.Image | undefined, localRight: number): void {
-    if (!image) return;
-    const rest = this.backdropRestPose.get(image);
-    if (!rest) return;
-    const needed = image.width > 0 ? (localRight - rest.x) / image.width : rest.scale;
-    image.setScale(Math.max(rest.scale, needed), rest.scale).setPosition(rest.x, rest.y);
-  }
-
-  /** A live editor edit re-authors the backdrop's rest pose, so that becomes the new base. */
-  private rebaseBackdrop(
-    image: Phaser.GameObjects.Image | undefined,
-    transform: EditableTransform,
-  ): void {
-    if (image) {
-      this.backdropRestPose.set(image, {
-        x: transform.x,
-        y: transform.y,
-        scale: transform.scaleY,
-      });
+  private updateBleed(localRight: number): void {
+    const background = this.background;
+    const bleed = this.bleed;
+    if (!background || !bleed) return;
+    const right = background.x + background.displayWidth;
+    const gap = localRight - right;
+    if (gap <= 0) {
+      bleed.setVisible(false);
+      return;
     }
+    bleed
+      .setVisible(true)
+      .setPosition(right, background.y)
+      .setDisplaySize(gap, background.displayHeight);
   }
 
   /**
@@ -327,9 +333,9 @@ export class StationSceneView {
    */
   getEditableObjects(): EditableObject[] {
     const entries: { id: StationObjectKey; label: string; target?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; nativeHeight: number; onChange?: (t: EditableTransform) => void }[] = [
-      { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK), onChange: (t) => this.rebaseBackdrop(this.background, t) },
+      { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
       { id: 'train', label: 'train', target: this.train, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT), onChange: () => this.recomputeTrainDeparture() },
-      { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK), onChange: (t) => this.rebaseBackdrop(this.foreground, t) },
+      { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
       { id: 'atmos', label: 'Atmos', target: this.atmos, nativeHeight: CHARACTER_CANVAS_HEIGHT },
       { id: 'disus', label: 'Disus', target: this.disus, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeDisusFloor() },
     ];
@@ -359,12 +365,8 @@ export class StationSceneView {
     for (const entry of snapshot) {
       const id = entry.id as StationObjectKey;
       if (!(id in heightById)) continue;
-      // Backdrops may currently be drawn scaled up to cover the divider
-      // overlap; persist the authored rest scale, never that derived one.
-      const target = id === 'background' ? this.background : id === 'foreground' ? this.foreground : undefined;
-      const rest = target && this.backdropRestPose.get(target);
       next[id] = toStationObjectLayout(
-        rest ? { x: rest.x, y: rest.y, scale: rest.scale } : { x: entry.x, y: entry.y, scale: entry.scaleY },
+        { x: entry.x, y: entry.y, scale: entry.scaleY },
         this.referenceWidth,
         this.referenceHeight,
         heightById[id],
