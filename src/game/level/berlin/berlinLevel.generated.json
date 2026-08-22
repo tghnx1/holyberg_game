@@ -23,9 +23,9 @@
     "artSlot": "obstacle.homeless",
     "hitbox": {
       "width": 52.1,
-      "height": 36.0,
+      "height": 36,
       "offsetX": 0,
-      "offsetY": 16.0
+      "offsetY": 16
     }
   },
   {
@@ -291,8 +291,8 @@
     "type": "collectible",
     "kind": "emerald",
     "label": "EMERALD",
-    "x": 3008,
-    "y": 190,
+    "x": 3002,
+    "y": 149,
     "width": 51,
     "height": 48,
     "score": 250,
@@ -351,16 +351,16 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 1886,
-    "y": 542,
-    "width": 152,
-    "height": 181,
+    "x": 1881,
+    "y": 554,
+    "width": 138,
+    "height": 162,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 90.0,
+      "width": 93,
+      "height": 81,
       "offsetX": 0,
-      "offsetY": 28.0
+      "offsetY": 25
     }
   },
   {
@@ -385,16 +385,16 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 3423,
-    "y": 534,
-    "width": 152,
-    "height": 181,
+    "x": 3417,
+    "y": 554,
+    "width": 142,
+    "height": 161,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 90.0,
+      "width": 95,
+      "height": 80,
       "offsetX": 0,
-      "offsetY": 28.0
+      "offsetY": 25
     }
   },
   {
@@ -408,7 +408,7 @@
     "height": 149,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 111.0,
+      "width": 111,
       "height": 74.2,
       "offsetX": 0,
       "offsetY": 23.4
@@ -425,7 +425,7 @@
     "height": 148,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 105.0,
+      "width": 105,
       "height": 74.2,
       "offsetX": 0,
       "offsetY": 23.4
@@ -476,7 +476,7 @@
     "height": 147,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
+      "width": 102,
       "height": 73.5,
       "offsetX": 0,
       "offsetY": 23.2
@@ -493,10 +493,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -504,16 +504,16 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 8418,
-    "y": 547,
+    "x": 8419,
+    "y": 561,
     "width": 152,
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -522,15 +522,15 @@
     "action": "jump",
     "label": "HOMELESS",
     "x": 8743,
-    "y": 546,
+    "y": 559,
     "width": 152,
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -544,10 +544,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -561,10 +561,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -578,10 +578,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -589,16 +589,16 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 13854,
-    "y": 571,
-    "width": 95,
-    "height": 93,
+    "x": 13869,
+    "y": 556,
+    "width": 130,
+    "height": 148,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 63.8,
-      "height": 46.5,
+      "width": 87,
+      "height": 74,
       "offsetX": 0,
-      "offsetY": 14.8
+      "offsetY": 24
     }
   },
   {
@@ -606,16 +606,16 @@
     "type": "obstacle",
     "action": "jump",
     "label": "HOMELESS",
-    "x": 14788,
-    "y": 562,
-    "width": 117,
-    "height": 107,
+    "x": 14797,
+    "y": 559,
+    "width": 135,
+    "height": 148,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 78.8,
-      "height": 53.2,
+      "width": 91,
+      "height": 73,
       "offsetX": 0,
-      "offsetY": 16.9
+      "offsetY": 24
     }
   },
   {
@@ -697,10 +697,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -714,10 +714,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -731,10 +731,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -748,10 +748,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -765,10 +765,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -782,10 +782,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -799,10 +799,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
@@ -816,10 +816,10 @@
     "height": 144,
     "artSlot": "obstacle.homeless",
     "hitbox": {
-      "width": 102.0,
-      "height": 72.0,
+      "width": 102,
+      "height": 72,
       "offsetX": 0,
-      "offsetY": 23.0
+      "offsetY": 23
     }
   },
   {
