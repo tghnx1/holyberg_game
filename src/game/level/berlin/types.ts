@@ -89,11 +89,24 @@ export interface CollectibleConfig extends LevelEntityBase {
 }
 
 
+/**
+ * Purely visual world art — no body, no group, never collidable (see
+ * LevelBuilder.createZone). `x`/`y` are the centre of the drawn box, matching
+ * every other entity, so the dev editor moves and resizes it with the same
+ * generic code path.
+ */
+export interface SceneryConfig extends LevelEntityBase {
+  type: 'scenery';
+  label: string;
+  y: number;
+}
+
 export type BerlinEntity =
   | ObstacleConfig
   | CollectibleConfig
   | PlatformConfig
-  | MovingPlatformConfig;
+  | MovingPlatformConfig
+  | SceneryConfig;
 
 /**
  * Body width/height only: the offset that centers/grounds the body against

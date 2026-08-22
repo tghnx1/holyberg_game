@@ -14,12 +14,12 @@ import {
   type ResizeHandle,
 } from './levelEditorResize';
 
-/** Entity kinds the editor lets you move; `finish` and scenery are excluded. */
-const EDITABLE_TYPES = new Set(['obstacle', 'collectible', 'platform', 'movingPlatform']);
+/** Entity kinds the editor lets you move; the `finish` trigger is excluded. */
+const EDITABLE_TYPES = new Set(['obstacle', 'collectible', 'platform', 'movingPlatform', 'scenery']);
 
 type EditableConfig = Extract<
   BerlinEntity,
-  { type: 'obstacle' | 'collectible' | 'platform' | 'movingPlatform' }
+  { type: 'obstacle' | 'collectible' | 'platform' | 'movingPlatform' | 'scenery' }
 >;
 
 const NUDGE_STEP = 1;

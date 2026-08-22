@@ -118,6 +118,10 @@ export class LevelBuilder {
   private createZone(config: BerlinEntity): Phaser.GameObjects.Zone {
     const layout = getBerlinEntityZoneLayout(config);
     const zone = this.scene.add.zone(layout.x, layout.y, layout.width, layout.height);
+    // Scenery gets a zone (the editor moves and resizes entities through it)
+    // but deliberately no physics body, so a building can never be collided
+    // with or landed on however large its artwork is.
+    if (config.type === 'scenery') return zone;
     const isStatic = config.type === 'collectible' || config.type === 'platform';
     this.scene.physics.add.existing(zone, isStatic);
     const body = zone.body as

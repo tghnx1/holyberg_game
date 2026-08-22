@@ -906,5 +906,15 @@
       "offsetX": 0,
       "offsetY": -5
     }
+  },
+  {
+    "id": "club-entrance",
+    "type": "scenery",
+    "label": "CLUB ENTRANCE",
+    "x": 15090,
+    "y": 330,
+    "width": 531,
+    "height": 560,
+    "artSlot": "scenery.clubEntrance"
   }
 ]

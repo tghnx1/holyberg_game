@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Depth } from '../../constants';
 import { animationForSlot, textureForSlot } from './ArtSlotRegistry';
+import { frameForSlot } from './sceneryAssets';
 import { getPlatformSupportLayout, getPlatformVisualLayout } from './platformVisualLayout';
 import type { BerlinEntity } from './types';
 
@@ -11,7 +12,18 @@ const colors = {
   platform: 0x59c1ff,
   movingPlatform: 0x2f8fd6,
   collectible: 0x4fd5c7,
+  scenery: 0x6b5f8a,
 } as const;
+
+/**
+ * Scenery sits behind the street, the gameplay objects and the player, so
+ * Atmos visibly runs in front of the building toward its doorway.
+ */
+function depthFor(entity: BerlinEntity): number {
+  if (entity.type === 'collectible') return Depth.COLLECTIBLES;
+  if (entity.type === 'scenery') return Depth.ENVIRONMENT;
+  return Depth.GAMEPLAY;
+}
 
 export class PlaceholderFactory {
   constructor(
@@ -39,7 +51,9 @@ export class PlaceholderFactory {
       : animKey
         ? this.scene.add.sprite(0, 0, this.scene.anims.get(animKey).frames[0].textureKey).play(animKey).setDisplaySize(entity.width, entity.height)
       : texture
-        ? this.scene.add.image(0, 0, texture).setDisplaySize(entity.width, entity.height)
+        ? this.scene.add
+            .image(0, 0, texture, frameForSlot(this.scene, entity.artSlot))
+            .setDisplaySize(entity.width, entity.height)
       : this.scene.add
           .rectangle(0, 0, entity.width, entity.height, color)
           .setStrokeStyle(4, 0x17101f);
@@ -54,7 +68,8 @@ export class PlaceholderFactory {
     if (
       import.meta.env.DEV &&
       entity.type !== 'platform' &&
-      entity.type !== 'movingPlatform'
+      entity.type !== 'movingPlatform' &&
+      entity.type !== 'scenery'
     ) {
       const debugType = entity.type === 'obstacle' ? entity.action.toUpperCase() : entity.label;
       children.push(
@@ -72,7 +87,7 @@ export class PlaceholderFactory {
     }
     const container = this.scene.add
       .container(entity.x, entity.y, children)
-      .setDepth(entity.type === 'collectible' ? Depth.COLLECTIBLES : Depth.GAMEPLAY)
+      .setDepth(depthFor(entity))
       .setScrollFactor(1);
     container.setData('primaryVisual', body);
     container.setData('resizeVisual', (updated: BerlinEntity) => {

@@ -10,7 +10,7 @@ import type { BerlinEntity } from './types';
  * with silently missing or misplaced objects.
  */
 
-const ENTITY_TYPES = ['obstacle', 'collectible', 'platform', 'movingPlatform'] as const;
+const ENTITY_TYPES = ['obstacle', 'collectible', 'platform', 'movingPlatform', 'scenery'] as const;
 const OBSTACLE_ACTIONS = ['jump', 'duck', 'moving'] as const;
 const COLLECTIBLE_KINDS = ['emerald'] as const;
 const PLATFORM_AXES = ['horizontal', 'vertical'] as const;
@@ -142,6 +142,9 @@ export function validateBerlinEntities(data: unknown): BerlinEntity[] {
       requireNumber(entity, 'score', where);
       return;
     }
+
+    // Scenery is pure art: the common fields above are all it has.
+    if (type === 'scenery') return;
 
     // platform and movingPlatform both land on their top edge.
     requireNumber(entity, 'topY', where);
