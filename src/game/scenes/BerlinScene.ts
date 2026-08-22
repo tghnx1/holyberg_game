@@ -13,7 +13,6 @@ import {
   CLUB_ENTRANCE_X,
   GROUND_SEGMENTS,
 } from '../level/berlin/berlinLevelConfig';
-import { applyCollectibleReward } from '../level/berlin/berlinRules';
 import { getBerlinMaxScore } from '../level/berlin/berlinMaxScore';
 import { canAcceptTutorialJumpInput, resolveIntroStart } from '../level/berlin/controlsTutorial';
 import {
@@ -95,7 +94,7 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.progress = { state: 'intro', seconds: START_TIME, score: 0, hasUsb: false };
+    this.progress = { state: 'intro', seconds: START_TIME, score: 0 };
     this.scoreSystem = new BerlinScoreSystem();
     this.sections = new SectionTracker();
     this.finishTriggered = false;
@@ -358,13 +357,9 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private applyCollectible(config: CollectibleConfig): void {
-    const reward = applyCollectibleReward(this.progress.seconds, this.progress.hasUsb, config);
-    this.scoreSystem.addCollectible(reward.score);
-    this.progress.seconds = reward.seconds;
-    this.progress.hasUsb = reward.hasUsb;
+    this.scoreSystem.addCollectible(config.score);
     this.syncScore();
-    const bonus = config.timeBonus ? `+${config.timeBonus} SEC` : `+${config.score}`;
-    this.hud.flash(`${config.label}  ${bonus}`, 900);
+    this.hud.flash(`${config.label}  +${config.score}`, 900);
   }
 
   private finish(): void {
@@ -486,7 +481,7 @@ export class BerlinScene extends Phaser.Scene {
       (item) => item instanceof Phaser.GameObjects.Text,
     ) as Phaser.GameObjects.Text | undefined;
     status?.setText(
-      `STATE ${this.player.animationState}\nSECTION ${BERLIN_SECTIONS[this.sections.index].id}\nX ${Math.round(this.player.x)}  TIME ${this.progress.seconds.toFixed(1)}\nSCORE ${this.progress.score}  USB ${this.progress.hasUsb ? 'YES' : 'NO'}`,
+      `STATE ${this.player.animationState}\nSECTION ${BERLIN_SECTIONS[this.sections.index].id}\nX ${Math.round(this.player.x)}  TIME ${this.progress.seconds.toFixed(1)}\nSCORE ${this.progress.score}`,
     );
   }
 

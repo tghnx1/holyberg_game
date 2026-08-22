@@ -3,5 +3,4 @@ export interface BerlinProgress {
   state: GameState;
   seconds: number;
   score: number;
-  hasUsb: boolean;
 }

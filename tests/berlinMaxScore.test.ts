@@ -12,8 +12,8 @@ describe('getBerlinMaxScore', () => {
   it('matches a from-scratch calculation using only existing config/constants', () => {
     const collectibles = BERLIN_ENTITIES.filter(isCollectible);
     const maxCollectibleScore = collectibles.reduce((sum, entity) => sum + entity.score, 0);
-    const maxSeconds = collectibles.reduce((sum, entity) => sum + (entity.timeBonus ?? 0), START_TIME);
-    const maxTimeBonus = Math.ceil(maxSeconds) * 20;
+    // No collectible adds time, so the best reachable clock is the starting one.
+    const maxTimeBonus = Math.ceil(START_TIME) * 20;
     const maxCleanSectionBonus = (BERLIN_SECTIONS.length - 1) * CLEAN_SECTION_BONUS;
     const expected = maxCollectibleScore + maxTimeBonus + maxCleanSectionBonus;
 

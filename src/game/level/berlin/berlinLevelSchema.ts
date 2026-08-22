@@ -12,7 +12,7 @@ import type { BerlinEntity } from './types';
 
 const ENTITY_TYPES = ['obstacle', 'collectible', 'platform', 'movingPlatform'] as const;
 const OBSTACLE_ACTIONS = ['jump', 'duck', 'moving'] as const;
-const COLLECTIBLE_KINDS = ['usb', 'headphones', 'poster', 'vinyl', 'pass', 'energy'] as const;
+const COLLECTIBLE_KINDS = ['emerald'] as const;
 const PLATFORM_AXES = ['horizontal', 'vertical'] as const;
 
 export class LevelSchemaError extends Error {
@@ -140,7 +140,6 @@ export function validateBerlinEntities(data: unknown): BerlinEntity[] {
     if (type === 'collectible') {
       requireOneOf(entity, 'kind', COLLECTIBLE_KINDS, where);
       requireNumber(entity, 'score', where);
-      optionalNumber(entity, 'timeBonus', where);
       return;
     }
 

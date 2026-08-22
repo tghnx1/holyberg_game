@@ -25,7 +25,12 @@ export class PlaceholderFactory {
         ? getPlatformVisualLayout(entity)
         : undefined;
     const texture = platformLayout?.textureKey ?? textureForSlot(this.scene, entity.artSlot);
-    const animKey = entity.type === 'obstacle' ? animationForSlot(this.scene, entity.artSlot) : undefined;
+    // Obstacles and collectibles can both carry a looping animation; platforms
+    // use their own static visual layout instead.
+    const animKey =
+      entity.type === 'obstacle' || entity.type === 'collectible'
+        ? animationForSlot(this.scene, entity.artSlot)
+        : undefined;
     const color = entity.type === 'obstacle' ? colors[entity.action] : colors[entity.type];
     const body = platformLayout
       ? this.scene.add

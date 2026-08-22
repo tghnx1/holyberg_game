@@ -9,11 +9,13 @@ const isCollectible = (entity: (typeof BERLIN_ENTITIES)[number]): entity is Coll
   entity.type === 'collectible';
 
 /**
- * Theoretical maximum Level 1 score: every collectible picked up, every
- * section entered undamaged, and the largest time bonus reachable by
- * collecting every time-bonus collectible — all read from the same config
- * and constants BerlinScoreSystem itself uses, so this can never drift from
- * the real scoring rules.
+ * Theoretical maximum Level 1 score: every Emerald picked up, every section
+ * entered undamaged, and the time bonus for finishing with the clock
+ * untouched — all read from the same config and constants BerlinScoreSystem
+ * itself uses, so this can never drift from the real scoring rules.
+ *
+ * No collectible adds time any more, so the best reachable clock is simply
+ * the starting one.
  *
  * `base` and `penalties` are always 0 in a perfect run (BerlinScoreSystem
  * never awards base points and a clean run takes no obstacle penalty), so
@@ -22,9 +24,8 @@ const isCollectible = (entity: (typeof BERLIN_ENTITIES)[number]): entity is Coll
 export function getBerlinMaxScore(): number {
   const collectibles = BERLIN_ENTITIES.filter(isCollectible);
   const maxCollectibleScore = collectibles.reduce((sum, entity) => sum + entity.score, 0);
-  const maxSeconds = collectibles.reduce((sum, entity) => sum + (entity.timeBonus ?? 0), START_TIME);
   // Mirrors BerlinScoreSystem.finish's own formula exactly.
-  const maxTimeBonus = Math.ceil(Math.max(0, maxSeconds)) * 20;
+  const maxTimeBonus = Math.ceil(Math.max(0, START_TIME)) * 20;
   const maxCleanSectionBonus = Math.max(0, BERLIN_SECTIONS.length - 1) * CLEAN_SECTION_BONUS;
   return maxCollectibleScore + maxTimeBonus + maxCleanSectionBonus;
 }

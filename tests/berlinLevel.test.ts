@@ -5,7 +5,6 @@ import {
   GROUND_SEGMENTS,
   sectionIndexAtX,
 } from '../src/game/level/berlin/berlinLevelConfig';
-import { applyCollectibleReward, canFinishBerlin } from '../src/game/level/berlin/berlinRules';
 import {
   canConsumeJump,
   computePlayerBodyOffset,
@@ -15,7 +14,7 @@ import {
   playerBodyFor,
   STANDING_BODY,
 } from '../src/game/level/berlin/playerPhysics';
-import { GROUND_Y } from '../src/game/constants';
+import { EMERALD_SCORE, GROUND_Y } from '../src/game/constants';
 import { BerlinScoreSystem } from '../src/game/systems/BerlinScoreSystem';
 import { SectionTracker } from '../src/game/systems/SectionTracker';
 
@@ -35,39 +34,28 @@ describe('Berlin level config', () => {
     expect(sectionIndexAtX(1599)).toBe(0);
     expect(sectionIndexAtX(1600)).toBe(1);
   });
-  it('keeps the USB pickup in the level', () => {
-    // Its exact position is authored in the layout editor and changes often,
-    // so this guards that it exists and is reachable, not where it sits.
-    const usb = BERLIN_ENTITIES.find((entity) => entity.id === 'usb');
-    expect(usb).toBeDefined();
-    expect(usb?.type).toBe('collectible');
-    expect(usb!.x).toBeGreaterThan(0);
-    expect(usb!.x).toBeLessThan(15500);
+  it('uses Emerald as the only collectible type, and has some placed', () => {
+    // Exact positions are authored in the layout editor and change often, so
+    // this guards the type and reachability, not where any one of them sits.
+    const collectibles = BERLIN_ENTITIES.filter((entity) => entity.type === 'collectible');
+    expect(collectibles.length).toBeGreaterThan(0);
+    expect(new Set(collectibles.map((entity) => entity.kind))).toEqual(new Set(['emerald']));
+    expect(collectibles.every((entity) => entity.x > 0 && entity.x < 15500)).toBe(true);
   });
   it('gives every gameplay object a unique id and independent dimensions', () => {
     expect(new Set(BERLIN_ENTITIES.map((entity) => entity.id)).size).toBe(BERLIN_ENTITIES.length);
     expect(BERLIN_ENTITIES.every((entity) => entity.width > 0 && entity.height > 0)).toBe(true);
   });
-  it('does not mark any collectible as mandatory and finishing never requires USB', () => {
-    expect(
-      BERLIN_ENTITIES.filter((entity) => entity.type === 'collectible').every(
-        (entity) => !('mandatory' in entity) || !entity.mandatory,
-      ),
-    ).toBe(true);
-    expect(canFinishBerlin(false)).toBe(true);
-    expect(canFinishBerlin(true)).toBe(true);
+  it('carries no mandatory pickup, so finishing never depends on collecting one', () => {
+    // Nothing in the level config or the scene gates the finish on a pickup;
+    // the collectible shape itself no longer has a `mandatory` field to set.
+    const collectibles = BERLIN_ENTITIES.filter((entity) => entity.type === 'collectible');
+    expect(collectibles.every((entity) => !('mandatory' in entity))).toBe(true);
   });
-  it('applies collectible time bonuses and score correctly', () => {
-    const nightBonus = BERLIN_ENTITIES.find((entity) => entity.id === 'night-bonus');
-    if (!nightBonus || nightBonus.type !== 'collectible') throw new Error('night-bonus missing');
-    expect(applyCollectibleReward(12, false, nightBonus)).toEqual({
-      seconds: 12,
-      score: 250,
-      hasUsb: false,
-    });
-    const usb = BERLIN_ENTITIES.find((entity) => entity.id === 'usb');
-    if (!usb || usb.type !== 'collectible') throw new Error('usb missing');
-    expect(applyCollectibleReward(12, false, usb).hasUsb).toBe(true);
+  it('scores every Emerald with the same value', () => {
+    const collectibles = BERLIN_ENTITIES.filter((entity) => entity.type === 'collectible');
+    expect(collectibles.every((entity) => entity.score === EMERALD_SCORE)).toBe(true);
+    expect(collectibles.every((entity) => !('timeBonus' in entity))).toBe(true);
   });
   it('keeps every ground obstacle and platform inside the 15500-unit world', () => {
     expect(BERLIN_ENTITIES.every((entity) => entity.x >= 0 && entity.x <= 15500)).toBe(true);

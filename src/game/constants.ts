@@ -13,7 +13,8 @@ export const JUMP_VELOCITY = -720;
 export const START_TIME = 65;
 export const HIT_TIME = 3;
 export const HIT_SCORE = 100;
-export const USB_SCORE = 500;
+/** Every Level 1 collectible is an Emerald and is worth exactly this. */
+export const EMERALD_SCORE = 250;
 
 export const Depth = {
   SKY: 0,

@@ -1,15 +1,15 @@
 [
   {
-    "id": "usb",
+    "id": "emerald-1",
     "type": "collectible",
-    "kind": "usb",
-    "label": "USB",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 1013,
     "y": 576,
-    "width": 86,
-    "height": 62,
-    "score": 500,
-    "artSlot": "collectible.usb"
+    "width": 51,
+    "height": 48,
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
     "id": "homeless-tutorial",
@@ -62,40 +62,40 @@
     "editorSized": true
   },
   {
-    "id": "headphones",
+    "id": "emerald-2",
     "type": "collectible",
-    "kind": "headphones",
-    "label": "HEADPHONES",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 3704,
     "y": 580,
-    "width": 54,
-    "height": 54,
-    "score": 200,
-    "artSlot": "collectible.headphones"
-  },
-  {
-    "id": "poster",
-    "type": "collectible",
-    "kind": "poster",
-    "label": "POSTER",
-    "x": 6550,
-    "y": 485,
-    "width": 50,
-    "height": 64,
-    "score": 150,
-    "artSlot": "collectible.poster"
-  },
-  {
-    "id": "night-bonus",
-    "type": "collectible",
-    "kind": "energy",
-    "label": "NIGHT BONUS",
-    "x": 7601,
-    "y": 153,
-    "width": 48,
+    "width": 51,
     "height": 48,
     "score": 250,
-    "artSlot": "collectible.energy"
+    "artSlot": "collectible.emerald"
+  },
+  {
+    "id": "emerald-3",
+    "type": "collectible",
+    "kind": "emerald",
+    "label": "EMERALD",
+    "x": 6550,
+    "y": 485,
+    "width": 51,
+    "height": 48,
+    "score": 250,
+    "artSlot": "collectible.emerald"
+  },
+  {
+    "id": "emerald-4",
+    "type": "collectible",
+    "kind": "emerald",
+    "label": "EMERALD",
+    "x": 7601,
+    "y": 153,
+    "width": 51,
+    "height": 48,
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
     "id": "platform-1",
@@ -134,16 +134,16 @@
     "editorSized": true
   },
   {
-    "id": "artifact-1",
+    "id": "emerald-5",
     "type": "collectible",
-    "kind": "vinyl",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 9926,
     "y": 154,
-    "width": 50,
+    "width": 51,
     "height": 48,
-    "score": 400,
-    "artSlot": "collectible.vinyl"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
     "id": "platform-5",
@@ -170,16 +170,16 @@
     "editorSized": true
   },
   {
-    "id": "artifact-2",
+    "id": "emerald-6",
     "type": "collectible",
-    "kind": "poster",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 11977,
     "y": 127,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 500,
-    "artSlot": "collectible.poster"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
     "id": "final-moving-platform-1",
@@ -251,100 +251,100 @@
     "editorSized": true
   },
   {
-    "id": "club-pass",
+    "id": "emerald-7",
     "type": "collectible",
-    "kind": "pass",
-    "label": "CLUB PASS",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 14790,
     "y": 353,
-    "width": 48,
-    "height": 66,
+    "width": 51,
+    "height": 48,
     "score": 250,
-    "artSlot": "collectible.pass"
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-2-copy",
+    "id": "emerald-8",
     "type": "collectible",
-    "kind": "poster",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 12730,
     "y": 111,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 500,
-    "artSlot": "collectible.poster"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-2-copy-copy",
+    "id": "emerald-9",
     "type": "collectible",
-    "kind": "poster",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 13827,
     "y": 124,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 500,
-    "artSlot": "collectible.poster"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-1-copy",
+    "id": "emerald-10",
     "type": "collectible",
-    "kind": "vinyl",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 3008,
     "y": 190,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 400,
-    "artSlot": "collectible.vinyl"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-1-copy-copy",
+    "id": "emerald-11",
     "type": "collectible",
-    "kind": "vinyl",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 5203,
     "y": 581,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 400,
-    "artSlot": "collectible.vinyl"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-1-copy-copy-3",
+    "id": "emerald-12",
     "type": "collectible",
-    "kind": "vinyl",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 8100,
     "y": 580,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 400,
-    "artSlot": "collectible.vinyl"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-1-copy-copy-3-copy",
+    "id": "emerald-13",
     "type": "collectible",
-    "kind": "vinyl",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 10607,
     "y": 582,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 400,
-    "artSlot": "collectible.vinyl"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
-    "id": "artifact-1-copy-copy-3-copy-5",
+    "id": "emerald-14",
     "type": "collectible",
-    "kind": "vinyl",
-    "label": "ARTIFACT",
+    "kind": "emerald",
+    "label": "EMERALD",
     "x": 14408,
     "y": 582,
-    "width": 48,
+    "width": 51,
     "height": 48,
-    "score": 400,
-    "artSlot": "collectible.vinyl"
+    "score": 250,
+    "artSlot": "collectible.emerald"
   },
   {
     "id": "homeless-1",

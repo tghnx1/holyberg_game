@@ -10,7 +10,8 @@ export type SectionId =
   | 'finale';
 export type PlayerAnimationState = 'run' | 'jump' | 'doubleJump' | 'fall' | 'crouch' | 'hurt';
 export type ObstacleAction = 'jump' | 'duck' | 'moving';
-export type CollectibleKind = 'usb' | 'headphones' | 'poster' | 'vinyl' | 'pass' | 'energy';
+/** Level 1 has a single collectible type; every pickup on the map is an Emerald. */
+export type CollectibleKind = 'emerald';
 export type PlatformAxis = 'horizontal' | 'vertical';
 
 export interface BerlinSection {
@@ -83,9 +84,8 @@ export interface CollectibleConfig extends LevelEntityBase {
   kind: CollectibleKind;
   label: string;
   y: number;
+  /** Always EMERALD_SCORE: one consistent value for the level's one pickup type. */
   score: number;
-  timeBonus?: number;
-  mandatory?: boolean;
 }
 
 

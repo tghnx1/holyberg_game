@@ -155,7 +155,7 @@ export class HudSystem {
   }
 
   update(progress: BerlinProgress): void {
-    const next = `SCORE  ${progress.score}\nUSB  ${progress.hasUsb ? '✓' : '—'}`;
+    const next = `SCORE  ${progress.score}`;
     if (next === this.scoreText) return;
     this.scoreText = next;
     this.score.setText(next);

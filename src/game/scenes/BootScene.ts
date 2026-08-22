@@ -22,6 +22,10 @@ import {
   createObstacleAnimations,
   getObstacleAnimationAssetUrls,
 } from '../level/berlin/obstacleAnimations';
+import {
+  createCollectibleAnimations,
+  getCollectibleAnimationAssetUrls,
+} from '../level/berlin/collectibleAnimations';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -94,10 +98,14 @@ export class BootScene extends Phaser.Scene {
     for (const asset of getObstacleAnimationAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
+    for (const asset of getCollectibleAnimationAssetUrls()) {
+      this.load.image(asset.key, asset.url);
+    }
   }
 
   create(): void {
     createObstacleAnimations(this);
+    createCollectibleAnimations(this);
 
     const developmentScene = new URLSearchParams(window.location.search).get('scene');
     if (import.meta.env.DEV && developmentScene === 'rhythm') {
