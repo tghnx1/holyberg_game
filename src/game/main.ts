@@ -3,6 +3,7 @@ import '../style.css';
 import { config } from './config';
 import { installFullscreenLifecycle } from './responsive/FullscreenController';
 import { setupFullscreenResize } from './responsive/FullscreenResize';
+import { setupViewportDebug } from './responsive/viewportDebug';
 
 const game = new Phaser.Game(config);
 
@@ -12,3 +13,6 @@ if (import.meta.env.DEV) (window as unknown as { __game: Phaser.Game }).__game =
 
 setupFullscreenResize(game);
 installFullscreenLifecycle(game);
+
+// Temporary, dev-only, and inert unless ?viewportDebug=1 is present.
+if (import.meta.env.DEV) setupViewportDebug(game);
