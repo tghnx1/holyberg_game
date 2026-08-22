@@ -71,6 +71,14 @@ export class DialogueScene extends Phaser.Scene {
   private spaceKey?: Phaser.Input.Keyboard.Key;
   private spaceHeldSince?: number;
   private finished = false;
+  /**
+   * Id of the pointer whose press began on empty space, so the matching
+   * release counts as a tap. Undefined means no tap is armed: the press
+   * landed on a UI control (the fullscreen exit ✕, or a SceneEditor handle),
+   * or its release has already been consumed. Keyed by id so one physical
+   * tap can only ever advance one step.
+   */
+  private armedTapPointerId?: number;
   /** Dev-only visual layout editor; never created outside `import.meta.env.DEV`. */
   private editor?: SceneEditor;
   private editorKey?: Phaser.Input.Keyboard.Key;
@@ -92,6 +100,7 @@ export class DialogueScene extends Phaser.Scene {
     this.finished = false;
     this.dialoguePaused = false;
     this.pausedAtNow = undefined;
+    this.armedTapPointerId = undefined;
   }
 
   create(): void {
@@ -115,6 +124,7 @@ export class DialogueScene extends Phaser.Scene {
 
     this.buildSkipHint();
     this.spaceKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.attachTapProgression();
 
     // Built with OrientationController last, matching Berlin/Rhythm: it fires
     // an immediate onLayout pass, then one on every later viewport change.
@@ -525,6 +535,57 @@ export class DialogueScene extends Phaser.Scene {
       x: baseX,
       duration: DIALOGUE_TIMING.glitchMs,
     });
+  }
+
+  /**
+   * Tap/click to move the dialogue along: the first tap finishes the line
+   * being typed, the next one moves to the following line, and a tap on the
+   * last line leaves the same way the automatic pacing would.
+   *
+   * Bound to `pointerup` rather than `pointerdown` so it behaves the same for
+   * a touch and a mouse, and so the press that starts it can never leak a
+   * stray release into the scene this dialogue hands over to.
+   *
+   * The press is only armed when it lands on empty space. `hitTestPointer`
+   * reports the interactive objects under it — the fullscreen exit ✕ and,
+   * in dev, the SceneEditor's handles — and a press on any of those is left
+   * alone entirely, so tapping ✕ exits fullscreen without also skipping a
+   * line.
+   */
+  private attachTapProgression(): void {
+    const onDown = (pointer: Phaser.Input.Pointer): void => {
+      this.armedTapPointerId =
+        this.input.hitTestPointer(pointer).length === 0 ? pointer.id : undefined;
+    };
+    const onUp = (pointer: Phaser.Input.Pointer): void => {
+      if (this.armedTapPointerId !== pointer.id) return;
+      // Consumed here, so a repeated release for the same press is inert.
+      this.armedTapPointerId = undefined;
+      this.handleTap();
+    };
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, onDown);
+    this.input.on(Phaser.Input.Events.POINTER_UP, onUp);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.input.off(Phaser.Input.Events.POINTER_DOWN, onDown);
+      this.input.off(Phaser.Input.Events.POINTER_UP, onUp);
+    });
+  }
+
+  /** Only the two settled phases respond; transitions are left to finish. */
+  private handleTap(): void {
+    if (this.finished || this.dialoguePaused) return;
+    if (this.phase === 'typing') {
+      this.revealCurrentLine();
+      return;
+    }
+    if (this.phase === 'holding') this.advance();
+  }
+
+  /** Drops the rest of the typewriter and starts the hold from now. */
+  private revealCurrentLine(): void {
+    const { text } = this.currentLine;
+    this.bodyText.setText(getRevealedText(text, getTypedCharacterCount(text)));
+    this.setPhase('holding');
   }
 
   private updateSkip(now: number): void {
