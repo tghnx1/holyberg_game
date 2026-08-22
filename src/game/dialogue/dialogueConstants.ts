@@ -17,8 +17,8 @@ export const DialogueLayout = {
   /** Fraction of the width taken by the left-hand scene panel. */
   scenePanelWidthRatio: 0.56,
   textPaddingX: 56,
-  speakerOffsetY: 22,
-  textOffsetY: 58,
+  speakerOffsetY: 12,
+  textOffsetY: 46,
   /** How much of the portrait panel's box the Magician composition fills. */
   portraitFillRatio: 0.96,
   /** Thickness of the diagonal seam between the scene and portrait panels. */
