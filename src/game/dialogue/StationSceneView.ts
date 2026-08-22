@@ -235,27 +235,30 @@ export class StationSceneView {
   }
 
   /**
-   * Grows a backdrop layer just enough that its right edge reaches
-   * `localRight` (in `content`-local pixels), scaling *uniformly* from its
-   * authored rest pose so the art is never stretched, and never shrinking it
-   * below that pose. At the panel aspect ratios this composition was authored
-   * for the art already reaches well past the seam and this is a no-op; it
-   * only engages on wide-and-short viewports, where the backdrop would
-   * otherwise run out before the divider.
+   * Widens a backdrop layer just enough that its right edge reaches
+   * `localRight` (in `content`-local pixels), so the station keeps covering
+   * the ground under the diagonal seam instead of exposing the camera
+   * background.
    *
-   * The extra size is taken off the left/top anchor: x stays put so the
-   * growth spills rightwards under the seam, and the bottom edge is pinned so
-   * the platform's ground plane stays where the characters' feet are, with
-   * the overflow cropped by the mask.
+   * Horizontal only: `scaleY` and `y` stay exactly as authored, and `x` stays
+   * put so the extra width spills rightwards under the seam. Scaling the
+   * backdrop *uniformly* here would move the platform's ground plane while
+   * Atmos, Disus and the train kept their authored transforms — which is what
+   * dropped the characters relative to the station on wide mobile layouts.
+   * Vertical geometry is the shared reference the characters are placed
+   * against, so it must not depend on how wide the panel happens to be.
+   *
+   * At the panel aspect ratios this composition was authored for, the art
+   * already reaches well past the seam and this is a no-op; it only engages
+   * on wide-and-short viewports, where the backdrop would otherwise run out
+   * before the divider.
    */
   private coverRenderWidth(image: Phaser.GameObjects.Image | undefined, localRight: number): void {
     if (!image) return;
     const rest = this.backdropRestPose.get(image);
     if (!rest) return;
     const needed = image.width > 0 ? (localRight - rest.x) / image.width : rest.scale;
-    const scale = Math.max(rest.scale, needed);
-    const restBottom = rest.y + image.height * rest.scale;
-    image.setScale(scale).setPosition(rest.x, restBottom - image.height * scale);
+    image.setScale(Math.max(rest.scale, needed), rest.scale).setPosition(rest.x, rest.y);
   }
 
   /** A live editor edit re-authors the backdrop's rest pose, so that becomes the new base. */
