@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
 import type { EditableObject, EditableTransform } from '../systems/SceneEditor';
+import { DialogueLayout } from './dialogueConstants';
 import { computeCoverFit } from './dialogueLayoutMetrics';
 import {
   DEFAULT_STATION_LAYOUT,
@@ -14,6 +16,26 @@ import {
   DISUS_STAY_KEY,
   DIALOGUE_STATION_TEXTURE_KEYS,
 } from './stationAssets';
+
+/**
+ * Fixed canonical box the station composition is authored and laid out
+ * against, independent of the live viewport.
+ *
+ * Every object's rest pose (`dialogueStationLayout.json`) is a ratio of this
+ * box, not of whatever panel size happens to be live when the scene is
+ * built — that was the actual bug: `resolveStationTransform` used to resolve
+ * x from the *live* panel width while scale came from the live panel height,
+ * so any resize whose aspect ratio differed from the one active at
+ * construction shifted every object horizontally relative to the art
+ * underneath it, most visibly on phone aspect ratios far from desktop's.
+ *
+ * Chosen to equal the scene panel's own size at the 16:9 aspect ratio the
+ * composition was authored at (matching DESIGN_WIDTH/DESIGN_HEIGHT used
+ * throughout the game), so canonical space and the live panel coincide
+ * exactly there and desktop's appearance is unchanged bit-for-bit.
+ */
+const STATION_CANONICAL_WIDTH = Math.round(DESIGN_WIDTH * DialogueLayout.scenePanelWidthRatio);
+const STATION_CANONICAL_HEIGHT = DESIGN_HEIGHT - DialogueLayout.topBarHeight - DialogueLayout.bottomBarHeight;
 
 /** Seconds the train sits still before it departs. */
 const STATIONARY_PAUSE_MS = 600;
@@ -54,9 +76,11 @@ const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
  *
  * Layers, back to front: background_metro, the train, first_plan_metro, then
  * the characters (Atmos seated, Disus once revealed) on top, so both stay
- * visible over the foreground art. Everything is laid out once against the
- * panel's first-layout ("reference") size; `resize()` uniformly covers
- * whatever the panel's current size is, so the departure/appearance sequence
+ * visible over the foreground art. Everything is laid out once against a
+ * fixed canonical box (`STATION_CANONICAL_WIDTH`/`_HEIGHT`), never the live
+ * panel; `resize()` then applies one uniform scale/position to cover
+ * whatever the panel's current size is, so the composition is identical in
+ * relative terms at every aspect ratio and the departure/appearance sequence
  * never has to be rebuilt or reset mid-animation.
  *
  * Every object's *rest pose* (position + scale) comes from
@@ -75,18 +99,10 @@ export class StationSceneView {
   private readonly atmos: Phaser.GameObjects.Image;
   private readonly disus: Phaser.GameObjects.Sprite;
   private readonly mask: Phaser.GameObjects.Graphics;
-  private referenceWidth: number;
-  private referenceHeight: number;
   /** Recomputed from the train's current rest transform on every edit. */
   private trainDepartX = 0;
   /** Recomputed from Disus's current (stay-pose) rest transform on every edit. */
   private disusFloorY = 0;
-  /**
-   * Mirrored continuation of the background, covering the strip between where
-   * the background art ends and the far edge of the masked render area. See
-   * `updateBleed`.
-   */
-  private readonly bleed?: Phaser.GameObjects.Image;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -99,26 +115,21 @@ export class StationSceneView {
      * (which drifts right toward the bottom) instead of leaving a black wedge
      * between the panel's vertical edge and the divider's left edge.
      *
-     * Only *coverage* is extended: the panel's logical width still drives the
-     * cover-fit composition and every authored rest pose, so the train and
-     * the characters sit exactly where they would with no overlap at all.
+     * Only the *mask* is widened. The composition itself is never stretched,
+     * duplicated or otherwise coerced to reach it — whatever of the real
+     * station art naturally extends past the panel edge shows through, and
+     * the divider drawn on top of it covers its own band regardless; the
+     * seam is allowed to crop into the art rather than manufacture more of
+     * it.
      */
     private readonly renderOverlap: number = 0,
   ) {
-    this.referenceWidth = width;
-    this.referenceHeight = height;
-
     const children: Phaser.GameObjects.GameObject[] = [];
 
     this.background = this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.background)
       ? this.buildBackdropLayer(DIALOGUE_STATION_TEXTURE_KEYS.background, layout.background)
       : undefined;
     if (this.background) children.push(this.background);
-
-    // Sits directly on top of the background and behind everything else, so
-    // it can only ever fill space the background itself does not reach.
-    this.bleed = this.background ? this.buildBleed() : undefined;
-    if (this.bleed) children.push(this.bleed);
 
     this.train = this.buildTrain();
     this.recomputeTrainDeparture();
@@ -157,7 +168,12 @@ export class StationSceneView {
     entry: import('./dialogueStationLayout').StationObjectLayout,
     nativeHeight: number,
   ): void {
-    const resolved = resolveStationTransform(entry, this.referenceWidth, this.referenceHeight, nativeHeight);
+    const resolved = resolveStationTransform(
+      entry,
+      STATION_CANONICAL_WIDTH,
+      STATION_CANONICAL_HEIGHT,
+      nativeHeight,
+    );
     image.setPosition(resolved.x, resolved.y).setScale(resolved.scale);
   }
 
@@ -168,19 +184,6 @@ export class StationSceneView {
     const image = this.scene.add.image(0, 0, key).setOrigin(0, 0);
     this.applyRestTransform(image, entry, this.nativeHeightOf(key, BACKDROP_NATIVE_HEIGHT_FALLBACK));
     return image;
-  }
-
-  /**
-   * A horizontally mirrored copy of the background, used to continue the art
-   * past its own right edge. Drawn at the background's scale, so it is real
-   * pixels of the station rather than anything stretched.
-   */
-  private buildBleed(): Phaser.GameObjects.Image {
-    return this.scene.add
-      .image(0, 0, DIALOGUE_STATION_TEXTURE_KEYS.background)
-      .setOrigin(0, 0)
-      .setFlipX(true)
-      .setVisible(false);
   }
 
   private buildTrain(): Phaser.GameObjects.Image {
@@ -209,7 +212,7 @@ export class StationSceneView {
 
   /** Train's departure target follows its current rest position/scale, so editing it live stays correct. */
   private recomputeTrainDeparture(): void {
-    this.trainDepartX = this.referenceWidth + this.train.displayWidth;
+    this.trainDepartX = STATION_CANONICAL_WIDTH + this.train.displayWidth;
   }
 
   /** The floor line every Disus appear-frame's foot gap is measured from, derived from its stay pose. */
@@ -226,63 +229,29 @@ export class StationSceneView {
 
   /**
    * Refits the environment to a new panel size by covering it with the
-   * reference-box composition (uniform scale, centred, cropping overflow
+   * canonical-box composition (one uniform scale, centred, cropping overflow
    * rather than leaving gaps) and repositions the mask to match.
+   *
+   * Background, foreground, train, Atmos and Disus are children of the same
+   * `content` container and were all positioned in the same canonical space
+   * they share, so this single scale/position carries every one of them
+   * together — none of them can drift relative to another, at any aspect
+   * ratio the panel takes.
+   *
+   * The mask alone is widened by `renderOverlap` to reach under the diagonal
+   * divider; the composition's own fit is computed against the real panel
+   * size, never the widened one, so extending that coverage never rescales
+   * or repositions the station. Whatever of the real art naturally reaches
+   * past the panel edge (the background is wide relative to the canonical
+   * box) shows through there; the divider painted on top covers its own
+   * band regardless. No duplicate or stretched art is manufactured to
+   * guarantee full coverage — the seam is allowed to crop into the station
+   * instead.
    */
   resize(width: number, height: number): void {
-    const renderWidth = width + this.renderOverlap;
-    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, renderWidth, height);
-    // Cover-fit targets the *logical* panel box, so the composition — and with
-    // it every authored object transform — is identical with or without the
-    // overlap. Nothing below touches the station artwork itself.
-    const fit = computeCoverFit(this.referenceWidth, this.referenceHeight, width, height);
+    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width + this.renderOverlap, height);
+    const fit = computeCoverFit(STATION_CANONICAL_WIDTH, STATION_CANONICAL_HEIGHT, width, height);
     this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
-    if (fit.scale > 0) this.updateBleed((renderWidth - fit.offsetX) / fit.scale);
-  }
-
-  /**
-   * Fills the strip between the right edge of the background art and
-   * `localRight` (the far edge of the masked render area, in `content`-local
-   * pixels) by smearing the background's own edge column across it.
-   *
-   * The station artwork is never scaled or moved to reach the seam. Doing that
-   * — uniformly or on one axis — changes the background/foreground geometry
-   * independently of Atmos, Disus and the train, which keep their authored
-   * transforms, and so breaks the authored composition on exactly the wide
-   * mobile layouts where the coverage engages. The bleed is additive instead:
-   * it only ever paints where the background does not reach, so the
-   * composition is bit-identical to desktop at every viewport.
-   *
-   * The mirror is butted directly against the background's right edge at the
-   * background's own scale, so its first column is the background's last one
-   * and the join is continuous. Nothing is stretched: it is the station's own
-   * pixels, reflected. Whatever of it reaches past `localRight` is cropped by
-   * the seam mask that is already in place, so its effective width is exactly
-   * the gap — it can never paint left of the background's edge either, which
-   * is what keeps the composition untouched.
-   *
-   * One reflection covers a gap up to the background's own display width,
-   * which is far more than the widest real device leaves; beyond roughly a
-   * 3.5:1 panel it would run short.
-   *
-   * Read live from the background's current transform, so a dev-editor edit
-   * to the background is followed automatically. Only the background needs
-   * this: the foreground is transparent art layered on top, so where it ends
-   * the background (and this bleed) still show through.
-   */
-  private updateBleed(localRight: number): void {
-    const background = this.background;
-    const bleed = this.bleed;
-    if (!background || !bleed) return;
-    const right = background.x + background.displayWidth;
-    if (localRight <= right) {
-      bleed.setVisible(false);
-      return;
-    }
-    bleed
-      .setVisible(true)
-      .setPosition(right, background.y)
-      .setScale(background.scaleX, background.scaleY);
   }
 
   /**
@@ -371,8 +340,8 @@ export class StationSceneView {
       if (!(id in heightById)) continue;
       next[id] = toStationObjectLayout(
         { x: entry.x, y: entry.y, scale: entry.scaleY },
-        this.referenceWidth,
-        this.referenceHeight,
+        STATION_CANONICAL_WIDTH,
+        STATION_CANONICAL_HEIGHT,
         heightById[id],
       );
     }
