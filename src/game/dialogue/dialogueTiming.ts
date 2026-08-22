@@ -10,10 +10,10 @@ export const DIALOGUE_TIMING = {
   /** A newline costs a short beat rather than a full character. */
   msPerNewline: 40,
   /** Floor and ceiling on the pause after a line has finished typing. */
-  minHoldMs: 1000,
-  maxHoldMs: 2600,
+  minHoldMs: 4000,
+  maxHoldMs: 5600,
   /** Hold grows with the line length so long lines get more reading time. */
-  holdMsPerCharacter: 28,
+  holdMsPerCharacter: 100,
   /** Quick glitch/flash covering the swap between two lines. */
   glitchMs: 130,
   /** Beat after the last line before the panels slide out. */
