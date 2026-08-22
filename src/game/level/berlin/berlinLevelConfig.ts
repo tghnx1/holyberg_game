@@ -21,7 +21,7 @@ export const BERLIN_SECTIONS: readonly BerlinSection[] = [
   },
 ] as const;
 
-export const CLUB_ENTRANCE_X = 15000;
+export const CLUB_ENTRANCE_X = 15300;
 
 /** One unbroken floor across the whole level: there are no pits to fall into. */
 export const GROUND_SEGMENTS: readonly GroundSegment[] = [
