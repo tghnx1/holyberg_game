@@ -31,7 +31,7 @@ export interface ClubSceneData {
  * the same ground per second reads as trudging — so if that changes a lot,
  * this usually wants to move with it.
  */
-const WALK_SPEED = 420;
+ const WALK_SPEED = 420;
 /**
  * How far inside the edge the player is placed on entering a room, and how
  * close to the edge counts as leaving. Comfortably wider than one step at
@@ -94,6 +94,14 @@ export class ClubScene extends Phaser.Scene {
   /** Pointer ids currently held on each walk zone, so multi-touch releases cleanly. */
   private readonly leftPointers = new Set<number>();
   private readonly rightPointers = new Set<number>();
+  /**
+   * Atmos's x as a float. The sprite itself is only ever placed on whole
+   * pixels: at ATMOS_CLUB_SCALE the art is magnified, and drawing magnified
+   * art on a subpixel boundary makes the GPU resample it every frame, which
+   * reads as a soft, shimmering edge. Keeping the motion here and rounding at
+   * draw time removes that without making the walk step-y.
+   */
+  private walkX = 0;
   /** Last direction walked; kept when stopping so Atmos does not snap around. */
   private facing: 1 | -1 = 1;
   private currentFrameKey: AtmosFrameKey = ATMOS_STAY_FRAME_KEY;
@@ -107,6 +115,7 @@ export class ClubScene extends Phaser.Scene {
   init(data: ClubSceneData): void {
     this.score = data.score ?? 0;
     this.roomIndex = 0;
+    this.walkX = 0;
     this.facing = 1;
     this.currentFrameKey = ATMOS_STAY_FRAME_KEY;
     this.transitioning = false;
@@ -221,7 +230,7 @@ export class ClubScene extends Phaser.Scene {
     const direction = this.transitioning ? 0 : this.readDirection();
     if (direction !== 0) {
       this.facing = direction;
-      this.atmos.x += direction * WALK_SPEED * (delta / 1000);
+      this.walkX += direction * WALK_SPEED * (delta / 1000);
     }
     this.applyWalkFrame(direction !== 0);
     if (direction !== 0) this.checkEdges(direction);
@@ -237,15 +246,18 @@ export class ClubScene extends Phaser.Scene {
     }
     // Right is the artwork's natural facing; left mirrors it.
     this.atmos.setFlipX(this.facing === -1);
-    this.atmos.y = this.floorY() + getAtmosFootOffset(frameKey, ATMOS_CLUB_SCALE) + FOOT_NUDGE;
+    this.atmos.setPosition(
+      Math.round(this.walkX),
+      Math.round(this.floorY() + getAtmosFootOffset(frameKey, ATMOS_CLUB_SCALE) + FOOT_NUDGE),
+    );
   }
 
   private checkEdges(direction: -1 | 1): void {
     const width = this.cameras.main.width;
     const edge: ClubRoomEdge | undefined =
-      direction === 1 && this.atmos.x >= width - EDGE_MARGIN
+      direction === 1 && this.walkX >= width - EDGE_MARGIN
         ? 'right'
-        : direction === -1 && this.atmos.x <= EDGE_MARGIN
+        : direction === -1 && this.walkX <= EDGE_MARGIN
           ? 'left'
           : undefined;
     if (!edge) return;
@@ -257,7 +269,7 @@ export class ClubScene extends Phaser.Scene {
     }
     if (transition.roomIndex === undefined || transition.enterFrom === undefined) {
       // A wall: the first room's left edge. Hold the player just inside it.
-      this.atmos.x = EDGE_MARGIN;
+      this.walkX = EDGE_MARGIN;
       return;
     }
     this.enterRoom(transition.roomIndex, transition.enterFrom);
@@ -298,7 +310,7 @@ export class ClubScene extends Phaser.Scene {
     this.layoutVideo();
 
     const width = this.cameras.main.width;
-    this.atmos.x = enterFrom === 'left' ? ENTRY_INSET : width - ENTRY_INSET;
+    this.walkX = enterFrom === 'left' ? ENTRY_INSET : width - ENTRY_INSET;
     this.applyWalkFrame(false);
 
     this.prefetchNeighbour(roomIndex + 1);
@@ -406,7 +418,7 @@ export class ClubScene extends Phaser.Scene {
     }
 
     // Keep the player inside the new width, and on the floor line.
-    this.atmos.x = Phaser.Math.Clamp(this.atmos.x, EDGE_MARGIN, camera.width - EDGE_MARGIN);
+    this.walkX = Phaser.Math.Clamp(this.walkX, EDGE_MARGIN, camera.width - EDGE_MARGIN);
     this.applyWalkFrame(false);
   }
 
