@@ -62,6 +62,21 @@ const ATMOS_CLUB_SCALE = 1.8;
 const FLOOR_DROP = 100;
 /** Floor line as a fraction of the logical height, which EXPAND pins at 720. */
 const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
+/**
+ * How far the room art is pushed down, in logical pixels, so its floor line
+ * sits under Atmos's feet. Positive is down. Tuning knob for the background
+ * only — Atmos's own position comes from FLOOR_DROP.
+ */
+const ROOM_SHIFT_Y = 20;
+/**
+ * Extra scale on top of the cover fit, so pushing the art down cannot expose
+ * a strip along the top. This is a floor, not the final value: the shift
+ * needs at least `2 * ROOM_SHIFT_Y` of spare height, which at the 720-high
+ * logical size is 5.6% — more than this. layoutRoomArt raises it to whatever
+ * the current shift and viewport actually require, so the two constants can
+ * be tuned independently without ever opening a gap.
+ */
+const ROOM_OVERSCAN = 1.04;
 
 /**
  * Level 2: three club interiors the player walks through, each an looping
@@ -388,10 +403,6 @@ export class ClubScene extends Phaser.Scene {
   }
 
   /**
-   * Covers the viewport with the video without distorting it: one uniform
-   * scale, so whichever axis overflows is cropped rather than squashed.
-   */
-  /**
    * Dev-only: reports how long each stage of opening a room video takes, and
    * whether the browser blocked autoplay. `locked` means the still stays up
    * until the player touches the screen, which looks the same as a slow load
@@ -407,19 +418,36 @@ export class ClubScene extends Phaser.Scene {
     }
   }
 
-  /** Uniform cover scale for a source of `naturalWidth` x `naturalHeight`. */
-  private coverScale(naturalWidth: number, naturalHeight: number): number {
+  /**
+   * Places a room background: cover the viewport with one uniform scale, then
+   * push it down by ROOM_SHIFT_Y.
+   *
+   * The overscan is whichever is larger of ROOM_OVERSCAN and the amount the
+   * shift actually needs. Shifting down only risks the *top* edge, and
+   * keeping it covered needs `displayHeight >= cameraHeight + 2 * shift`;
+   * deriving that here rather than trusting the constant means the art can
+   * never separate from the top of the screen at any aspect ratio, and the
+   * shift is always applied in full rather than being quietly clamped.
+   */
+  private layoutRoomArt(
+    target: Phaser.GameObjects.Image | Phaser.GameObjects.Video,
+    naturalWidth: number,
+    naturalHeight: number,
+  ): void {
     const camera = this.cameras.main;
-    return Math.max(camera.width / naturalWidth, camera.height / naturalHeight);
+    const cover = Math.max(camera.width / naturalWidth, camera.height / naturalHeight);
+    const required = (camera.height + 2 * ROOM_SHIFT_Y) / (naturalHeight * cover);
+    const scale = cover * Math.max(ROOM_OVERSCAN, required);
+    target.setDisplaySize(naturalWidth * scale, naturalHeight * scale);
+    target.setPosition(camera.width / 2, camera.height / 2 + ROOM_SHIFT_Y);
   }
 
   private layoutPoster(): void {
     const poster = this.poster;
     if (!poster || poster.width <= 0 || poster.height <= 0) return;
-    const camera = this.cameras.main;
-    const scale = this.coverScale(poster.width, poster.height);
-    poster.setDisplaySize(poster.width * scale, poster.height * scale);
-    poster.setPosition(camera.width / 2, camera.height / 2);
+    // The still shares the video's placement exactly, so the handover when
+    // the video starts is invisible.
+    this.layoutRoomArt(poster, poster.width, poster.height);
   }
 
   private layoutVideo(): void {
@@ -435,11 +463,7 @@ export class ClubScene extends Phaser.Scene {
       video.setVisible(false);
       return;
     }
-    const camera = this.cameras.main;
-    // One uniform scale, so the overflowing axis is cropped, never squashed.
-    const scale = this.coverScale(naturalWidth, naturalHeight);
-    video.setDisplaySize(naturalWidth * scale, naturalHeight * scale);
-    video.setPosition(camera.width / 2, camera.height / 2);
+    this.layoutRoomArt(video, naturalWidth, naturalHeight);
     video.setVisible(true);
   }
 
