@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import type { ViewportInfo } from '../responsive/ViewportInfo';
 
 /**
  * Reusable post-level score screen, shown after a gameplay level finishes
@@ -84,7 +85,7 @@ export class LevelCompleteScene extends Phaser.Scene {
     // Built before the controller, because OrientationController runs its
     // onLayout once from its own constructor — there has to be something to
     // lay out by then.
-    new OrientationController(this, { onLayout: () => this.layoutUi() });
+    new OrientationController(this, { onLayout: (viewport) => this.layoutUi(viewport) });
     this.layoutUi();
   }
 
@@ -134,7 +135,7 @@ export class LevelCompleteScene extends Phaser.Scene {
    * other resize. Each button's hit area is local to its own background rect,
    * so moving the rect moves the hit area with it — nothing to re-register.
    */
-  private layoutUi(): void {
+  private layoutUi(viewport?: ViewportInfo): void {
     // Viewport-relative, not the fixed design constants: EXPAND scaling
     // keeps height pinned but varies width with the actual aspect ratio, so
     // reading the live camera size is what keeps this centred on any device.
@@ -155,10 +156,31 @@ export class LevelCompleteScene extends Phaser.Scene {
     this.layoutScoreLine(centerX, cursorY + SCORE_HEIGHT / 2);
     cursorY += SCORE_HEIGHT + GAP_SCORE_TO_BUTTONS;
 
-    const buttonsY = cursorY + BUTTON_HEIGHT / 2;
-    const groupWidth = BUTTON_WIDTH * 2 + BUTTON_GAP;
-    this.positionButton(this.retryButton, centerX - groupWidth / 2 + BUTTON_WIDTH / 2, buttonsY);
-    this.positionButton(this.continueButton, centerX + groupWidth / 2 - BUTTON_WIDTH / 2, buttonsY);
+    // The safe area, not just the camera box: on a notched phone in landscape
+    // the outer strip is physically unreachable, so a button sitting in it
+    // looks tappable and is not.
+    const margin = viewport?.safeMargin ?? 0;
+    // Close the gap before anything else if the pair will not fit; the
+    // buttons themselves keep their authored size.
+    const gap = Phaser.Math.Clamp(width - margin * 2 - BUTTON_WIDTH * 2, 0, BUTTON_GAP);
+    const groupWidth = BUTTON_WIDTH * 2 + gap;
+    // Clamp rather than centre blindly, so neither button can end up outside
+    // the reachable area on a narrow or heavily inset viewport.
+    const maxLeft = Math.max(margin, width - margin - groupWidth);
+    const groupLeft = Phaser.Math.Clamp(centerX - groupWidth / 2, margin, maxLeft);
+
+    const buttonsY = Phaser.Math.Clamp(
+      cursorY + BUTTON_HEIGHT / 2,
+      margin + BUTTON_HEIGHT / 2,
+      Math.max(margin + BUTTON_HEIGHT / 2, height - margin - BUTTON_HEIGHT / 2),
+    );
+
+    this.positionButton(this.retryButton, groupLeft + BUTTON_WIDTH / 2, buttonsY);
+    this.positionButton(
+      this.continueButton,
+      groupLeft + BUTTON_WIDTH + gap + BUTTON_WIDTH / 2,
+      buttonsY,
+    );
   }
 
   private layoutScoreLine(centerX: number, y: number): void {
