@@ -17,6 +17,23 @@ export interface ClubRoom {
    */
   posterKey: string;
   posterUrl: string;
+  /**
+   * Pushes this room's background down by this many logical pixels, so its
+   * floor line sits under Atmos's feet. Positive is down; omitted means the
+   * plain centred cover fit. Per room because the three interiors are framed
+   * differently — only the corridor's floor sits high enough to need it.
+   *
+   * Affects the background only. Atmos's own position comes from ClubScene's
+   * FLOOR_DROP and is shared by every room.
+   */
+  videoShiftY?: number;
+  /**
+   * Minimum extra scale on top of the cover fit for this room, so a shift
+   * cannot expose a strip along the top. A floor, not the final value:
+   * ClubScene raises it to whatever the shift and the live viewport actually
+   * require. Omitted means 1 — no overscan, the untouched cover fit.
+   */
+  videoOverscan?: number;
 }
 
 export const CLUB_ROOMS: readonly ClubRoom[] = [
@@ -33,6 +50,8 @@ export const CLUB_ROOMS: readonly ClubRoom[] = [
     videoUrl: 'assets/level_2/animation_2.mp4',
     posterKey: 'club-room-2-poster',
     posterUrl: 'assets/level_2/room_2_poster.webp',
+    videoShiftY: 20,
+    videoOverscan: 1.04,
   },
   {
     id: 'backstage',

@@ -15,6 +15,20 @@ describe('club room sequence', () => {
     expect(new Set(CLUB_ROOMS.map((room) => room.id)).size).toBe(CLUB_ROOMS.length);
   });
 
+  it('shifts only the corridor background, leaving the other rooms untouched', () => {
+    const byId = Object.fromEntries(CLUB_ROOMS.map((room) => [room.id, room]));
+    // Omitted means ClubScene applies shift 0 and overscan 1, i.e. the plain
+    // centred cover fit — these two must stay pixel-identical to before.
+    for (const id of ['lounge', 'backstage']) {
+      expect(byId[id].videoShiftY).toBeUndefined();
+      expect(byId[id].videoOverscan).toBeUndefined();
+    }
+    expect(byId.corridor.videoShiftY).toBeGreaterThan(0);
+    // A shift needs 2 * shift of spare height; the overscan floor exists so
+    // the corridor never opens a strip along the top.
+    expect(byId.corridor.videoOverscan).toBeGreaterThan(1);
+  });
+
   it('walks forward through the rooms, entering each from its left edge', () => {
     expect(resolveClubRoomTransition(0, 'right')).toEqual({
       roomIndex: 1,
