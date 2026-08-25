@@ -4,7 +4,6 @@ import {
   ATMOS_RUN_FRAME_DURATION_MS,
   ATMOS_RUN_FRAME_KEYS,
   ATMOS_STAY_FRAME_KEY,
-  ATMOS_VISUAL_SCALE,
   getAtmosFootOffset,
   getLoopedFrame,
   type AtmosFrameKey,
@@ -35,6 +34,17 @@ const EDGE_MARGIN = 46;
 const ENTRY_INSET = 96;
 /** Matches Player.syncVisual, so Atmos stands exactly as he does in Berlin. */
 const FOOT_NUDGE = 10;
+/**
+ * Level 2 only. The club rooms are shot much closer than Berlin's street, so
+ * Atmos is drawn larger here than ATMOS_VISUAL_SCALE's 0.8 to sit in them
+ * convincingly. Local on purpose: the shared constant also drives Berlin and
+ * the boss fight, where the size is tied to the collision box.
+ *
+ * Anything reading a per-frame foot gap must be given this same scale — the
+ * gaps are in source pixels, so scaling the sprite without scaling them lets
+ * the feet drift, and by a different amount per run frame.
+ */
+const ATMOS_CLUB_SCALE = 1.2;
 /** Floor line as a fraction of the logical height, which EXPAND pins at 720. */
 const FLOOR_RATIO = GROUND_Y / DESIGN_HEIGHT;
 
@@ -99,7 +109,7 @@ export class ClubScene extends Phaser.Scene {
     this.atmos = this.add
       .sprite(0, 0, ATMOS_STAY_FRAME_KEY)
       .setOrigin(0.5, 1)
-      .setScale(ATMOS_VISUAL_SCALE)
+      .setScale(ATMOS_CLUB_SCALE)
       .setDepth(Depth.PLAYER);
 
     this.roomLabel = this.add
@@ -213,7 +223,7 @@ export class ClubScene extends Phaser.Scene {
     }
     // Right is the artwork's natural facing; left mirrors it.
     this.atmos.setFlipX(this.facing === -1);
-    this.atmos.y = this.floorY() + getAtmosFootOffset(frameKey, ATMOS_VISUAL_SCALE) + FOOT_NUDGE;
+    this.atmos.y = this.floorY() + getAtmosFootOffset(frameKey, ATMOS_CLUB_SCALE) + FOOT_NUDGE;
   }
 
   private checkEdges(direction: -1 | 1): void {
