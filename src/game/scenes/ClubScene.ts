@@ -45,8 +45,15 @@ const FOOT_NUDGE = 10;
  * the feet drift, and by a different amount per run frame.
  */
 const ATMOS_CLUB_SCALE = 1.2;
+/**
+ * How far below Berlin's ground line the club floor sits, in logical pixels
+ * at the 720-high design size. The room videos are framed lower than the
+ * street, so Atmos stands further down the frame here. This is the knob to
+ * turn to move him up or down: positive is down.
+ */
+const FLOOR_DROP = 30;
 /** Floor line as a fraction of the logical height, which EXPAND pins at 720. */
-const FLOOR_RATIO = GROUND_Y / DESIGN_HEIGHT;
+const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
 
 /**
  * Level 2: three club interiors the player walks through, each an looping
