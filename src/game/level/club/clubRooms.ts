@@ -10,12 +10,37 @@ export interface ClubRoom {
   label: string;
   /** Streamed straight from this URL; never preloaded into the Phaser cache. */
   videoUrl: string;
+  /**
+   * First frame of `videoUrl`, small enough to sit in the boot load. Shown
+   * while the video is still opening, so entering a room never shows the
+   * empty camera background.
+   */
+  posterKey: string;
+  posterUrl: string;
 }
 
 export const CLUB_ROOMS: readonly ClubRoom[] = [
-  { id: 'lounge', label: 'MADAME CLAUDE — LOUNGE', videoUrl: 'assets/level_2/animation_1.mp4' },
-  { id: 'corridor', label: 'MADAME CLAUDE — CORRIDOR', videoUrl: 'assets/level_2/animation_2.mp4' },
-  { id: 'backstage', label: 'MADAME CLAUDE — BACKSTAGE', videoUrl: 'assets/level_2/animation_3.mp4' },
+  {
+    id: 'lounge',
+    label: 'MADAME CLAUDE — LOUNGE',
+    videoUrl: 'assets/level_2/animation_1.mp4',
+    posterKey: 'club-room-1-poster',
+    posterUrl: 'assets/level_2/room_1_poster.webp',
+  },
+  {
+    id: 'corridor',
+    label: 'MADAME CLAUDE — CORRIDOR',
+    videoUrl: 'assets/level_2/animation_2.mp4',
+    posterKey: 'club-room-2-poster',
+    posterUrl: 'assets/level_2/room_2_poster.webp',
+  },
+  {
+    id: 'backstage',
+    label: 'MADAME CLAUDE — BACKSTAGE',
+    videoUrl: 'assets/level_2/animation_3.mp4',
+    posterKey: 'club-room-3-poster',
+    posterUrl: 'assets/level_2/room_3_poster.webp',
+  },
 ] as const;
 
 /** Which side of a room the player crossed to leave it. */

@@ -81,6 +81,14 @@ export class ClubScene extends Phaser.Scene {
   private score = 0;
   private roomIndex = 0;
   private video?: Phaser.GameObjects.Video;
+  /**
+   * The room's first frame, shown from the instant the room is entered and
+   * hidden once the video is actually producing frames. Opening a video is
+   * never instantaneous — even fully cached it has to demux and start a
+   * decoder, and on mobile it may be waiting on an autoplay gesture — so
+   * without this the camera background shows through as a black screen.
+   */
+  private poster?: Phaser.GameObjects.Image;
   private atmos!: Phaser.GameObjects.Sprite;
   private roomLabel!: Phaser.GameObjects.Text;
   private hint?: Phaser.GameObjects.Text;
@@ -126,6 +134,12 @@ export class ClubScene extends Phaser.Scene {
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#07040d');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+
+    this.poster = this.add
+      .image(0, 0, CLUB_ROOMS[0].posterKey)
+      .setOrigin(0.5, 0.5)
+      .setDepth(Depth.FAR_BACKGROUND - 1)
+      .setVisible(false);
 
     this.atmos = this.add
       .sprite(0, 0, ATMOS_STAY_FRAME_KEY)
@@ -281,6 +295,11 @@ export class ClubScene extends Phaser.Scene {
     this.roomLabel.setText(room.label);
 
     this.releaseVideo();
+    // Up before the video is even requested, so there is no frame of black.
+    if (this.poster && this.textures.exists(room.posterKey)) {
+      this.poster.setTexture(room.posterKey).setVisible(true);
+      this.layoutPoster();
+    }
     // noAudio: true is what makes Phaser set muted + playsinline on the
     // element, which is the combination mobile Safari requires before it will
     // autoplay anything without a gesture.
@@ -307,9 +326,14 @@ export class ClubScene extends Phaser.Scene {
     // Only now is the warmed copy redundant: the real element has its own
     // request and enough data to play. Releasing any earlier could abort an
     // unfinished download that nothing else was fetching yet.
-    video.once(Phaser.GameObjects.Events.VIDEO_PLAYING, () =>
-      releasePrefetchedVideo(room.videoUrl),
-    );
+    if (import.meta.env.DEV) this.traceVideoStartup(video, room.videoUrl);
+    video.once(Phaser.GameObjects.Events.VIDEO_PLAYING, () => {
+      releasePrefetchedVideo(room.videoUrl);
+      // Only now is the video definitely drawing; until then the still is
+      // what the player sees, including while an autoplay block waits for a
+      // gesture.
+      this.poster?.setVisible(false);
+    });
     this.video = video;
     this.layoutVideo();
 
@@ -367,6 +391,37 @@ export class ClubScene extends Phaser.Scene {
    * Covers the viewport with the video without distorting it: one uniform
    * scale, so whichever axis overflows is cropped rather than squashed.
    */
+  /**
+   * Dev-only: reports how long each stage of opening a room video takes, and
+   * whether the browser blocked autoplay. `locked` means the still stays up
+   * until the player touches the screen, which looks the same as a slow load
+   * but is not one.
+   */
+  private traceVideoStartup(video: Phaser.GameObjects.Video, url: string): void {
+    const started = performance.now();
+    const since = (): string => `${Math.round(performance.now() - started)}ms`;
+    const element = video.video as HTMLVideoElement | null | undefined;
+    console.debug(`[ClubScene] opening ${url} (readyState ${element?.readyState ?? '-'})`);
+    for (const event of ['metadata', 'created', 'playing', 'locked', 'unlocked', 'error'] as const) {
+      video.once(event, () => console.debug(`[ClubScene] ${url} ${event} +${since()}`));
+    }
+  }
+
+  /** Uniform cover scale for a source of `naturalWidth` x `naturalHeight`. */
+  private coverScale(naturalWidth: number, naturalHeight: number): number {
+    const camera = this.cameras.main;
+    return Math.max(camera.width / naturalWidth, camera.height / naturalHeight);
+  }
+
+  private layoutPoster(): void {
+    const poster = this.poster;
+    if (!poster || poster.width <= 0 || poster.height <= 0) return;
+    const camera = this.cameras.main;
+    const scale = this.coverScale(poster.width, poster.height);
+    poster.setDisplaySize(poster.width * scale, poster.height * scale);
+    poster.setPosition(camera.width / 2, camera.height / 2);
+  }
+
   private layoutVideo(): void {
     const video = this.video;
     if (!video) return;
@@ -382,7 +437,7 @@ export class ClubScene extends Phaser.Scene {
     }
     const camera = this.cameras.main;
     // One uniform scale, so the overflowing axis is cropped, never squashed.
-    const scale = Math.max(camera.width / naturalWidth, camera.height / naturalHeight);
+    const scale = this.coverScale(naturalWidth, naturalHeight);
     video.setDisplaySize(naturalWidth * scale, naturalHeight * scale);
     video.setPosition(camera.width / 2, camera.height / 2);
     video.setVisible(true);
@@ -391,6 +446,7 @@ export class ClubScene extends Phaser.Scene {
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
     const camera = this.cameras.main;
     this.layoutVideo();
+    this.layoutPoster();
 
     const margin = viewport?.safeMargin ?? 24;
     this.roomLabel.setPosition(margin, margin).setScale(viewport?.hudScale ?? 1);

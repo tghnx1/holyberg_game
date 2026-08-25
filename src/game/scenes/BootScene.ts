@@ -27,6 +27,7 @@ import {
   getCollectibleAnimationAssetUrls,
 } from '../level/berlin/collectibleAnimations';
 import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/sceneryAssets';
+import { CLUB_ROOMS } from '../level/club/clubRooms';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -104,6 +105,11 @@ export class BootScene extends Phaser.Scene {
     }
     for (const asset of getSceneryAssetUrls()) {
       this.load.image(asset.key, asset.url);
+    }
+    // Room stills only, ~200 KB for all three. The videos themselves are
+    // never queued here; they stream in ClubScene.
+    for (const room of CLUB_ROOMS) {
+      this.load.image(room.posterKey, room.posterUrl);
     }
   }
 
