@@ -51,7 +51,7 @@ const FOOT_NUDGE = 10;
  * gaps are in source pixels, so scaling the sprite without scaling them lets
  * the feet drift, and by a different amount per run frame.
  */
-const ATMOS_CLUB_SCALE = 1.8;
+const ATMOS_CLUB_SCALE = 1.2;
 /**
  * How far below Berlin's ground line the club floor sits, in logical pixels
  * at the 720-high design size. The room videos are framed lower than the
