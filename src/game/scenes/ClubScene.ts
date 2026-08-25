@@ -23,8 +23,15 @@ export interface ClubSceneData {
   score?: number;
 }
 
-/** Walking pace. Slower than Berlin's auto-run: this is a stroll, not a chase. */
-const WALK_SPEED = 210;
+/**
+ * Walking pace in logical pixels per second. This is the knob for how fast
+ * Atmos crosses a room: higher is faster.
+ *
+ * Kept roughly proportional to ATMOS_CLUB_SCALE — a bigger character covering
+ * the same ground per second reads as trudging — so if that changes a lot,
+ * this usually wants to move with it.
+ */
+const WALK_SPEED = 420;
 /**
  * How far inside the edge the player is placed on entering a room, and how
  * close to the edge counts as leaving. Comfortably wider than one step at
@@ -44,14 +51,14 @@ const FOOT_NUDGE = 10;
  * gaps are in source pixels, so scaling the sprite without scaling them lets
  * the feet drift, and by a different amount per run frame.
  */
-const ATMOS_CLUB_SCALE = 1.2;
+const ATMOS_CLUB_SCALE = 1.8;
 /**
  * How far below Berlin's ground line the club floor sits, in logical pixels
  * at the 720-high design size. The room videos are framed lower than the
  * street, so Atmos stands further down the frame here. This is the knob to
  * turn to move him up or down: positive is down.
  */
-const FLOOR_DROP = 30;
+const FLOOR_DROP = 100;
 /** Floor line as a fraction of the logical height, which EXPAND pins at 720. */
 const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
 
