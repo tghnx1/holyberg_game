@@ -379,7 +379,7 @@ export class BerlinScene extends Phaser.Scene {
         score: this.progress.score,
         maxScore: getBerlinMaxScore(),
         retryScene: 'BerlinScene',
-        continueScene: 'RhythmScene',
+        continueScene: 'ClubScene',
         continueData: { score: this.progress.score },
       } satisfies LevelCompleteSceneData);
     });

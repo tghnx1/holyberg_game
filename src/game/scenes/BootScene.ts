@@ -87,9 +87,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image(ATMOS_STAY_FRAME_KEY, 'assets/players/Atmos/stay.png');
     this.load.svg(
       RHYTHM_HIGHWAY_TEXTURE_KEY,
-      'assets/level_2/Rhythm Highway (unchanged).svg',
+      'assets/level_3/Rhythm Highway (unchanged).svg',
     );
-    this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/level_2/Deck L.svg');
+    this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/level_3/Deck L.svg');
     for (const asset of getDialogueStationAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
