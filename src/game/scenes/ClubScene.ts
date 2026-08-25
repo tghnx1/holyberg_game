@@ -14,6 +14,7 @@ import {
   type ClubRoomEdge,
 } from '../level/club/clubRooms';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
+import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
@@ -51,7 +52,7 @@ const FOOT_NUDGE = 10;
  * gaps are in source pixels, so scaling the sprite without scaling them lets
  * the feet drift, and by a different amount per run frame.
  */
-const ATMOS_CLUB_SCALE = 1.2;
+const ATMOS_CLUB_SCALE = 1.8;
 /**
  * How far below Berlin's ground line the club floor sits, in logical pixels
  * at the 720-high design size. The room videos are framed lower than the
@@ -80,9 +81,6 @@ export class ClubScene extends Phaser.Scene {
   private score = 0;
   private roomIndex = 0;
   private video?: Phaser.GameObjects.Video;
-  /** Detached element used only to pull the next room into the HTTP cache. */
-  private prefetch?: HTMLVideoElement;
-  private prefetchedUrl?: string;
   private atmos!: Phaser.GameObjects.Sprite;
   private roomLabel!: Phaser.GameObjects.Text;
   private hint?: Phaser.GameObjects.Text;
@@ -306,6 +304,12 @@ export class ClubScene extends Phaser.Scene {
     video.on(Phaser.GameObjects.Events.VIDEO_METADATA, () => this.layoutVideo());
     video.on(Phaser.GameObjects.Events.VIDEO_CREATED, () => this.layoutVideo());
     video.on(Phaser.GameObjects.Events.VIDEO_PLAYING, () => this.layoutVideo());
+    // Only now is the warmed copy redundant: the real element has its own
+    // request and enough data to play. Releasing any earlier could abort an
+    // unfinished download that nothing else was fetching yet.
+    video.once(Phaser.GameObjects.Events.VIDEO_PLAYING, () =>
+      releasePrefetchedVideo(room.videoUrl),
+    );
     this.video = video;
     this.layoutVideo();
 
@@ -317,32 +321,14 @@ export class ClubScene extends Phaser.Scene {
   }
 
   /**
-   * Pulls the next room's file into the HTTP cache with a detached element
-   * that is never added to the display list and never played, so the
-   * transition is quick without a second video decoding alongside the live
-   * one. Best-effort: if the browser ignores the hint, the room still works.
+   * Warms the next room so its transition is quick. Deduplicated by the
+   * helper, so walking back and forth re-requests nothing, and an in-flight
+   * download is never aborted just because the player changed direction —
+   * which the previous scene-local version did on every room change.
    */
   private prefetchNeighbour(roomIndex: number): void {
     const room = CLUB_ROOMS[roomIndex];
-    if (!room || this.prefetchedUrl === room.videoUrl) return;
-    this.releasePrefetch();
-    const element = document.createElement('video');
-    element.muted = true;
-    element.setAttribute('playsinline', 'playsinline');
-    element.preload = 'auto';
-    element.src = room.videoUrl;
-    element.load();
-    this.prefetch = element;
-    this.prefetchedUrl = room.videoUrl;
-  }
-
-  private releasePrefetch(): void {
-    const element = this.prefetch;
-    if (!element) return;
-    element.removeAttribute('src');
-    element.load();
-    this.prefetch = undefined;
-    this.prefetchedUrl = undefined;
+    if (room) prefetchVideo(room.videoUrl);
   }
 
   /** Stops playback and frees the decoder before the next room takes over. */
@@ -424,7 +410,9 @@ export class ClubScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.releaseVideo();
-    this.releasePrefetch();
+    // Leaving Level 2: every room file is done with, and a retry re-warms
+    // from the HTTP cache rather than the network.
+    for (const room of CLUB_ROOMS) releasePrefetchedVideo(room.videoUrl);
     this.tweens.killAll();
     this.leftPointers.clear();
     this.rightPointers.clear();

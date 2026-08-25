@@ -14,6 +14,7 @@ import {
   GROUND_SEGMENTS,
 } from '../level/berlin/berlinLevelConfig';
 import { getBerlinMaxScore } from '../level/berlin/berlinMaxScore';
+import { CLUB_ROOMS } from '../level/club/clubRooms';
 import { canAcceptTutorialJumpInput, resolveIntroStart } from '../level/berlin/controlsTutorial';
 import {
   isCollectible,
@@ -30,6 +31,7 @@ import {
 } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
+import { prefetchVideo } from '../systems/videoPrefetch';
 import { ControlsTutorialSystem } from '../systems/ControlsTutorialSystem';
 import { CullingSystem } from '../systems/CullingSystem';
 import { HudSystem } from '../systems/HudSystem';
@@ -210,6 +212,13 @@ export class BerlinScene extends Phaser.Scene {
     this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.followPlayer();
     attachFullscreenExitControl(this);
+    // Level 2's first room is a multi-megabyte MP4 that ClubScene otherwise
+    // only starts fetching once it is already on screen. Warming just that
+    // one here gives it the length of Level 1 to arrive; the remaining rooms
+    // stay on ClubScene's own neighbour prefetch. Ownership is module-level,
+    // so this deliberately outlives Berlin's shutdown and is still in flight
+    // through LevelCompleteScene.
+    prefetchVideo(CLUB_ROOMS[0].videoUrl);
     void this.createDevelopmentTools();
     // `once` so a restart cannot stack handlers; everything registered above
     // is released here rather than left attached to a dead scene.
