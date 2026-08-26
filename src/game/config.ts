@@ -7,6 +7,7 @@ import { DialogueScene } from './scenes/DialogueScene';
 import { LevelCompleteScene } from './scenes/LevelCompleteScene';
 import { BootScene } from './scenes/BootScene';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene';
+import { PauseScene } from './scenes/PauseScene';
 import { ResultScene } from './scenes/ResultScene';
 import { RhythmScene } from './scenes/RhythmScene';
 
@@ -40,5 +41,5 @@ export const config: Phaser.Types.Core.GameConfig = {
   // does not scale by devicePixelRatio, so this is a 1:1 backing store and a
   // phone renders the same pixel count as a desktop at the same CSS size.
   scale: { mode: Phaser.Scale.EXPAND, autoCenter: Phaser.Scale.CENTER_BOTH, zoom: 1 },
-  scene: [BootScene, CharacterSelectScene, BerlinScene, LevelCompleteScene, DialogueScene, ClubScene, RhythmScene, BossScene, ResultScene],
+  scene: [BootScene, CharacterSelectScene, BerlinScene, LevelCompleteScene, DialogueScene, ClubScene, RhythmScene, BossScene, ResultScene, PauseScene],
 };

@@ -69,6 +69,17 @@ export function getRevealedCharacterCount(text: string, elapsedMs: number): numb
 }
 
 /**
+ * Whether releasing SPACE after holding it for `heldForMs` should count as a
+ * short press — i.e. behave exactly like a mobile tap (reveal/advance) — or
+ * as nothing further, because the hold already reached `skipHoldMs` and the
+ * full-dialogue skip already fired from the continuous hold check. Pure so
+ * the desktop/mobile unification can be tested without a running scene.
+ */
+export function isShortSpacePress(heldForMs: number, skipHoldMs: number = DIALOGUE_TIMING.skipHoldMs): boolean {
+  return heldForMs < skipHoldMs;
+}
+
+/**
  * Renders `text` with only the first `revealed` printable characters shown.
  * Newlines inside the revealed prefix are kept, so a multi-line block types
  * out line by line and already-visible text never moves.

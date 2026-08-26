@@ -7,6 +7,7 @@ import {
   getRevealedText,
   getTypedCharacterCount,
   getTypingDurationMs,
+  isShortSpacePress,
 } from '../src/game/dialogue/dialogueTiming';
 import {
   DIALOGUE_SCRIPTS,
@@ -61,6 +62,20 @@ describe('dialogue timing', () => {
     expect(getRevealedText(text, 2)).toBe('AB\n');
     expect(getRevealedText(text, 3)).toBe('AB\nC');
     expect(getRevealedText(text, 4)).toBe(text);
+  });
+});
+
+describe('isShortSpacePress', () => {
+  it('treats any release before skipHoldMs as a short press (same path as a tap)', () => {
+    expect(isShortSpacePress(0, DIALOGUE_TIMING.skipHoldMs)).toBe(true);
+    expect(isShortSpacePress(DIALOGUE_TIMING.skipHoldMs - 1, DIALOGUE_TIMING.skipHoldMs)).toBe(true);
+  });
+
+  it('does not treat a hold that already reached skipHoldMs as a short press', () => {
+    // At this point the continuous hold check has already fired exit(); this
+    // guards against also handling it as a tap if release is observed later.
+    expect(isShortSpacePress(DIALOGUE_TIMING.skipHoldMs, DIALOGUE_TIMING.skipHoldMs)).toBe(false);
+    expect(isShortSpacePress(DIALOGUE_TIMING.skipHoldMs + 500, DIALOGUE_TIMING.skipHoldMs)).toBe(false);
   });
 });
 

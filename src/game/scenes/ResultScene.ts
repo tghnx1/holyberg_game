@@ -20,6 +20,9 @@ import type { RhythmResult } from '../rhythm/types';
 const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
 
 export class ResultScene extends Phaser.Scene {
+  /** Final results/leaderboard screen, not gameplay. */
+  static readonly pausable = false;
+
   private result!: RhythmResult;
   private totalScore = 0;
   private leaderboardText!: Phaser.GameObjects.Text;

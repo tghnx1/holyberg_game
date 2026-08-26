@@ -13,6 +13,7 @@ import {
   getRevealedCharacterCount,
   getRevealedText,
   getTypedCharacterCount,
+  isShortSpacePress,
 } from '../dialogue/dialogueTiming';
 import {
   assertDialogueCastCapabilities,
@@ -31,6 +32,7 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import type { SceneEditor } from '../systems/SceneEditor';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
+import type { PausableScene } from '../systems/pause/PausableScene';
 
 export interface DialogueSceneData {
   /** Id from dialogueScripts; defaults to the metro/Magician dialogue. */
@@ -64,7 +66,7 @@ function portraitFramesFor(character: CharacterDefinition): PortraitFrames {
  * change, the same responsive pattern Berlin and Rhythm use — none of the
  * dialogue timing/typewriter/skip logic depends on layout at all.
  */
-export class DialogueScene extends Phaser.Scene {
+export class DialogueScene extends Phaser.Scene implements PausableScene {
   private script!: DialogueScript;
   private payload: Record<string, unknown> = {};
   private panels!: DialoguePanels;
@@ -230,6 +232,18 @@ export class DialogueScene extends Phaser.Scene {
       this.pausedAtNow = undefined;
     }
     this.dialoguePaused = false;
+  }
+
+  /**
+   * Global pause hook (see `PausableScene`): `scene.scene.pause()` freezes
+   * `update()` entirely, so no manual time compensation is needed the way
+   * `pauseDialogue`/`resumeDialogue` need for the SceneEditor toggle — this
+   * only has to drop an in-flight SPACE hold so a key released while paused
+   * can't read as a short press and advance the line on resume.
+   */
+  onGamePause(): void {
+    this.spaceHeldSince = undefined;
+    this.skipFill.width = 0;
   }
 
   private saveStationLayout(
@@ -623,12 +637,24 @@ export class DialogueScene extends Phaser.Scene {
     this.setPhase('holding');
   }
 
+  /**
+   * A short SPACE press takes the same path as a mobile tap (`handleTap`),
+   * so desktop and touch share one progression semantic; holding it past
+   * `skipHoldMs` still triggers the full-dialogue skip, exactly as before.
+   * The two never both fire for one press: `exit()` only runs once progress
+   * reaches 1 while the key is still down, and a release before that just
+   * calls `handleTap()` — never both for the same press.
+   */
   private updateSkip(now: number): void {
     if (this.finished) return;
     const held = this.spaceKey?.isDown === true;
     if (!held) {
-      this.spaceHeldSince = undefined;
-      this.skipFill.width = 0;
+      if (this.spaceHeldSince !== undefined) {
+        const heldForMs = now - this.spaceHeldSince;
+        this.spaceHeldSince = undefined;
+        this.skipFill.width = 0;
+        if (isShortSpacePress(heldForMs, DIALOGUE_TIMING.skipHoldMs)) this.handleTap();
+      }
       return;
     }
     this.spaceHeldSince ??= now;

@@ -4,6 +4,8 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { AudioTrackPlayer } from '../rhythm/AudioTrackPlayer';
+import { SoundManager } from '../audio/SoundManager';
+import type { PausableScene } from '../systems/pause/PausableScene';
 import { readInputOffsetMs } from '../rhythm/Calibration';
 import { HIT_LINE_HALF_WIDTH, LANE_COLORS, LANE_LABELS, RHYTHM_SCORE_CAP, RhythmDepth, SPAWN_AHEAD_SECONDS } from '../rhythm/constants';
 import { HIT_LINE_Y, HORIZON_HALF_WIDTH, HORIZON_Y, PAD_BOTTOM_Y } from '../rhythm/constants';
@@ -35,8 +37,9 @@ import type { Judgement, Lane, RhythmChart, ScoreState } from '../rhythm/types';
 import type { RhythmPlaybackWindow } from '../rhythm/RhythmPlaybackWindow';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
 
-export class RhythmScene extends Phaser.Scene {
+export class RhythmScene extends Phaser.Scene implements PausableScene {
   private berlinScore = 0;
+  private unsubscribeSoundManager?: () => void;
   private chart!: RhythmChart;
   private playbackWindow!: RhythmPlaybackWindow;
   private scoreState!: ScoreState;
@@ -176,6 +179,7 @@ export class RhythmScene extends Phaser.Scene {
       );
       this.audio = new AudioTrackPlayer();
       await this.audio.prepare(audioBuffer);
+      this.unsubscribeSoundManager = SoundManager.onChange((muted) => this.audio.setMuted(muted));
       // prepare() detaches the buffer, so the cached copy is now an empty
       // shell that nothing can decode. Dropping it frees the encoded track
       // (several MB held for the whole level) and makes a retry re-request
@@ -680,9 +684,20 @@ export class RhythmScene extends Phaser.Scene {
     });
   }
 
+  /** Raw Web Audio playback sits outside Phaser's update loop, so `scene.scene.pause()` alone can't stop it. */
+  onGamePause(): void {
+    void this.audio?.pause();
+  }
+
+  onGameResume(): void {
+    void this.audio?.resume();
+  }
+
   private cleanup(): void {
     this.playing = false;
     this.clock?.stop();
+    this.unsubscribeSoundManager?.();
+    this.unsubscribeSoundManager = undefined;
     this.audio?.destroy();
     this.notes?.destroy();
     this.boothAnimation?.destroy();

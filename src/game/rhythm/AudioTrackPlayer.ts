@@ -15,6 +15,9 @@ export class AudioTrackPlayer implements TrackTimeSource {
   private running = false;
   private stoppedIntentionally = false;
   private ended = false;
+  /** Session-wide mute; persists across `schedulePlayback` calls since it lives on this node, not the per-play gain. */
+  private masterGain?: GainNode;
+  private muted = false;
   onEnded?: () => void;
 
   /**
@@ -29,6 +32,17 @@ export class AudioTrackPlayer implements TrackTimeSource {
   async prepare(encodedAudio: ArrayBuffer): Promise<void> {
     this.context ??= new AudioContext();
     this.buffer = await this.context.decodeAudioData(encodedAudio);
+    if (!this.masterGain) {
+      this.masterGain = this.context.createGain();
+      this.masterGain.connect(this.context.destination);
+      this.masterGain.gain.value = this.muted ? 0 : 1;
+    }
+  }
+
+  /** Applies (or queues, if the context isn't ready yet) the global mute state. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 1;
   }
 
   async unlock(): Promise<boolean> {
@@ -95,7 +109,7 @@ export class AudioTrackPlayer implements TrackTimeSource {
     const playbackDurationSeconds = stopOffsetSeconds - startOffsetSeconds;
     const actualFadeOutSeconds = Math.min(Math.max(0, fadeOutSeconds), playbackDurationSeconds / 2);
     this.gain = this.context.createGain();
-    this.gain.connect(this.context.destination);
+    this.gain.connect(this.masterGain ?? this.context.destination);
     this.source = this.context.createBufferSource();
     this.source.buffer = this.buffer;
     this.source.connect(this.gain);

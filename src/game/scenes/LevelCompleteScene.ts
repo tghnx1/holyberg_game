@@ -52,6 +52,9 @@ interface LevelCompleteButton {
 }
 
 export class LevelCompleteScene extends Phaser.Scene {
+  /** Transition/results screen, not gameplay. */
+  static readonly pausable = false;
+
   private levelData!: LevelCompleteSceneData;
   private titleText!: Phaser.GameObjects.Text;
   private scoreLabel!: Phaser.GameObjects.Text;

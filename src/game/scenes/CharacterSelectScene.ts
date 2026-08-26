@@ -44,6 +44,9 @@ interface CharacterCard {
  * once and only by whoever actually needs it.
  */
 export class CharacterSelectScene extends Phaser.Scene {
+  /** Menu screen, not gameplay. */
+  static readonly pausable = false;
+
   private characters: readonly CharacterDefinition[] = [];
   private cards: CharacterCard[] = [];
   private track!: Phaser.GameObjects.Container;

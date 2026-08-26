@@ -42,6 +42,9 @@ function getViewportDimensions(scale: Phaser.Scale.ScaleManager): {
 }
 
 export class BootScene extends Phaser.Scene {
+  /** Preloader/router only; there is nothing here for a pause menu to freeze. */
+  static readonly pausable = false;
+
   constructor() {
     super('BootScene');
   }
