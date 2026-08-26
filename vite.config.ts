@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Connect, Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+import { characterManifestPlugin } from './vite/characterManifestPlugin';
 import { validateBerlinEntities } from './src/game/level/berlin/berlinLevelSchema';
 import { validateDialogueStationLayout } from './src/game/dialogue/dialogueStationLayoutSchema';
 
@@ -112,6 +113,6 @@ export default defineConfig(({ command }) => ({
   // GitHub Pages serves this repository at /holyberg_game/. Keep local
   // development at / so phone testing through the Vite dev server is unchanged.
   base: command === 'build' ? '/holyberg_game/' : '/',
-  plugins: [levelEditorSavePlugin(), dialogueStationLayoutSavePlugin()],
+  plugins: [characterManifestPlugin(), levelEditorSavePlugin(), dialogueStationLayoutSavePlugin()],
   test: { environment: 'node', include: ['tests/**/*.test.ts'] },
 }));

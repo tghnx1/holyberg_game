@@ -1,0 +1,10 @@
+{
+  "footGaps": {
+    "gameplay/run/01.png": 4,
+    "gameplay/run/02.png": 4,
+    "gameplay/run/03.png": 8,
+    "gameplay/run/04.png": 4,
+    "gameplay/run/05.png": 4,
+    "gameplay/run/06.png": 15
+  }
+}
