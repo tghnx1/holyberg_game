@@ -18,8 +18,11 @@ import type { CharacterAssetRef, CharacterDefinition } from './characterManifest
  */
 
 export type CharacterAssetGroup =
-  /** Full-body still for Character Select; one file. */
-  | 'preview'
+  /**
+   * The full-body standing still, one file. Character Select's preview, and
+   * also the pose a dialogue actor settles on after its entrance.
+   */
+  | 'idle'
   /** Everything the platforming scenes draw: idle, run, jump, crouch, damage. */
   | 'gameplay'
   /** The two dialogue portrait frames. */
@@ -45,7 +48,7 @@ export function collectCharacterAssets(
 
   for (const group of groups) {
     switch (group) {
-      case 'preview':
+      case 'idle':
         push(character.gameplay.idle);
         break;
       case 'gameplay':
@@ -70,7 +73,7 @@ export function collectCharacterAssets(
     }
   }
 
-  // Groups overlap — `preview` and `gameplay` share the idle frame — so a
+  // Groups overlap — `idle` and `gameplay` share the standing frame — so a
   // caller asking for both must not queue it twice.
   const seen = new Set<string>();
   return refs.filter((ref) => (seen.has(ref.key) ? false : (seen.add(ref.key), true)));
@@ -112,7 +115,7 @@ export function queueCharacterPreview(
   scene: Phaser.Scene,
   character: CharacterDefinition,
 ): CharacterAssetRef[] {
-  return queueCharacterAssets(scene, character, ['preview']);
+  return queueCharacterAssets(scene, character, ['idle']);
 }
 
 /** Everything the selected player needs to run the platforming scenes. */

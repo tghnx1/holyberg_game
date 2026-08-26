@@ -5,6 +5,7 @@ import {
   roleRef,
   type CharacterRef,
 } from '../characters/characterRef';
+import type { CharacterAssetGroup } from '../characters/characterAssets';
 import type { DialogueLine, DialogueSceneId, DialogueScript } from './types';
 
 /**
@@ -13,6 +14,21 @@ import type { DialogueLine, DialogueSceneId, DialogueScript } from './types';
  * Phaser-free, so casting and capability rules are testable without a running
  * scene, and so no renderer has to contain casting logic.
  */
+
+/**
+ * Everything a dialogue can draw of a character, and therefore everything
+ * DialogueScene loads for each member of the cast.
+ *
+ * `idle` is in here because the arriving actor settles on that pose once its
+ * entrance finishes — it is not only a Character Select preview. Declared
+ * once so the scene and its regression test cannot drift apart.
+ */
+export const DIALOGUE_ASSET_GROUPS: readonly CharacterAssetGroup[] = [
+  'portrait',
+  'metroPose',
+  'appear',
+  'idle',
+];
 
 export interface ResolvedDialogueSpeaker {
   character: CharacterDefinition;

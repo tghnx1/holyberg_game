@@ -16,6 +16,7 @@ import {
 } from '../dialogue/dialogueTiming';
 import {
   assertDialogueCastCapabilities,
+  DIALOGUE_ASSET_GROUPS,
   resolveDialogueCast,
   resolveDialogueSpeaker,
   resolveSceneCast,
@@ -136,7 +137,7 @@ export class DialogueScene extends Phaser.Scene {
     // cast as both the player and an NPC appears once, and the loader skips
     // anything already in the texture manager.
     for (const character of resolveDialogueCast(this.script)) {
-      queueCharacterAssets(this, character, ['portrait', 'metroPose', 'appear']);
+      queueCharacterAssets(this, character, DIALOGUE_ASSET_GROUPS);
     }
   }
 

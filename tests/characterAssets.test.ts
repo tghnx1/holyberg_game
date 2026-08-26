@@ -14,8 +14,8 @@ const keys = (groups: CharacterAssetGroup[], character = atmos): string[] =>
   collectCharacterAssets(character, groups).map((ref) => ref.key);
 
 describe('what each group loads', () => {
-  it('preview is a single full-body still', () => {
-    expect(keys(['preview'])).toEqual(['character:atmos:gameplay:idle']);
+  it('idle is a single full-body still', () => {
+    expect(keys(['idle'])).toEqual(['character:atmos:gameplay:idle']);
   });
 
   it('gameplay covers idle, run, jump, crouch and damage', () => {
@@ -62,7 +62,7 @@ describe('what each group loads', () => {
 
 describe('combining groups', () => {
   it('never queues an overlapping asset twice', () => {
-    const combined = keys(['preview', 'gameplay']);
+    const combined = keys(['idle', 'gameplay']);
     expect(new Set(combined).size).toBe(combined.length);
     // preview's idle is already inside gameplay, so it adds nothing.
     expect(combined).toHaveLength(keys(['gameplay']).length);
@@ -133,7 +133,7 @@ describe('idempotency', () => {
 
 describe('select-screen cost', () => {
   it('previewing every playable character is one file each, not their animations', () => {
-    const previews = [atmos, klaus].flatMap((c) => collectCharacterAssets(c, ['preview']));
+    const previews = [atmos, klaus].flatMap((c) => collectCharacterAssets(c, ['idle']));
     expect(previews).toHaveLength(2);
     const fullGameplay = [atmos, klaus].flatMap((c) => collectCharacterAssets(c, ['gameplay']));
     expect(fullGameplay.length).toBeGreaterThan(previews.length * 5);

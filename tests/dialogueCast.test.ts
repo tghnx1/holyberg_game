@@ -5,8 +5,10 @@ import {
   resetCharacterSelection,
   selectCharacter,
 } from '../src/game/characters/characterSelection';
+import { collectCharacterAssets } from '../src/game/characters/characterAssets';
 import {
   assertDialogueCastCapabilities,
+  DIALOGUE_ASSET_GROUPS,
   DIALOGUE_SCENE_CASTS,
   DialogueCastError,
   resolveDialogueCast,
@@ -247,6 +249,51 @@ describe('the arriving actor needs a pose to settle on', () => {
       expect(() => assertDialogueCastCapabilities(s)).not.toThrow(/dialogue\/appear/);
     } finally {
       (DIALOGUE_SCENE_CASTS.metroStation as { arrivingActor: unknown }).arrivingActor = original;
+    }
+  });
+});
+
+describe('everything the metro scene draws is actually loaded', () => {
+  /** Exactly what DialogueScene.preload queues, per cast member. */
+  const queuedKeys = (script: DialogueScript): Set<string> =>
+    new Set(
+      resolveDialogueCast(script).flatMap((character) =>
+        collectCharacterAssets(character, DIALOGUE_ASSET_GROUPS).map((ref) => ref.key),
+      ),
+    );
+
+  it('queues the arriving actor’s settled idle, not just its entrance', () => {
+    // Regression: the settled pose is gameplay/idle.png, which the dialogue
+    // groups originally omitted, so the actor became a missing-texture square
+    // the moment its entrance finished.
+    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
+    const keys = queuedKeys(METRO_MAGICIAN_DIALOGUE);
+    expect(cast.arriving.gameplay.idle).toBeDefined();
+    expect(keys.has(cast.arriving.gameplay.idle!.key)).toBe(true);
+  });
+
+  it('queues every frame of the arriving actor’s entrance', () => {
+    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
+    const keys = queuedKeys(METRO_MAGICIAN_DIALOGUE);
+    expect(cast.arriving.dialogue.appear.length).toBeGreaterThan(0);
+    for (const frame of cast.arriving.dialogue.appear) expect(keys.has(frame.key)).toBe(true);
+  });
+
+  it('queues the seated actor’s pose and both portraits of every speaker', () => {
+    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
+    const keys = queuedKeys(METRO_MAGICIAN_DIALOGUE);
+    expect(keys.has(cast.seated.dialogue.metroSit!.key)).toBe(true);
+    for (const line of METRO_MAGICIAN_DIALOGUE.lines) {
+      const { character } = resolveDialogueSpeaker(line, METRO_MAGICIAN_DIALOGUE);
+      expect(keys.has(character.dialogue.portraitIdle!.key)).toBe(true);
+      expect(keys.has(character.dialogue.portraitTalk!.key)).toBe(true);
+    }
+  });
+
+  it('still does not pull the run, jump, crouch or damage sets', () => {
+    const keys = [...queuedKeys(METRO_MAGICIAN_DIALOGUE)];
+    for (const group of ['run', 'jump', 'crouch', 'damage']) {
+      expect(keys.some((key) => key.includes(`:gameplay:${group}:`))).toBe(false);
     }
   });
 });
