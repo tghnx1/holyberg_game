@@ -28,6 +28,7 @@ import {
 } from '../level/berlin/collectibleAnimations';
 import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/sceneryAssets';
 import { CLUB_ROOMS } from '../level/club/clubRooms';
+import { selectFallbackCharacter } from '../characters/characterSelection';
 
 function getMaxTextureSize(game: Phaser.Game): number | undefined {
   const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
@@ -118,7 +119,15 @@ export class BootScene extends Phaser.Scene {
     createCollectibleAnimations(this);
     createSceneryFrames(this);
 
-    const developmentScene = new URLSearchParams(window.location.search).get('scene');
+    const query = new URLSearchParams(window.location.search);
+    const developmentScene = query.get('scene');
+    if (import.meta.env.DEV && developmentScene) {
+      // Direct routes skip Character Select, so give them a selection anyway:
+      // ?character=<id> if supplied, otherwise Atmos, otherwise the first
+      // playable one. Nothing downstream reads it yet, but it keeps the dev
+      // entry points valid once the scenes do.
+      selectFallbackCharacter(query.get('character') ?? undefined);
+    }
     if (import.meta.env.DEV && developmentScene === 'rhythm') {
       this.scene.start('RhythmScene', { score: 500 });
       return;
@@ -132,13 +141,14 @@ export class BootScene extends Phaser.Scene {
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
-      const scriptId = new URLSearchParams(window.location.search).get('script') ?? 'metro-magician';
+      const scriptId = query.get('script') ?? 'metro-magician';
       this.scene.start('DialogueScene', { scriptId });
       return;
     }
-    // DialogueScene only ever plays before BerlinScene; from there the level
-    // sequence is BerlinScene -> LevelCompleteScene -> RhythmScene ->
+    // Character Select comes first and starts the opening dialogue itself;
+    // from there the sequence is DialogueScene -> BerlinScene ->
+    // LevelCompleteScene -> ClubScene -> LevelCompleteScene -> RhythmScene ->
     // LevelCompleteScene -> BossScene -> ResultScene.
-    this.scene.start('DialogueScene', { scriptId: 'metro-magician' });
+    this.scene.start('CharacterSelectScene');
   }
 }
