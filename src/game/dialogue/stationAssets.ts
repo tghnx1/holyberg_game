@@ -37,11 +37,11 @@ export function getDialogueStationAssetUrls(): StationImageAsset[] {
     { key: DIALOGUE_STATION_TEXTURE_KEYS.background, url: 'assets/dialogue_1/background_metro.png' },
     { key: DIALOGUE_STATION_TEXTURE_KEYS.train, url: 'assets/dialogue_1/train.png' },
     { key: DIALOGUE_STATION_TEXTURE_KEYS.foreground, url: 'assets/dialogue_1/first_plan_metro.png' },
-    { key: ATMOS_SIT_METRO_KEY, url: 'assets/players/Atmos/sit_metro.png' },
+    { key: ATMOS_SIT_METRO_KEY, url: 'assets/players/Atmos/dialogue/poses/metro_sit.png' },
     ...DISUS_APPEAR_FRAME_KEYS.map((key, index) => ({
       key,
-      url: `assets/players/Disus/apiering ${index + 1}.png`,
+      url: `assets/players/Disus/dialogue/appear/${String(index + 1).padStart(2, '0')}.png`,
     })),
-    { key: DISUS_STAY_KEY, url: 'assets/players/Disus/stay.png' },
+    { key: DISUS_STAY_KEY, url: 'assets/players/Disus/gameplay/idle.png' },
   ];
 }

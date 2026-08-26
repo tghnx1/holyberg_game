@@ -76,16 +76,16 @@ export class BootScene extends Phaser.Scene {
     this.load.image('berlin-train-right', 'assets/level_1/train-right.png');
     this.load.image('berlin-train-left', 'assets/level_1/train-left.png');
     for (const [index, key] of ATMOS_RUN_FRAME_KEYS.entries()) {
-      this.load.image(key, `assets/players/Atmos/run ${index + 1}.png`);
+      this.load.image(key, `assets/players/Atmos/gameplay/run/${String(index + 1).padStart(2, '0')}.png`);
     }
     for (const [index, key] of ATMOS_JUMP_FRAME_KEYS.entries()) {
-      this.load.image(key, `assets/players/Atmos/jump ${index + 1}.png`);
+      this.load.image(key, `assets/players/Atmos/gameplay/jump/${String(index + 1).padStart(2, '0')}.png`);
     }
     for (const [index, key] of ATMOS_CROUCH_FRAME_KEYS.entries()) {
-      this.load.image(key, `assets/players/Atmos/crouch ${index + 1}.png`);
+      this.load.image(key, `assets/players/Atmos/gameplay/crouch/${String(index + 1).padStart(2, '0')}.png`);
     }
-    this.load.image(ATMOS_DAMAGE_FRAME_KEY, 'assets/players/Atmos/damage 1.png');
-    this.load.image(ATMOS_STAY_FRAME_KEY, 'assets/players/Atmos/stay.png');
+    this.load.image(ATMOS_DAMAGE_FRAME_KEY, 'assets/players/Atmos/gameplay/damage/01.png');
+    this.load.image(ATMOS_STAY_FRAME_KEY, 'assets/players/Atmos/gameplay/idle.png');
     this.load.svg(
       RHYTHM_HIGHWAY_TEXTURE_KEY,
       'assets/level_3/Rhythm Highway (unchanged).svg',

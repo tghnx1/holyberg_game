@@ -19,9 +19,9 @@ export interface DialoguePortraitAsset {
 
 export function getDialoguePortraitAssetUrls(): DialoguePortraitAsset[] {
   return [
-    { key: ATMOS_DIALOG_IDLE_KEY, url: 'assets/players/Atmos/dialog_1.png' },
-    { key: ATMOS_DIALOG_TALK_KEY, url: 'assets/players/Atmos/dialog_2.png' },
-    { key: DISUS_DIALOG_IDLE_KEY, url: 'assets/players/Disus/dialog_1.png' },
-    { key: DISUS_DIALOG_TALK_KEY, url: 'assets/players/Disus/dialog_2.png' },
+    { key: ATMOS_DIALOG_IDLE_KEY, url: 'assets/players/Atmos/dialogue/portrait/idle.png' },
+    { key: ATMOS_DIALOG_TALK_KEY, url: 'assets/players/Atmos/dialogue/portrait/talk.png' },
+    { key: DISUS_DIALOG_IDLE_KEY, url: 'assets/players/Disus/dialogue/portrait/idle.png' },
+    { key: DISUS_DIALOG_TALK_KEY, url: 'assets/players/Disus/dialogue/portrait/talk.png' },
   ];
 }
