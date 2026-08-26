@@ -1,4 +1,5 @@
 /** Inter-level dialogue domain types. Free of Phaser so timing stays testable. */
+import type { CharacterRef } from '../characters/characterRef';
 
 /** One dialogue line. Newlines are preserved as written. */
 export interface DialogueLine {
@@ -14,9 +15,23 @@ export interface DialogueLine {
    */
   speakerId?: DialoguePortraitId;
   /**
+   * Who is speaking, as a character reference: the selected player, a story
+   * role, or one named character.
+   *
+   * PHASE 8: this is the replacement for `speakerId`, which cannot express
+   * "whoever the player picked" and hardcodes Disus where the story means
+   * the Magician. DialogueScene still reads `speakerId`, so both are present
+   * on migrated scripts for now; `speakerId` and DialoguePortraitId go when
+   * the renderer switches over.
+   */
+  speaker?: CharacterRef;
+  /**
    * Overrides the displayed speaker name for just this line (e.g. keeping
    * "THE MAGICIAN" as the label while the portrait itself is Disus).
    * Falls back to the portrait config's own name, then the script's default.
+   *
+   * Independent of `speaker`: the label is a story decision and does not have
+   * to match whoever was cast.
    */
   speakerName?: string;
 }
@@ -37,6 +52,11 @@ export interface DialogueScript {
   sceneId: DialogueSceneId;
   /** Default portrait/speaker for any line that doesn't set its own `speakerId`. */
   portraitId: DialoguePortraitId;
+  /**
+   * Default speaker reference for lines without their own `speaker`.
+   * PHASE 8: replaces `portraitId` once the renderer resolves references.
+   */
+  defaultSpeaker?: CharacterRef;
   /** Default name shown above the dialogue text. */
   speaker: string;
   lines: readonly DialogueLine[];
