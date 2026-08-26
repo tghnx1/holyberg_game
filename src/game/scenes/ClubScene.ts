@@ -1,13 +1,15 @@
 import Phaser from 'phaser';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
 import {
-  ATMOS_RUN_FRAME_DURATION_MS,
-  ATMOS_RUN_FRAME_KEYS,
-  ATMOS_STAY_FRAME_KEY,
-  getAtmosFootOffset,
-  getLoopedFrame,
-  type AtmosFrameKey,
-} from '../entities/atmosFrames';
+  queueCharacterGameplay,
+} from '../characters/characterAssets';
+import {
+  footOffset,
+  loopedFrameIndex,
+  RUN_CYCLE_MS,
+} from '../characters/characterAnimation';
+import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
+import { getSelectedCharacter } from '../characters/characterSelection';
 import {
   CLUB_ROOMS,
   resolveClubRoomTransition,
@@ -110,7 +112,8 @@ export class ClubScene extends Phaser.Scene {
   private walkX = 0;
   /** Last direction walked; kept when stopping so Atmos does not snap around. */
   private facing: 1 | -1 = 1;
-  private currentFrameKey: AtmosFrameKey = ATMOS_STAY_FRAME_KEY;
+  private character!: CharacterDefinition;
+  private currentFrameKey?: string;
   private transitioning = false;
   private finished = false;
 
@@ -118,12 +121,19 @@ export class ClubScene extends Phaser.Scene {
     super('ClubScene');
   }
 
+  preload(): void {
+    // Demand-driven and idempotent: after Berlin has run, this queues
+    // nothing, and a direct ?scene=club still loads what it needs.
+    this.character = getSelectedCharacter();
+    queueCharacterGameplay(this, this.character);
+  }
+
   init(data: ClubSceneData): void {
     this.score = data.score ?? 0;
     this.roomIndex = 0;
     this.walkX = 0;
     this.facing = 1;
-    this.currentFrameKey = ATMOS_STAY_FRAME_KEY;
+    this.currentFrameKey = undefined;
     this.transitioning = false;
     this.finished = false;
     this.leftPointers.clear();
@@ -142,7 +152,7 @@ export class ClubScene extends Phaser.Scene {
       .setVisible(false);
 
     this.atmos = this.add
-      .sprite(0, 0, ATMOS_STAY_FRAME_KEY)
+      .sprite(0, 0, this.character.gameplay.idle!.key)
       .setOrigin(0.5, 1)
       .setScale(ATMOS_CLUB_SCALE)
       .setDepth(Depth.PLAYER);
@@ -249,18 +259,21 @@ export class ClubScene extends Phaser.Scene {
   }
 
   private applyWalkFrame(walking: boolean): void {
-    const frameKey: AtmosFrameKey = walking
-      ? getLoopedFrame(ATMOS_RUN_FRAME_KEYS, this.time.now, ATMOS_RUN_FRAME_DURATION_MS)
-      : ATMOS_STAY_FRAME_KEY;
-    if (frameKey !== this.currentFrameKey) {
-      this.atmos.setTexture(frameKey);
-      this.currentFrameKey = frameKey;
+    // Still the run cycle, exactly as before: the discovered walk frames stay
+    // unused until Club's presentation is revisited on purpose.
+    const { run, idle } = this.character.gameplay;
+    const frame: CharacterAssetRef = walking
+      ? run[loopedFrameIndex(this.time.now, run.length, RUN_CYCLE_MS)]
+      : idle!;
+    if (frame.key !== this.currentFrameKey) {
+      this.atmos.setTexture(frame.key);
+      this.currentFrameKey = frame.key;
     }
     // Right is the artwork's natural facing; left mirrors it.
     this.atmos.setFlipX(this.facing === -1);
     this.atmos.setPosition(
       Math.round(this.walkX),
-      Math.round(this.floorY() + getAtmosFootOffset(frameKey, ATMOS_CLUB_SCALE) + FOOT_NUDGE),
+      Math.round(this.floorY() + footOffset(frame.footGap, ATMOS_CLUB_SCALE) + FOOT_NUDGE),
     );
   }
 

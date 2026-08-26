@@ -52,7 +52,7 @@ const CHARACTER_CANVAS_HEIGHT = 184;
 /**
  * Transparent padding below the drawn figure in each frame, so every frame's
  * feet land on the same floor line regardless of how much of the canvas that
- * frame's artwork fills (mirrors ATMOS_FRAME_FOOT_GAPS in entities/atmosFrames).
+ * frame's artwork fills (the same idea as CharacterAssetRef.footGap).
  */
 const DISUS_APPEAR_FOOT_GAPS: Record<(typeof DISUS_APPEAR_FRAME_KEYS)[number], number> = {
   'disus-appear-1': 79,

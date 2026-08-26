@@ -32,6 +32,8 @@ import {
 import { OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
 import { prefetchVideo } from '../systems/videoPrefetch';
+import { queueCharacterGameplay } from '../characters/characterAssets';
+import { getSelectedCharacter } from '../characters/characterSelection';
 import { ControlsTutorialSystem } from '../systems/ControlsTutorialSystem';
 import { CullingSystem } from '../systems/CullingSystem';
 import { HudSystem } from '../systems/HudSystem';
@@ -95,6 +97,12 @@ export class BerlinScene extends Phaser.Scene {
     super('BerlinScene');
   }
 
+  preload(): void {
+    // Demand-driven and idempotent: whichever gameplay scene runs first pays
+    // for the selected character, the rest queue nothing.
+    queueCharacterGameplay(this, getSelectedCharacter());
+  }
+
   create(): void {
     this.progress = { state: 'intro', seconds: START_TIME, score: 0 };
     this.scoreSystem = new BerlinScoreSystem();
@@ -110,7 +118,7 @@ export class BerlinScene extends Phaser.Scene {
     this.world = buildBerlinWorld(this, this.layers);
     if (import.meta.env.DEV) console.debug('[BerlinScene] after buildBerlinWorld');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before Player creation');
-    this.player = new Player(this, 230);
+    this.player = new Player(this, 230, getSelectedCharacter());
     if (import.meta.env.DEV) console.debug('[BerlinScene] after Player creation');
     this.layers.gameplay.add(this.player);
     GROUND_SEGMENTS.forEach((segment) => {

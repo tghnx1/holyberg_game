@@ -18,34 +18,21 @@ import {
 } from '../level/berlin/playerPhysics';
 import type { PlayerAnimationState } from '../level/berlin/types';
 import {
-  ATMOS_CROUCH_FRAME_DURATION_MS,
-  ATMOS_CROUCH_FRAME_KEYS,
-  ATMOS_DAMAGE_FRAME_KEY,
-  ATMOS_JUMP_ASCENT_FRAME_COUNT,
-  ATMOS_JUMP_FRAME_DURATION_MS,
-  ATMOS_JUMP_FRAME_KEYS,
-  ATMOS_JUMP_LANDING_DURATION_MS,
-  ATMOS_JUMP_LANDING_FRAME_KEY,
-  ATMOS_RUN_FRAME_DURATION_MS,
-  ATMOS_RUN_FRAME_KEYS,
-  ATMOS_RUN_STATIC_FRAME_KEY,
-  ATMOS_STAY_FRAME_KEY,
-  ATMOS_VISUAL_SCALE,
-  getAtmosFootOffset,
-  getLoopedFrame,
-  type AtmosFrameKey,
-} from './atmosFrames';
+  CROUCH_CYCLE_MS,
+  footOffset,
+  JUMP_LANDING_HOLD_MS,
+  jumpFrameIndex,
+  landingFrameIndex,
+  loopedFrameIndex,
+  RUN_CYCLE_MS,
+  staticRunFrameIndex,
+} from '../characters/characterAnimation';
+import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
+/** Shared presentation scale for the platforming scenes; not character data. */
+export const PLAYER_VISUAL_SCALE = 0.8;
 
 // Re-exported so existing importers (BootScene) keep one import site while the
 // frame data itself lives in a Phaser-free module shared with the boss arena.
-export {
-  ATMOS_CROUCH_FRAME_KEYS,
-  ATMOS_DAMAGE_FRAME_KEY,
-  ATMOS_JUMP_FRAME_KEYS,
-  ATMOS_RUN_FRAME_KEYS,
-  ATMOS_RUN_STATIC_FRAME_KEY,
-  ATMOS_STAY_FRAME_KEY,
-} from './atmosFrames';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   animationState: PlayerAnimationState = 'run';
@@ -74,8 +61,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   /** Shows the damage pose for the duration of the existing knockback. */
   private hitAnimUntil = -Infinity;
 
-  constructor(scene: Phaser.Scene, x: number) {
-    super(scene, x, GROUND_Y, ATMOS_STAY_FRAME_KEY);
+  private readonly character: CharacterDefinition;
+
+  constructor(scene: Phaser.Scene, x: number, character: CharacterDefinition) {
+    super(scene, x, GROUND_Y, character.gameplay.idle!.key);
+    this.character = character;
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setOrigin(0.5, 1);
@@ -87,11 +77,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Shown immediately, before the run starts and before the first run()
     // call ever fires: without this Atmos would flash whatever placeholder
     // texture the constructor happened to pass, for the whole intro screen.
-    this.currentVisualFrameKey = ATMOS_STAY_FRAME_KEY;
-    this.visual = scene.add.sprite(x, GROUND_Y, ATMOS_STAY_FRAME_KEY);
+    const idle = character.gameplay.idle!;
+    this.currentVisualFrameKey = idle.key;
+    this.visual = scene.add.sprite(x, GROUND_Y, idle.key);
     this.visual.setOrigin(0.5, 1);
-    this.visual.setScale(ATMOS_VISUAL_SCALE);
-    this.visual.y = GROUND_Y + getAtmosFootOffset(ATMOS_STAY_FRAME_KEY, ATMOS_VISUAL_SCALE) + 10;
+    this.visual.setScale(PLAYER_VISUAL_SCALE);
+    this.visual.y = GROUND_Y + footOffset(idle.footGap, PLAYER_VISUAL_SCALE) + 10;
     this.visual.setDepth(Depth.PLAYER);
   }
 
@@ -143,7 +134,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Restart the jump frames on every impulse, including the second one.
     if (jumpedThisFrame) this.jumpAnimStartedAt = now;
     // Touching down starts the landing pose; jumping again cuts it short.
-    if (grounded && !this.wasGrounded) this.landingAnimUntil = now + ATMOS_JUMP_LANDING_DURATION_MS;
+    if (grounded && !this.wasGrounded) this.landingAnimUntil = now + JUMP_LANDING_HOLD_MS;
     if (jumpedThisFrame) this.landingAnimUntil = -Infinity;
     this.wasGrounded = grounded;
     this.rotation = this.crouched ? 0 : Math.sin(now / 80) * 0.025;
@@ -155,47 +146,53 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // never affected by resizing the physics body, unlike body.y + body.height
     // which reads stale for one frame right after a crouch/stand toggle
     // (the body only resyncs on Phaser's next automatic preUpdate).
-    const targetFrameKey = this.resolveVisualFrameKey(now);
+    const frame = this.resolveVisualFrame(now);
     this.visual.x = this.x;
-    this.visual.y = this.y + this.getVisualFootOffset(targetFrameKey, ATMOS_VISUAL_SCALE) + 10;
-    if (targetFrameKey !== this.currentVisualFrameKey) {
-      this.visual.setTexture(targetFrameKey);
-      this.currentVisualFrameKey = targetFrameKey;
+    this.visual.y = this.y + footOffset(frame.footGap, PLAYER_VISUAL_SCALE) + 10;
+    if (frame.key !== this.currentVisualFrameKey) {
+      this.visual.setTexture(frame.key);
+      this.currentVisualFrameKey = frame.key;
     }
-    this.visual.setScale(ATMOS_VISUAL_SCALE);
+    this.visual.setScale(PLAYER_VISUAL_SCALE);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);
   }
 
-  private resolveVisualFrameKey(now: number): AtmosFrameKey {
+  /**
+   * Which artwork this frame, as a manifest ref so the foot gap travels with
+   * the key. Frame *counts* come from the character; every duration comes
+   * from characterAnimation and is the same for everyone.
+   */
+  private resolveVisualFrame(now: number): CharacterAssetRef {
+    const { run, jump, crouch, damage, idle } = this.character.gameplay;
     // Obstacle knockback pre-empts whatever pose run()/crouch would show.
-    if (now < this.hitAnimUntil) return ATMOS_DAMAGE_FRAME_KEY;
+    // Only the first damage frame is used, as before; the rest stay
+    // discovered but unplayed until a damage animation is designed.
+    if (now < this.hitAnimUntil && damage.length > 0) return damage[0];
     switch (this.animationState) {
       case 'run':
-        if (this.frozen) return ATMOS_STAY_FRAME_KEY;
-        return now < this.landingAnimUntil
-          ? ATMOS_JUMP_LANDING_FRAME_KEY
-          : getLoopedFrame(ATMOS_RUN_FRAME_KEYS, now, ATMOS_RUN_FRAME_DURATION_MS);
+        if (this.frozen && idle) return idle;
+        if (now < this.landingAnimUntil && jump.length > 0) {
+          return jump[landingFrameIndex(jump.length)];
+        }
+        return run[loopedFrameIndex(now, run.length, RUN_CYCLE_MS)];
       case 'jump':
       case 'doubleJump':
       case 'fall': {
-        const step = Math.floor((now - this.jumpAnimStartedAt) / ATMOS_JUMP_FRAME_DURATION_MS);
-        // Ascending walks frames 1-4; the fall holds on frame 4. Frame 5 is
-        // the landing pose and never plays while the player is still airborne.
-        const index = this.animationState === 'fall'
-          ? ATMOS_JUMP_ASCENT_FRAME_COUNT - 1
-          : Math.min(ATMOS_JUMP_ASCENT_FRAME_COUNT - 1, Math.max(0, step));
-        return ATMOS_JUMP_FRAME_KEYS[index];
+        // Ascending walks the airborne frames; a fall holds the last of them.
+        // The landing pose is reserved and never plays mid-air.
+        const airborneLast = Math.max(0, jump.length - 2);
+        const index =
+          this.animationState === 'fall'
+            ? airborneLast
+            : jumpFrameIndex(now - this.jumpAnimStartedAt, jump.length);
+        return jump[index];
       }
       case 'crouch':
-        return getLoopedFrame(ATMOS_CROUCH_FRAME_KEYS, now, ATMOS_CROUCH_FRAME_DURATION_MS);
+        return crouch[loopedFrameIndex(now, crouch.length, CROUCH_CYCLE_MS)];
       default:
-        return ATMOS_RUN_STATIC_FRAME_KEY;
+        return run[staticRunFrameIndex(run.length)];
     }
-  }
-
-  private getVisualFootOffset(frameKey: AtmosFrameKey, visualScale: number): number {
-    return getAtmosFootOffset(frameKey, visualScale);
   }
 
   requestJump(now: number): void {
@@ -266,7 +263,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     const spec = playerBodyFor(crouched);
     // Aligned against this physics sprite's own current frame (always
-    // ATMOS_STAY_FRAME_KEY's dimensions — its texture never changes; only
+    // the idle frame's dimensions — its texture never changes; only
     // the separate `visual` sprite swaps animation frames), not a hardcoded
     // placeholder size.
     const offset = computePlayerBodyOffset(this.width, this.height, spec);

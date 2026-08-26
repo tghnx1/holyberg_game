@@ -5,6 +5,8 @@ import { BossFightDirector, type BossFightEvent } from '../boss/BossFightDirecto
 import { BossHud } from '../boss/BossHud';
 import { BossInput } from '../boss/BossInput';
 import { BossPlayer } from '../boss/BossPlayer';
+import { queueCharacterGameplay } from '../characters/characterAssets';
+import { getSelectedCharacter } from '../characters/characterSelection';
 import { BossRenderer } from '../boss/BossRenderer';
 import { BossPalette } from '../boss/bossConstants';
 import type { ArenaBounds } from '../boss/types';
@@ -78,6 +80,12 @@ export class BossScene extends Phaser.Scene {
     };
   }
 
+  preload(): void {
+    // Demand-driven and idempotent, so a direct ?scene=boss works even
+    // though Berlin was never entered.
+    queueCharacterGameplay(this, getSelectedCharacter());
+  }
+
   create(): void {
     new OrientationController(this);
     attachFullscreenExitControl(this);
@@ -92,7 +100,7 @@ export class BossScene extends Phaser.Scene {
     this.arena.redraw(this.bounds);
     this.boss = new BossRenderer(this, width / 2);
     this.attacks = new AttackRenderer(this);
-    this.player = new BossPlayer(this, width / 2);
+    this.player = new BossPlayer(this, width / 2, getSelectedCharacter());
     this.controls = new BossInput(this, this.game.device.input.touch);
     this.hud = new BossHud(this);
 
