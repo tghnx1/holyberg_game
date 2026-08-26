@@ -114,5 +114,11 @@ export default defineConfig(({ command }) => ({
   // development at / so phone testing through the Vite dev server is unchanged.
   base: command === 'build' ? '/holyberg_game/' : '/',
   plugins: [characterManifestPlugin(), levelEditorSavePlugin(), dialogueStationLayoutSavePlugin()],
-  test: { environment: 'node', include: ['tests/**/*.test.ts'] },
+  test: {
+    environment: 'node',
+    include: ['tests/**/*.test.ts'],
+    // The virtual module only exists once the plugin runs; tests get a
+    // fixture built through the same manifest builder.
+    alias: { 'virtual:holyberg-characters': '/tests/fixtures/characterManifest.ts' },
+  },
 }));
