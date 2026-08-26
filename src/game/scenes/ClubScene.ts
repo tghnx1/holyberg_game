@@ -30,7 +30,7 @@ export interface ClubSceneData {
  * Walking pace in logical pixels per second. This is the knob for how fast
  * Atmos crosses a room: higher is faster.
  *
- * Kept roughly proportional to ATMOS_CLUB_SCALE — a bigger character covering
+ * Kept roughly proportional to CLUB_PLAYER_SCALE — a bigger character covering
  * the same ground per second reads as trudging — so if that changes a lot,
  * this usually wants to move with it.
  */
@@ -45,16 +45,17 @@ const ENTRY_INSET = 96;
 /** Matches Player.syncVisual, so Atmos stands exactly as he does in Berlin. */
 const FOOT_NUDGE = 10;
 /**
- * Level 2 only. The club rooms are shot much closer than Berlin's street, so
- * Atmos is drawn larger here than ATMOS_VISUAL_SCALE's 0.8 to sit in them
- * convincingly. Local on purpose: the shared constant also drives Berlin and
- * the boss fight, where the size is tied to the collision box.
+ * Level 2 only, and applies to whichever character is selected. The club
+ * rooms are shot much closer than Berlin's street, so the player is drawn
+ * larger here than PLAYER_VISUAL_SCALE's 0.8 to sit in them convincingly.
+ * Local on purpose: the shared constant also drives Berlin and the boss
+ * fight, where the size is paired with the collision box.
  *
  * Anything reading a per-frame foot gap must be given this same scale — the
  * gaps are in source pixels, so scaling the sprite without scaling them lets
  * the feet drift, and by a different amount per run frame.
  */
-const ATMOS_CLUB_SCALE = 1.8;
+const CLUB_PLAYER_SCALE = 1.8;
 /**
  * How far below Berlin's ground line the club floor sits, in logical pixels
  * at the 720-high design size. The room videos are framed lower than the
@@ -104,7 +105,7 @@ export class ClubScene extends Phaser.Scene {
   private readonly rightPointers = new Set<number>();
   /**
    * Atmos's x as a float. The sprite itself is only ever placed on whole
-   * pixels: at ATMOS_CLUB_SCALE the art is magnified, and drawing magnified
+   * pixels: at CLUB_PLAYER_SCALE the art is magnified, and drawing magnified
    * art on a subpixel boundary makes the GPU resample it every frame, which
    * reads as a soft, shimmering edge. Keeping the motion here and rounding at
    * draw time removes that without making the walk step-y.
@@ -154,7 +155,7 @@ export class ClubScene extends Phaser.Scene {
     this.atmos = this.add
       .sprite(0, 0, this.character.gameplay.idle!.key)
       .setOrigin(0.5, 1)
-      .setScale(ATMOS_CLUB_SCALE)
+      .setScale(CLUB_PLAYER_SCALE)
       .setDepth(Depth.PLAYER);
 
     this.roomLabel = this.add
@@ -273,7 +274,7 @@ export class ClubScene extends Phaser.Scene {
     this.atmos.setFlipX(this.facing === -1);
     this.atmos.setPosition(
       Math.round(this.walkX),
-      Math.round(this.floorY() + footOffset(frame.footGap, ATMOS_CLUB_SCALE) + FOOT_NUDGE),
+      Math.round(this.floorY() + footOffset(frame.footGap, CLUB_PLAYER_SCALE) + FOOT_NUDGE),
     );
   }
 

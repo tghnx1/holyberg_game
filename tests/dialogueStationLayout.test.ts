@@ -43,8 +43,8 @@ describe('station layout validation', () => {
     background: { xRatio: 0, yRatio: 0, heightRatio: 1 },
     train: { xRatio: 0.5, yRatio: 0.8, heightRatio: 0.5 },
     foreground: { xRatio: 0, yRatio: 0, heightRatio: 1 },
-    atmos: { xRatio: 0.24, yRatio: 0.9, heightRatio: 0.4 },
-    disus: { xRatio: 0.68, yRatio: 0.9, heightRatio: 0.4 },
+    seated: { xRatio: 0.24, yRatio: 0.9, heightRatio: 0.4 },
+    arriving: { xRatio: 0.68, yRatio: 0.9, heightRatio: 0.4 },
   };
 
   it('accepts a complete, well-formed layout', () => {
@@ -53,8 +53,8 @@ describe('station layout validation', () => {
 
   it('rejects a missing object entry', () => {
     const incomplete: Record<string, unknown> = { ...valid };
-    delete incomplete.disus;
-    expect(() => validateDialogueStationLayout(incomplete)).toThrow(/disus/);
+    delete incomplete.arriving;
+    expect(() => validateDialogueStationLayout(incomplete)).toThrow(/arriving/);
   });
 
   it('rejects a non-numeric field', () => {

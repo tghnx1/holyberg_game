@@ -1,6 +1,6 @@
 import type { DialogueStationLayoutConfig, StationObjectLayout } from './dialogueStationLayout';
 
-const REQUIRED_KEYS = ['background', 'train', 'foreground', 'atmos', 'disus'] as const;
+const REQUIRED_KEYS = ['background', 'train', 'foreground', 'seated', 'arriving'] as const;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -29,7 +29,7 @@ export function validateDialogueStationLayout(value: unknown): DialogueStationLa
     background: record.background as StationObjectLayout,
     train: record.train as StationObjectLayout,
     foreground: record.foreground as StationObjectLayout,
-    atmos: record.atmos as StationObjectLayout,
-    disus: record.disus as StationObjectLayout,
+    seated: record.seated as StationObjectLayout,
+    arriving: record.arriving as StationObjectLayout,
   };
 }

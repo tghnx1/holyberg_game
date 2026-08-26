@@ -10,12 +10,10 @@ import {
   type DialogueStationLayoutConfig,
   type StationObjectKey,
 } from './dialogueStationLayout';
-import {
-  ATMOS_SIT_METRO_KEY,
-  DISUS_APPEAR_FRAME_KEYS,
-  DISUS_STAY_KEY,
-  DIALOGUE_STATION_TEXTURE_KEYS,
-} from './stationAssets';
+import { DIALOGUE_STATION_TEXTURE_KEYS } from './stationAssets';
+import { footOffset } from '../characters/characterAnimation';
+import type { CharacterAssetRef } from '../characters/characterManifest';
+import type { ResolvedSceneCast } from './dialogueCast';
 
 /**
  * Fixed canonical box the station composition is authored and laid out
@@ -42,11 +40,11 @@ const STATIONARY_PAUSE_MS = 600;
 /** How long the departure takes; the tween's own easing supplies the accel. */
 const DEPART_DURATION_MS = 2200;
 /** Fraction of the departure travelled before the train reads as "mostly gone". */
-const DISUS_TRIGGER_PROGRESS = 0.82;
+const ARRIVAL_TRIGGER_PROGRESS = 0.82;
 /** Within the requested 80-100ms/frame window. */
-const DISUS_FRAME_DURATION_MS = 90;
+const APPEAR_FRAME_DURATION_MS = 90;
 
-/** Native canvas size shared by every Atmos/Disus dialogue frame. */
+/** Native canvas height shared by every character's dialogue frame. */
 const CHARACTER_CANVAS_HEIGHT = 184;
 
 /**
@@ -54,28 +52,16 @@ const CHARACTER_CANVAS_HEIGHT = 184;
  * feet land on the same floor line regardless of how much of the canvas that
  * frame's artwork fills (the same idea as CharacterAssetRef.footGap).
  */
-const DISUS_APPEAR_FOOT_GAPS: Record<(typeof DISUS_APPEAR_FRAME_KEYS)[number], number> = {
-  'disus-appear-1': 79,
-  'disus-appear-2': 43,
-  'disus-appear-3': 12,
-  'disus-appear-4': 0,
-  'disus-appear-5': 1,
-  'disus-appear-6': 5,
-  'disus-appear-7': 3,
-  'disus-appear-8': 9,
-  'disus-appear-9': 15,
-};
-const DISUS_STAY_FOOT_GAP = 21;
 
 /** background/foreground share the same source art, so 1px = 1px between the two. */
 const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
 
 /**
  * The left-hand panel for Dialogue 1: a metro platform where a train departs
- * and Disus appears once it has mostly left.
+ * and a second character walks on once it has mostly left.
  *
  * Layers, back to front: background_metro, the train, first_plan_metro, then
- * the characters (Atmos seated, Disus once revealed) on top, so both stay
+ * the two actors (seated, then the arriving one once revealed) on top, so both stay
  * visible over the foreground art. Everything is laid out once against a
  * fixed canonical box (`STATION_CANONICAL_WIDTH`/`_HEIGHT`), never the live
  * panel; `resize()` then applies one uniform scale/position to cover
@@ -87,7 +73,7 @@ const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
  * `dialogueStationLayout.ts`/`dialogueStationLayout.json` rather than
  * hardcoded numbers, and is editable at runtime via `getEditableObjects()`
  * (see DialogueScene's dev-only SceneEditor wiring). Train departure and
- * Disus's per-frame foot alignment are *derived* from that rest pose each
+ * the arriving actor's per-frame foot alignment are *derived* from that rest pose each
  * time it changes, so editing it live can't desync the animations.
  */
 export class StationSceneView {
@@ -96,18 +82,31 @@ export class StationSceneView {
   private readonly background?: Phaser.GameObjects.Image;
   private readonly train: Phaser.GameObjects.Image;
   private readonly foreground?: Phaser.GameObjects.Image;
-  private readonly atmos: Phaser.GameObjects.Image;
-  private readonly disus: Phaser.GameObjects.Sprite;
+  private readonly seated: Phaser.GameObjects.Image;
+  private readonly arriving: Phaser.GameObjects.Sprite;
   private readonly mask: Phaser.GameObjects.Graphics;
   /** Recomputed from the train's current rest transform on every edit. */
   private trainDepartX = 0;
-  /** Recomputed from Disus's current (stay-pose) rest transform on every edit. */
-  private disusFloorY = 0;
+  /** Recomputed from the arriving actor's settled rest transform on every edit. */
+  private arrivingFloorY = 0;
+  /** The arriving actor's entrance frames, in order. */
+  private readonly appearFrames: readonly CharacterAssetRef[];
+  /**
+   * Pose held once the entrance finishes. The character's discovered idle,
+   * which is what the previous hardcoded "stay" frame was.
+   */
+  private readonly settledFrame: CharacterAssetRef;
 
   constructor(
     private readonly scene: Phaser.Scene,
     width: number,
     height: number,
+    /**
+     * Who is on the platform. Resolved by the caller through the character
+     * and casting systems: this view renders whoever it is handed and makes
+     * no casting decision of its own.
+     */
+    private readonly cast: ResolvedSceneCast,
     private readonly layout: DialogueStationLayoutConfig = DEFAULT_STATION_LAYOUT,
     /**
      * Extra width this view renders past the panel's own logical width, so
@@ -124,6 +123,11 @@ export class StationSceneView {
      */
     private readonly renderOverlap: number = 0,
   ) {
+    // Read before any actor is built; capability validation upstream has
+    // already guaranteed both are present for this cast.
+    this.appearFrames = cast.arriving.dialogue.appear;
+    this.settledFrame = cast.arriving.gameplay.idle ?? cast.arriving.dialogue.appear[0];
+
     const children: Phaser.GameObjects.GameObject[] = [];
 
     this.background = this.hasTexture(DIALOGUE_STATION_TEXTURE_KEYS.background)
@@ -140,13 +144,13 @@ export class StationSceneView {
       : undefined;
     if (this.foreground) children.push(this.foreground);
 
-    // Characters go last so Atmos and Disus stay visible above first_plan_metro.
-    this.atmos = this.buildAtmos();
-    children.push(this.atmos);
+    // Actors go last so both stay visible above first_plan_metro.
+    this.seated = this.buildSeatedActor();
+    children.push(this.seated);
 
-    this.disus = this.buildDisus();
-    children.push(this.disus);
-    this.recomputeDisusFloor();
+    this.arriving = this.buildArrivingActor();
+    children.push(this.arriving);
+    this.recomputeArrivingFloor();
 
     this.content = scene.add.container(0, 0, children);
     this.root = scene.add.container(0, 0, [this.content]);
@@ -193,20 +197,22 @@ export class StationSceneView {
     return image;
   }
 
-  /** Atmos, seated for the whole scene. */
-  private buildAtmos(): Phaser.GameObjects.Image {
-    const image = this.scene.add.image(0, 0, ATMOS_SIT_METRO_KEY).setOrigin(0.5, 1);
-    this.applyRestTransform(image, this.layout.atmos, CHARACTER_CANVAS_HEIGHT);
+  /** The seated actor, present for the whole scene. */
+  /** Whoever the cast seats here; the renderer does not choose. */
+  private buildSeatedActor(): Phaser.GameObjects.Image {
+    const pose = this.cast.seated.dialogue.metroSit!;
+    const image = this.scene.add.image(0, 0, pose.key).setOrigin(0.5, 1);
+    this.applyRestTransform(image, this.layout.seated, CHARACTER_CANVAS_HEIGHT);
     return image;
   }
 
-  /** Disus, hidden until the appearing sequence starts. Rest pose is its `stay` pose. */
-  private buildDisus(): Phaser.GameObjects.Sprite {
+  /** The arriving actor, hidden until its entrance starts. Rest pose is its settled one. */
+  private buildArrivingActor(): Phaser.GameObjects.Sprite {
     const sprite = this.scene.add
-      .sprite(0, 0, DISUS_APPEAR_FRAME_KEYS[0])
+      .sprite(0, 0, this.appearFrames[0].key)
       .setOrigin(0.5, 1)
       .setVisible(false);
-    this.applyRestTransform(sprite, this.layout.disus, CHARACTER_CANVAS_HEIGHT);
+    this.applyRestTransform(sprite, this.layout.arriving, CHARACTER_CANVAS_HEIGHT);
     return sprite;
   }
 
@@ -215,16 +221,18 @@ export class StationSceneView {
     this.trainDepartX = STATION_CANONICAL_WIDTH + this.train.displayWidth;
   }
 
-  /** The floor line every Disus appear-frame's foot gap is measured from, derived from its stay pose. */
-  private recomputeDisusFloor(): void {
-    this.disusFloorY = this.disus.y - DISUS_STAY_FOOT_GAP * this.disus.scaleY;
+  /** The floor line every appear-frame's foot gap is measured from, from the settled pose. */
+  private recomputeArrivingFloor(): void {
+    this.arrivingFloorY = this.arriving.y - footOffset(this.settledFrame.footGap, this.arriving.scaleY);
   }
 
-  private floorForFrame(
-    key: (typeof DISUS_APPEAR_FRAME_KEYS)[number] | typeof DISUS_STAY_KEY,
-  ): number {
-    const gap = key === DISUS_STAY_KEY ? DISUS_STAY_FOOT_GAP : DISUS_APPEAR_FOOT_GAPS[key];
-    return this.disusFloorY + gap * this.disus.scaleY;
+  /**
+   * Seats a frame on the shared floor line using its own discovered footGap,
+   * so no character-specific table is needed here and none is re-measured at
+   * runtime.
+   */
+  private floorForFrame(frame: CharacterAssetRef): number {
+    return this.arrivingFloorY + footOffset(frame.footGap, this.arriving.scaleY);
   }
 
   /**
@@ -232,7 +240,7 @@ export class StationSceneView {
    * canonical-box composition (one uniform scale, centred, cropping overflow
    * rather than leaving gaps) and repositions the mask to match.
    *
-   * Background, foreground, train, Atmos and Disus are children of the same
+   * Background, foreground, train and both actors are children of the same
    * `content` container and were all positioned in the same canonical space
    * they share, so this single scale/position carries every one of them
    * together — none of them can drift relative to another, at any aspect
@@ -257,13 +265,13 @@ export class StationSceneView {
   /**
    * Plays the departure/appearance sequence once the panels have finished
    * sliding in: the train sits, then leaves with acceleration; once it is
-   * mostly offscreen, Disus appears frame by frame and settles on `stay`.
-   * `onComplete` fires once Disus has finished appearing, so the caller can
+   * mostly offscreen, the arriving actor appears frame by frame and settles.
+   * `onComplete` fires once it has finished appearing, so the caller can
    * gate the first dialogue line on it.
    */
   playArrival(onComplete: () => void): void {
     this.scene.time.delayedCall(STATIONARY_PAUSE_MS, () => {
-      let disusTriggered = false;
+      let arrivalTriggered = false;
       this.scene.tweens.add({
         targets: this.train,
         x: this.trainDepartX,
@@ -271,29 +279,29 @@ export class StationSceneView {
         // Starts slow and speeds up — an acceleration, not a constant slide.
         ease: 'Cubic.easeIn',
         onUpdate: (tween) => {
-          if (disusTriggered || tween.progress < DISUS_TRIGGER_PROGRESS) return;
-          disusTriggered = true;
-          this.playDisusAppearance(onComplete);
+          if (arrivalTriggered || tween.progress < ARRIVAL_TRIGGER_PROGRESS) return;
+          arrivalTriggered = true;
+          this.playArrivalAnimation(onComplete);
         },
       });
     });
   }
 
-  private playDisusAppearance(onComplete: () => void): void {
-    this.disus.setVisible(true);
+  private playArrivalAnimation(onComplete: () => void): void {
+    this.arriving.setVisible(true);
     let frameIndex = 0;
     const showFrame = (): void => {
-      const key = DISUS_APPEAR_FRAME_KEYS[frameIndex];
-      this.disus.setTexture(key);
-      this.disus.setY(this.floorForFrame(key));
+      const frame = this.appearFrames[frameIndex];
+      this.arriving.setTexture(frame.key);
+      this.arriving.setY(this.floorForFrame(frame));
       frameIndex += 1;
-      if (frameIndex < DISUS_APPEAR_FRAME_KEYS.length) {
-        this.scene.time.delayedCall(DISUS_FRAME_DURATION_MS, showFrame);
+      if (frameIndex < this.appearFrames.length) {
+        this.scene.time.delayedCall(APPEAR_FRAME_DURATION_MS, showFrame);
         return;
       }
-      this.scene.time.delayedCall(DISUS_FRAME_DURATION_MS, () => {
-        this.disus.setTexture(DISUS_STAY_KEY);
-        this.disus.setY(this.floorForFrame(DISUS_STAY_KEY));
+      this.scene.time.delayedCall(APPEAR_FRAME_DURATION_MS, () => {
+        this.arriving.setTexture(this.settledFrame.key);
+        this.arriving.setY(this.floorForFrame(this.settledFrame));
         onComplete();
       });
     };
@@ -309,8 +317,8 @@ export class StationSceneView {
       { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
       { id: 'train', label: 'train', target: this.train, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT), onChange: () => this.recomputeTrainDeparture() },
       { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
-      { id: 'atmos', label: 'Atmos', target: this.atmos, nativeHeight: CHARACTER_CANVAS_HEIGHT },
-      { id: 'disus', label: 'Disus', target: this.disus, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeDisusFloor() },
+      { id: 'seated', label: 'Seated actor', target: this.seated, nativeHeight: CHARACTER_CANVAS_HEIGHT },
+      { id: 'arriving', label: 'Arriving actor', target: this.arriving, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeArrivingFloor() },
     ];
     return entries
       .filter((entry): entry is typeof entry & { target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite } => entry.target !== undefined)
@@ -331,8 +339,8 @@ export class StationSceneView {
       background: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK),
       train: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT),
       foreground: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK),
-      atmos: CHARACTER_CANVAS_HEIGHT,
-      disus: CHARACTER_CANVAS_HEIGHT,
+      seated: CHARACTER_CANVAS_HEIGHT,
+      arriving: CHARACTER_CANVAS_HEIGHT,
     };
     const next: DialogueStationLayoutConfig = structuredClone(this.layout);
     for (const entry of snapshot) {

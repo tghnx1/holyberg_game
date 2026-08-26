@@ -10,7 +10,6 @@ import {
 import { getStreetGroundAssetUrls } from '../level/berlin/streetGroundLayout';
 import { getPlatformTextureAssets } from '../level/berlin/platformVisualLayout';
 import { getDialogueStationAssetUrls } from '../dialogue/stationAssets';
-import { getDialoguePortraitAssetUrls } from '../dialogue/dialoguePortraitAssets';
 import {
   createObstacleAnimations,
   getObstacleAnimationAssetUrls,
@@ -75,9 +74,6 @@ export class BootScene extends Phaser.Scene {
     );
     this.load.svg(RHYTHM_DECK_TEXTURE_KEY, 'assets/level_3/Deck L.svg');
     for (const asset of getDialogueStationAssetUrls()) {
-      this.load.image(asset.key, asset.url);
-    }
-    for (const asset of getDialoguePortraitAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
     for (const asset of getObstacleAnimationAssetUrls()) {

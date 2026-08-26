@@ -43,6 +43,9 @@ export const CHARACTER_MANIFEST: CharacterDefinition[] = buildCharacterManifest(
   ]),
   // A second playable character with different frame counts.
   scan('Klaus', playable({ run: 4, jump: 2, crouch: 1, damage: 1 })),
+  // Artwork-poor NPC: discoverable, but has no portraits, so casting it as a
+  // speaker must fail rather than render nothing.
+  scan('Mute', ['gameplay/idle.png']),
 ]);
 
 export default CHARACTER_MANIFEST;

@@ -14,12 +14,12 @@
     "yRatio": -0.002130631377097894,
     "heightRatio": 1
   },
-  "atmos": {
+  "seated": {
     "xRatio": 0.5821603927543646,
     "yRatio": 0.7472000469677678,
     "heightRatio": 0.32878967065955095
   },
-  "disus": {
+  "arriving": {
     "xRatio": 0.33804551525115306,
     "yRatio": 0.7384693742958257,
     "heightRatio": 0.5137022081472579

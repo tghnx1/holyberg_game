@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DialogueLayout } from './dialogueConstants';
 import { buildPortraitClipPoints } from './dialogueLayoutMetrics';
 import { isTalkFrameActive } from './dialogueTalkAnimation';
-import type { SpeakerPortraitConfig } from './speakerPortraits';
+
 
 /**
  * The right-hand portrait panel for any speaker with a 2-frame talking
@@ -16,12 +16,21 @@ import type { SpeakerPortraitConfig } from './speakerPortraits';
  * straight back to that speaker's idle frame — "on speaker change, switch
  * portrait immediately and start from frame 1".
  */
+/**
+ * The two frames a portrait alternates between. Just keys: the renderer is
+ * deliberately ignorant of whose face it is drawing.
+ */
+export interface PortraitFrames {
+  idleFrameKey: string;
+  talkFrameKey: string;
+}
+
 export class TalkingPortrait {
   readonly root: Phaser.GameObjects.Container;
   private readonly backdrop: Phaser.GameObjects.Rectangle;
   private readonly image: Phaser.GameObjects.Image;
   private readonly mask: Phaser.GameObjects.Graphics;
-  private speaker: SpeakerPortraitConfig;
+  private speaker: PortraitFrames;
   private talking = false;
   private talkStartedAt = -Infinity;
 
@@ -29,7 +38,7 @@ export class TalkingPortrait {
     private readonly scene: Phaser.Scene,
     width: number,
     height: number,
-    initialSpeaker: SpeakerPortraitConfig,
+    initialSpeaker: PortraitFrames,
   ) {
     this.speaker = initialSpeaker;
 
@@ -51,8 +60,11 @@ export class TalkingPortrait {
    * `config` is already the current speaker (e.g. the next line is the same
    * speaker again), so mid-line calls never reset the talk animation.
    */
-  setSpeaker(config: SpeakerPortraitConfig): void {
-    if (this.speaker === config) return;
+  setSpeaker(config: PortraitFrames): void {
+    // Compared by key, not identity: callers build a fresh frames object from
+    // the resolved character each line, so identity would never match and the
+    // talk animation would restart on every line.
+    if (this.speaker.idleFrameKey === config.idleFrameKey) return;
     this.speaker = config;
     this.talking = false;
     this.talkStartedAt = -Infinity;

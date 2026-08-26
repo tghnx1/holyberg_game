@@ -14,10 +14,18 @@ import {
   getRevealedText,
   getTypedCharacterCount,
 } from '../dialogue/dialogueTiming';
-import { MagicianPortrait } from '../dialogue/MagicianPortrait';
-import { getSpeakerPortrait } from '../dialogue/speakerPortraits';
+import {
+  assertDialogueCastCapabilities,
+  resolveDialogueCast,
+  resolveDialogueSpeaker,
+  resolveSceneCast,
+  type ResolvedSceneCast,
+} from '../dialogue/dialogueCast';
+import { queueCharacterAssets } from '../characters/characterAssets';
+import { selectFallbackCharacter, hasSelectedCharacter } from '../characters/characterSelection';
 import { StationSceneView } from '../dialogue/StationSceneView';
-import { TalkingPortrait } from '../dialogue/TalkingPortrait';
+import { TalkingPortrait, type PortraitFrames } from '../dialogue/TalkingPortrait';
+import type { CharacterDefinition } from '../characters/characterManifest';
 import type { DialogueScript } from '../dialogue/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import type { SceneEditor } from '../systems/SceneEditor';
@@ -32,6 +40,16 @@ export interface DialogueSceneData {
 }
 
 type DialoguePhase = 'slidingIn' | 'typing' | 'holding' | 'glitching' | 'slidingOut' | 'done';
+
+/**
+ * The two portrait frames for a resolved character, straight from the
+ * manifest. Keys are never rebuilt from strings here.
+ */
+function portraitFramesFor(character: CharacterDefinition): PortraitFrames {
+  const { portraitIdle, portraitTalk } = character.dialogue;
+  // assertDialogueCastCapabilities has already rejected a cast without these.
+  return { idleFrameKey: portraitIdle!.key, talkFrameKey: portraitTalk!.key };
+}
 
 /**
  * Inter-level dialogue, in the Hotline Miami presentation style: black bars top
@@ -51,8 +69,9 @@ export class DialogueScene extends Phaser.Scene {
   private payload: Record<string, unknown> = {};
   private panels!: DialoguePanels;
   private stationScene?: StationSceneView;
-  /** Either the hand-drawn placeholder or a reusable 2-frame talking portrait, per this.script.portraitId. */
-  private portrait?: MagicianPortrait | TalkingPortrait;
+  private portrait?: TalkingPortrait;
+  /** Resolved once per run, so casting cannot change mid-dialogue. */
+  private sceneCast!: ResolvedSceneCast;
   private topBarShape!: Phaser.GameObjects.Rectangle;
   private topBarTitle!: Phaser.GameObjects.Text;
   private topBarContainer!: Phaser.GameObjects.Container;
@@ -103,6 +122,25 @@ export class DialogueScene extends Phaser.Scene {
     this.armedTapPointerId = undefined;
   }
 
+  preload(): void {
+    // A direct ?scene=dialogue skips Character Select, so a { player } ref
+    // would have nothing to resolve; ?character=<id> still applies.
+    if (!hasSelectedCharacter()) {
+      const requested = new URLSearchParams(window.location.search).get('character');
+      selectFallbackCharacter(requested ?? undefined);
+    }
+    // Fails now, naming the role and what it lacks, rather than part-way
+    // through the scene when a portrait turns out to be missing.
+    assertDialogueCastCapabilities(this.script);
+    this.sceneCast = resolveSceneCast(this.script);
+    // Only the characters this invocation can actually show. A character
+    // cast as both the player and an NPC appears once, and the loader skips
+    // anything already in the texture manager.
+    for (const character of resolveDialogueCast(this.script)) {
+      queueCharacterAssets(this, character, ['portrait', 'metroPose', 'appear']);
+    }
+  }
+
   create(): void {
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#000000');
@@ -135,7 +173,7 @@ export class DialogueScene extends Phaser.Scene {
     this.panels.slideIn(() => {
       if (this.stationScene) {
         // The station scene's own departure/appearance sequence gates the
-        // first line: it fires this once Disus has finished appearing.
+        // first line: it fires once the arriving actor has finished appearing.
         this.stationScene.playArrival(() => this.startLine(0));
       } else {
         this.startLine(0);
@@ -167,7 +205,7 @@ export class DialogueScene extends Phaser.Scene {
   /**
    * Freezes every time-based thing the dialogue drives — tweens (train
    * departure, glitch flashes, panel slides if mid-flight), delayed calls
-   * (the stationary pause before departure, Disus's frame-by-frame
+   * (the stationary pause before departure, the arriving actor's frame-by-frame
    * appearance), and this scene's own typewriter/hold/glitch state machine
    * and skip-hold — while leaving SceneEditor's own pointer/keyboard-driven
    * selection, drag, resize, nudge and save completely unaffected, since
@@ -214,6 +252,7 @@ export class DialogueScene extends Phaser.Scene {
       this,
       width,
       height,
+      this.sceneCast,
       undefined,
       // The seam leans right as it descends, so the station has to keep
       // rendering past its own vertical edge to stay behind the divider all
@@ -232,13 +271,9 @@ export class DialogueScene extends Phaser.Scene {
 
   private buildPortraitPanel(): void {
     const { x, y, width, height } = this.layout.portraitPanel;
-    // 'magician' has no talking-portrait config (it's not in speakerPortraits.ts),
-    // so it keeps using the existing hand-drawn portrait untouched; any other
-    // portraitId is a reusable 2-frame talking speaker.
-    const talkingConfig = getSpeakerPortrait(this.script.portraitId);
-    this.portrait = talkingConfig
-      ? new TalkingPortrait(this, width, height, talkingConfig)
-      : new MagicianPortrait(this, width, height);
+    // Opens on whoever speaks first; every later line swaps the frames.
+    const first = resolveDialogueSpeaker(this.script.lines[0], this.script);
+    this.portrait = new TalkingPortrait(this, width, height, portraitFramesFor(first.character));
     this.portrait.root.setDepth(DialogueDepth.PORTRAIT);
     this.panels.add('portrait', this.portrait.root, {
       restX: x,
@@ -319,7 +354,8 @@ export class DialogueScene extends Phaser.Scene {
     const { width, height } = this.layout.bottomBar;
     this.bottomBarShape = this.add.rectangle(0, 0, width, height, DialoguePalette.bar).setOrigin(0, 0);
     this.speakerText = this.add
-      .text(DialogueLayout.textPaddingX, DialogueLayout.speakerOffsetY, this.script.speaker, {
+      // Filled by applySpeakerForCurrentLine before the first line shows.
+      .text(DialogueLayout.textPaddingX, DialogueLayout.speakerOffsetY, '', {
         fontFamily: 'Archivo Black',
         fontSize: '22px',
         color: DialoguePalette.speaker,
@@ -440,16 +476,15 @@ export class DialogueScene extends Phaser.Scene {
   }
 
   /**
-   * Resolves this line's speaker (its own `speakerId`, or the script's
-   * default) and applies the matching name/portrait. A no-op speaker switch
-   * inside TalkingPortrait.setSpeaker keeps repeated same-speaker lines from
-   * resetting the talk animation.
+   * Resolves this line's speaker through the character/casting system and
+   * applies the resulting name and portrait. Repeating the same speaker is a
+   * no-op inside TalkingPortrait.setSpeaker, so the talk animation is not
+   * reset between consecutive lines by the same character.
    */
   private applySpeakerForCurrentLine(): void {
-    const speakerId = this.currentLine.speakerId ?? this.script.portraitId;
-    const config = getSpeakerPortrait(speakerId);
-    this.speakerText.setText(this.currentLine.speakerName ?? config?.name ?? this.script.speaker);
-    if (config && this.portrait instanceof TalkingPortrait) this.portrait.setSpeaker(config);
+    const { character, displayName } = resolveDialogueSpeaker(this.currentLine, this.script);
+    this.speakerText.setText(displayName);
+    this.portrait?.setSpeaker(portraitFramesFor(character));
   }
 
   private setPhase(phase: DialoguePhase): void {

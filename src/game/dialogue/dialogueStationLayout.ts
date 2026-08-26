@@ -25,8 +25,9 @@ export interface DialogueStationLayoutConfig {
   background: StationObjectLayout;
   train: StationObjectLayout;
   foreground: StationObjectLayout;
-  atmos: StationObjectLayout;
-  disus: StationObjectLayout;
+  /** Slot names, not characters: whoever the cast seats and lands here. */
+  seated: StationObjectLayout;
+  arriving: StationObjectLayout;
 }
 
 export const DEFAULT_STATION_LAYOUT = rawLayout as DialogueStationLayoutConfig;
