@@ -19,11 +19,11 @@ export interface ClubRoom {
   posterUrl: string;
   /**
    * Pushes this room's background down by this many logical pixels, so its
-   * floor line sits under Atmos's feet. Positive is down; omitted means the
+   * floor line sits under the player's feet. Positive is down; omitted means the
    * plain centred cover fit. Per room because the three interiors are framed
    * differently — only the corridor's floor sits high enough to need it.
    *
-   * Affects the background only. Atmos's own position comes from ClubScene's
+   * Affects the background only. The player's own position comes from ClubScene's
    * FLOOR_DROP and is shared by every room.
    */
   videoShiftY?: number;

@@ -22,7 +22,6 @@ import {
   type ResolvedSceneCast,
 } from '../dialogue/dialogueCast';
 import { queueCharacterAssets } from '../characters/characterAssets';
-import { selectFallbackCharacter, hasSelectedCharacter } from '../characters/characterSelection';
 import { StationSceneView } from '../dialogue/StationSceneView';
 import { TalkingPortrait, type PortraitFrames } from '../dialogue/TalkingPortrait';
 import type { CharacterDefinition } from '../characters/characterManifest';
@@ -123,12 +122,12 @@ export class DialogueScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // A direct ?scene=dialogue skips Character Select, so a { player } ref
-    // would have nothing to resolve; ?character=<id> still applies.
-    if (!hasSelectedCharacter()) {
-      const requested = new URLSearchParams(window.location.search).get('character');
-      selectFallbackCharacter(requested ?? undefined);
-    }
+    // No fallback selection here on purpose. The campaign always arrives via
+    // CharacterSelectScene, and BootScene already selects one for a direct
+    // ?scene= route, so reaching this without a player is a routing bug —
+    // resolving a { player } ref will say so rather than quietly becoming
+    // whichever character happens to be first.
+    //
     // Fails now, naming the role and what it lacks, rather than part-way
     // through the scene when a portrait turns out to be missing.
     assertDialogueCastCapabilities(this.script);

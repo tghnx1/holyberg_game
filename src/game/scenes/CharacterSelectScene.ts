@@ -38,11 +38,10 @@ interface CharacterCard {
  * `CharacterDefinition.name` and the artwork from the discovered idle frame,
  * so a new asset folder appears with no edit to this file.
  *
- * Loads previews only — one still per character. The selected character's
- * gameplay and dialogue sets are deliberately not preloaded here: the scenes
- * downstream still draw the legacy Atmos textures, so pulling the same
- * artwork in under `character:*` keys would duplicate it in memory with
- * nothing reading it. That moves here once those consumers are replaced.
+ * Loads previews only — one still per character, so showing N characters
+ * costs N files rather than N animation sets. Each gameplay and dialogue
+ * scene queues what it needs in its own preload, which keeps that cost paid
+ * once and only by whoever actually needs it.
  */
 export class CharacterSelectScene extends Phaser.Scene {
   private characters: readonly CharacterDefinition[] = [];
@@ -248,8 +247,8 @@ export class CharacterSelectScene extends Phaser.Scene {
     if (!character) return;
     this.confirmed = true;
     selectCharacter(character.id);
-    // Straight into the campaign's opening dialogue; the scenes downstream
-    // still load their own artwork until Phase 5 moves that here.
+    // Straight into the campaign's opening dialogue, which resolves the
+    // selection through the character system from here on.
     this.scene.start('DialogueScene', { scriptId: 'metro-magician' });
   }
 

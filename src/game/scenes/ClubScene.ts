@@ -28,7 +28,7 @@ export interface ClubSceneData {
 
 /**
  * Walking pace in logical pixels per second. This is the knob for how fast
- * Atmos crosses a room: higher is faster.
+ * the player crosses a room: higher is faster.
  *
  * Kept roughly proportional to CLUB_PLAYER_SCALE — a bigger character covering
  * the same ground per second reads as trudging — so if that changes a lot,
@@ -42,7 +42,7 @@ export interface ClubSceneData {
  */
 const EDGE_MARGIN = 46;
 const ENTRY_INSET = 96;
-/** Matches Player.syncVisual, so Atmos stands exactly as he does in Berlin. */
+/** Matches Player.syncVisual, so the player stands exactly as in Berlin. */
 const FOOT_NUDGE = 10;
 /**
  * Level 2 only, and applies to whichever character is selected. The club
@@ -59,7 +59,7 @@ const CLUB_PLAYER_SCALE = 1.8;
 /**
  * How far below Berlin's ground line the club floor sits, in logical pixels
  * at the 720-high design size. The room videos are framed lower than the
- * street, so Atmos stands further down the frame here. This is the knob to
+ * street, so the player stands further down the frame here. This is the knob to
  * turn to move him up or down: positive is down.
  */
 const FLOOR_DROP = 100;
@@ -68,11 +68,11 @@ const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
 
 /**
  * Level 2: three club interiors the player walks through, each an looping
- * MP4 behind Atmos.
+ * MP4 behind the selected character.
  *
  * There is no jumping, ducking, obstacle or scoring here — it is a
  * connective walk between Berlin and the DJ set — so the scene runs no
- * physics at all and moves Atmos by hand.
+ * physics at all and moves the player by hand.
  *
  * Only one room's video is ever alive: switching rooms stops and destroys
  * the outgoing one before the next is created, so at most one decoder is
@@ -92,7 +92,7 @@ export class ClubScene extends Phaser.Scene {
    * without this the camera background shows through as a black screen.
    */
   private poster?: Phaser.GameObjects.Image;
-  private atmos!: Phaser.GameObjects.Sprite;
+  private playerSprite!: Phaser.GameObjects.Sprite;
   private roomLabel!: Phaser.GameObjects.Text;
   private hint?: Phaser.GameObjects.Text;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -104,14 +104,14 @@ export class ClubScene extends Phaser.Scene {
   private readonly leftPointers = new Set<number>();
   private readonly rightPointers = new Set<number>();
   /**
-   * Atmos's x as a float. The sprite itself is only ever placed on whole
+   * The player's x as a float. The sprite itself is only ever placed on whole
    * pixels: at CLUB_PLAYER_SCALE the art is magnified, and drawing magnified
    * art on a subpixel boundary makes the GPU resample it every frame, which
    * reads as a soft, shimmering edge. Keeping the motion here and rounding at
    * draw time removes that without making the walk step-y.
    */
   private walkX = 0;
-  /** Last direction walked; kept when stopping so Atmos does not snap around. */
+  /** Last direction walked; kept when stopping so the player does not snap around. */
   private facing: 1 | -1 = 1;
   private character!: CharacterDefinition;
   private currentFrameKey?: string;
@@ -152,7 +152,7 @@ export class ClubScene extends Phaser.Scene {
       .setDepth(Depth.FAR_BACKGROUND - 1)
       .setVisible(false);
 
-    this.atmos = this.add
+    this.playerSprite = this.add
       .sprite(0, 0, this.character.gameplay.idle!.key)
       .setOrigin(0.5, 1)
       .setScale(CLUB_PLAYER_SCALE)
@@ -267,12 +267,12 @@ export class ClubScene extends Phaser.Scene {
       ? run[loopedFrameIndex(this.time.now, run.length, RUN_CYCLE_MS)]
       : idle!;
     if (frame.key !== this.currentFrameKey) {
-      this.atmos.setTexture(frame.key);
+      this.playerSprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;
     }
     // Right is the artwork's natural facing; left mirrors it.
-    this.atmos.setFlipX(this.facing === -1);
-    this.atmos.setPosition(
+    this.playerSprite.setFlipX(this.facing === -1);
+    this.playerSprite.setPosition(
       Math.round(this.walkX),
       Math.round(this.floorY() + footOffset(frame.footGap, CLUB_PLAYER_SCALE) + FOOT_NUDGE),
     );

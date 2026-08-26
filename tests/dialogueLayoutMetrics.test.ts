@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DialogueLayout } from '../src/game/dialogue/dialogueConstants';
 import {
   buildDiagonalStripPoints,
+  computePortraitFitScale,
   buildPortraitClipPoints,
   computeCoverFit,
   computeContainFit,
@@ -116,5 +117,42 @@ describe('cover fit', () => {
     // Fully covers both axes: no gap on either side.
     expect(400 * fit.scale).toBeGreaterThanOrEqual(300 - 1e-6);
     expect(800 * fit.scale).toBeGreaterThanOrEqual(300 - 1e-6);
+  });
+});
+
+describe('portrait fit', () => {
+  const RATIO = 0.96;
+
+  it('fits by whichever axis is tighter', () => {
+    // Tall source in a wide panel: height constrains.
+    expect(computePortraitFitScale(1000, 500, 600, 1000, 1)).toBeCloseTo(0.5);
+    // Wide source in a tall panel: width constrains.
+    expect(computePortraitFitScale(500, 1000, 1000, 600, 1)).toBeCloseTo(0.5);
+  });
+
+  it('applies the fill ratio', () => {
+    expect(computePortraitFitScale(800, 800, 800, 800, RATIO)).toBeCloseTo(RATIO);
+  });
+
+  it('gives differently shaped portraits different scales in the same panel', () => {
+    // The reason setSpeaker has to refit rather than keep the previous scale.
+    const square = computePortraitFitScale(600, 900, 800, 800, RATIO);
+    const tall = computePortraitFitScale(600, 900, 600, 1000, RATIO);
+    expect(square).not.toBeCloseTo(tall);
+    // Neither overflows its panel.
+    expect(800 * square).toBeLessThanOrEqual(600);
+    expect(1000 * tall).toBeLessThanOrEqual(900);
+  });
+
+  it('never overflows the panel for a range of aspect ratios', () => {
+    for (const [w, h] of [[400, 1200], [1200, 400], [1024, 575], [900, 900], [1, 4000]]) {
+      const scale = computePortraitFitScale(700, 800, w, h, 1);
+      expect(w * scale).toBeLessThanOrEqual(700 + 1e-9);
+      expect(h * scale).toBeLessThanOrEqual(800 + 1e-9);
+    }
+  });
+
+  it('falls back to 1 for a source with no dimensions', () => {
+    expect(computePortraitFitScale(600, 900, 0, 0, RATIO)).toBe(1);
   });
 });

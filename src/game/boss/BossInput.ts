@@ -53,7 +53,7 @@ export class BossInput {
     zone.on('pointerout', clearPointer);
   }
 
-  /** Latest press wins, so sliding a thumb across the middle turns Atmos around. */
+  /** Latest press wins, so sliding a thumb across the middle turns the player around. */
   private resolveTouchDirection(): void {
     const directions = [...this.movePointers.values()];
     this.touchDirection = directions.length === 0 ? 0 : directions[directions.length - 1];

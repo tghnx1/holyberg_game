@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import { DialogueLayout } from './dialogueConstants';
-import { buildPortraitClipPoints } from './dialogueLayoutMetrics';
+import { buildPortraitClipPoints, computePortraitFitScale } from './dialogueLayoutMetrics';
 import { isTalkFrameActive } from './dialogueTalkAnimation';
 
 
 /**
  * The right-hand portrait panel for any speaker with a 2-frame talking
- * portrait (see speakerPortraits.ts) — a reusable alternative to
- * MagicianPortrait, not specific to Dialogue 1 or to any one speaker.
+ * portrait, driven by the two frame keys it is handed. Not specific to
+ * Dialogue 1, and deliberately ignorant of which character it is drawing.
  *
  * Shows `idleFrameKey` (closed mouth) at rest and alternates to
  * `talkFrameKey` (open mouth) every ~140ms while `setTalking(true, now)` is
@@ -31,6 +31,9 @@ export class TalkingPortrait {
   private readonly image: Phaser.GameObjects.Image;
   private readonly mask: Phaser.GameObjects.Graphics;
   private speaker: PortraitFrames;
+  /** Latest panel box, so a speaker change can refit without a resize pass. */
+  private panelWidth = 0;
+  private panelHeight = 0;
   private talking = false;
   private talkStartedAt = -Infinity;
 
@@ -48,8 +51,8 @@ export class TalkingPortrait {
       .setOrigin(0.5, 0.5);
     this.root = scene.add.container(0, 0, [this.backdrop, this.image]);
 
-    // Same diagonal clip MagicianPortrait uses, so the seam against the
-    // scene panel reads identically whichever portrait a script picks.
+    // The same diagonal clip the scene panel uses, so the seam reads
+    // identically whichever character is on screen.
     this.mask = scene.make.graphics({}, false);
     this.root.setMask(this.mask.createGeometryMask());
     this.resize(width, height);
@@ -68,7 +71,7 @@ export class TalkingPortrait {
     this.speaker = config;
     this.talking = false;
     this.talkStartedAt = -Infinity;
-    this.image.setTexture(config.idleFrameKey);
+    this.showFrame(config.idleFrameKey);
   }
 
   /** Starts/stops the mouth-flap cycle; only the active speaker should ever be told `true`. */
@@ -78,11 +81,13 @@ export class TalkingPortrait {
     if (active) {
       this.talkStartedAt = nowMs;
     } else {
-      this.image.setTexture(this.speaker.idleFrameKey);
+      this.showFrame(this.speaker.idleFrameKey);
     }
   }
 
   resize(width: number, height: number): void {
+    this.panelWidth = width;
+    this.panelHeight = height;
     this.backdrop.setSize(width, height);
 
     const clip = buildPortraitClipPoints(width, height, DialogueLayout.dividerThickness, DialogueLayout.dividerSkew);
@@ -93,21 +98,44 @@ export class TalkingPortrait {
     }
     this.mask.fillPoints(points, true);
 
+    this.fitPortrait();
+  }
+
+  /**
+   * Sizes and centres the image from *its own* source dimensions.
+   *
+   * Called on every texture change as well as on resize: characters can have
+   * differently shaped portrait canvases, so a speaker change that only swapped
+   * the texture would leave the new portrait wearing the previous one's scale.
+   */
+  private fitPortrait(): void {
     const source = this.scene.textures.get(this.image.texture.key).getSourceImage();
-    const scale = source.width > 0 && source.height > 0
-      ? Math.min(width / source.width, height / source.height) * DialogueLayout.portraitFillRatio
-      : 1;
-    this.image.setPosition(width / 2, height / 2).setScale(scale);
+    const scale = computePortraitFitScale(
+      this.panelWidth,
+      this.panelHeight,
+      source.width,
+      source.height,
+      DialogueLayout.portraitFillRatio,
+    );
+    this.image.setPosition(this.panelWidth / 2, this.panelHeight / 2).setScale(scale);
+  }
+
+  /** Single point where the drawn frame changes, so the fit can never be skipped. */
+  private showFrame(key: string): void {
+    if (this.image.texture.key === key) return;
+    this.image.setTexture(key);
+    this.fitPortrait();
   }
 
   /** Keeps the mask tracking the panel's on-screen position and advances the talk cycle. */
   update(nowMs: number): void {
     this.mask.setPosition(this.root.x, this.root.y);
     if (!this.talking) return;
-    const key = isTalkFrameActive(nowMs - this.talkStartedAt)
-      ? this.speaker.talkFrameKey
-      : this.speaker.idleFrameKey;
-    if (this.image.texture.key !== key) this.image.setTexture(key);
+    this.showFrame(
+      isTalkFrameActive(nowMs - this.talkStartedAt)
+        ? this.speaker.talkFrameKey
+        : this.speaker.idleFrameKey,
+    );
   }
 
   destroy(): void {

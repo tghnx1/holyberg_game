@@ -150,7 +150,7 @@ export class BossScene extends Phaser.Scene {
     // teleport the fight clock past a whole telegraph.
     const step = Math.min(delta, MAX_FRAME_DELTA_MS);
     if (!this.running) {
-      // Still let Atmos idle and the boss hover during the intro.
+      // Still let the player idle and the boss hover during the intro.
       this.player.update(0, 0, now, this.bounds);
       this.boss.update(now, this.bossX, this.player.x);
       return;

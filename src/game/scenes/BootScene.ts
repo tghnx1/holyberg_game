@@ -102,8 +102,9 @@ export class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV && developmentScene) {
       // Direct routes skip Character Select, so give them a selection anyway:
       // ?character=<id> if supplied, otherwise Atmos, otherwise the first
-      // playable one. Nothing downstream reads it yet, but it keeps the dev
-      // entry points valid once the scenes do.
+      // playable one. This is the *only* fallback in the game — the campaign
+      // itself always comes through CharacterSelectScene, and the scenes
+      // treat a missing selection as the routing bug it would be.
       selectFallbackCharacter(query.get('character') ?? undefined);
     }
     if (import.meta.env.DEV && developmentScene === 'rhythm') {

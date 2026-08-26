@@ -11,7 +11,7 @@ import { BOSS_ARENA, BOSS_PLAYER } from './bossConfig';
 
 /**
  * Standing-still cadence, the arena's own presentation choice rather than
- * character data. Preserves the previous 220ms-per-frame idle across Atmos's
+ * character data. Preserves the previous 220ms-per-frame idle across the
  * six run frames, expressed as a cycle so any frame count keeps the tempo.
  */
 const BOSS_IDLE_CYCLE_MS = 1320;
@@ -26,12 +26,12 @@ import {
 import type { ArenaBounds } from './types';
 
 /**
- * Atmos in the boss arena.
+ * The selected character in the boss arena.
  *
  * This deliberately does not extend the Level 1 `Player`: there is no gravity,
  * jumping, dashing or Arcade body here, only a horizontal dodge. It reuses the
  * shared
- * Atmos frame data so the character looks and aligns to the floor exactly as it
+ * the character's own frame data so it looks and aligns to the floor exactly as it
  * does in Level 1.
  */
 export class BossPlayer {
@@ -58,7 +58,7 @@ export class BossPlayer {
     return this.motion.x;
   }
 
-  /** Plays the damage pose, knocks Atmos away from the beam and blinks. */
+  /** Plays the damage pose, knocks the player away from the beam and blinks. */
   onHit(nowMs: number, beamCenterX: number): void {
     this.motion = applyKnockback(this.motion, nowMs, beamCenterX);
     this.damageFrameUntilMs = nowMs + BOSS_PLAYER.knockbackDurationMs;
@@ -83,7 +83,7 @@ export class BossPlayer {
     }
     this.sprite.x = this.motion.x;
     this.sprite.y = BOSS_ARENA.floorY + footOffset(frame.footGap, PLAYER_VISUAL_SCALE);
-    // Face the way Atmos is travelling; the run art is drawn facing right.
+    // Face the way the player is travelling; the run art is drawn facing right.
     if (this.motion.velocityX !== 0) {
       this.sprite.setFlipX(this.motion.velocityX < 0);
     }

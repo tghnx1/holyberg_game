@@ -110,7 +110,7 @@ describe('Berlin player physics rules', () => {
   describe('computePlayerBodyOffset (aligned against the actual physics sprite frame)', () => {
     // The physics sprite's own texture never changes (only the separate
     // visual sprite swaps animation frames), so this is always
-    // ATMOS_STAY_FRAME_KEY's real dimensions in production.
+    // the idle frame's real dimensions in production.
     const FRAME_WIDTH = 195;
     const FRAME_HEIGHT = 184;
 

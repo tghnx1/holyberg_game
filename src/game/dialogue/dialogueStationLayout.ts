@@ -11,7 +11,7 @@ import rawLayout from '../assets/dialogueStationLayout.json';
  * object's rendered height as a fraction of the panel height (its scale is
  * derived from that at load time). Each object's "rest pose" is its settled,
  * static appearance — for the train that's stationary-before-departure, for
- * Disus that's the `stay` pose after appearing — and the animations derive
+ * the arriving actor that's its settled pose after appearing — and the animations derive
  * their own frame-by-frame offsets from that single pose, so editing it can't
  * desync them.
  */

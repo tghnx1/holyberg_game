@@ -22,7 +22,7 @@ beforeEach(() => {
 
 describe('character registry', () => {
   it('exposes every discovered character, NPC-only ones included', () => {
-    expect(getAllCharacters().map((c) => c.id)).toEqual(['atmos', 'disus', 'klaus', 'mute']);
+    expect(getAllCharacters().map((c) => c.id)).toEqual(['atmos', 'disus', 'drifter', 'klaus', 'mute']);
   });
 
   it('offers only playable characters for selection', () => {
@@ -33,7 +33,7 @@ describe('character registry', () => {
   it('looks a character up by id, and says what exists when it cannot', () => {
     expect(getCharacter('disus').name).toBe('Disus');
     expect(findCharacter('nobody')).toBeUndefined();
-    expect(() => getCharacter('nobody')).toThrow(/Discovered characters: atmos, disus, klaus, mute/);
+    expect(() => getCharacter('nobody')).toThrow(/Discovered characters: atmos, disus, drifter, klaus, mute/);
   });
 });
 

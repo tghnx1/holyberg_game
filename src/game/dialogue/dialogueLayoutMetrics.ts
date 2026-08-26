@@ -74,6 +74,25 @@ export function buildPortraitClipPoints(
   return [leftAtTop, 0, panelWidth, 0, panelWidth, panelHeight, leftAtBottom, panelHeight];
 }
 
+/**
+ * Uniform scale that fits a portrait's source image inside the panel,
+ * filling `fillRatio` of whichever axis is tighter.
+ *
+ * Pure and separate because the fit depends on the *current* image's own
+ * dimensions: two characters can have differently shaped portrait canvases,
+ * so switching speaker has to refit rather than inherit the previous scale.
+ */
+export function computePortraitFitScale(
+  panelWidth: number,
+  panelHeight: number,
+  sourceWidth: number,
+  sourceHeight: number,
+  fillRatio: number,
+): number {
+  if (sourceWidth <= 0 || sourceHeight <= 0) return 1;
+  return Math.min(panelWidth / sourceWidth, panelHeight / sourceHeight) * fillRatio;
+}
+
 export function computeDialogueLayout(width: number, height: number): DialogueLayoutMetrics {
   const topBarHeight = DialogueLayout.topBarHeight;
   const bottomBarHeight = DialogueLayout.bottomBarHeight;

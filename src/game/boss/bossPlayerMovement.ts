@@ -2,7 +2,7 @@
  * Horizontal movement rules for the boss arena.
  *
  * Pure so acceleration, knockback and wall clamping can be tested without a
- * running scene. Atmos never jumps, dashes or shoots here: the whole fight is
+ * running scene. The player never jumps, dashes or shoots here: the whole fight is
  * a left/right dodge, so this is deliberately one-dimensional.
  */
 import { BOSS_PLAYER } from './bossConfig';

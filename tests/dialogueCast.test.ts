@@ -213,6 +213,44 @@ describe('capability validation', () => {
   });
 });
 
+describe('no selection is an error, never a silent default', () => {
+  it('fails to resolve a player ref rather than falling back to Atmos', () => {
+    resetCharacterSelection();
+    const s = script({ lines: [{ text: 'HI', speaker: playerRef() }] });
+    expect(() => resolveDialogueSpeaker(s.lines[0], s)).toThrow(/No character selected/);
+    expect(() => resolveSceneCast(METRO_MAGICIAN_DIALOGUE)).toThrow(/No character selected/);
+    expect(() => assertDialogueCastCapabilities(METRO_MAGICIAN_DIALOGUE)).toThrow(
+      /No character selected/,
+    );
+  });
+});
+
+describe('the arriving actor needs a pose to settle on', () => {
+  it('accepts a character with both an entrance and an idle', () => {
+    const disus = getCharacter('disus');
+    expect(disus.capabilities.appearAnimation).toBe(true);
+    expect(disus.gameplay.idle).toBeDefined();
+    expect(() => assertDialogueCastCapabilities(METRO_MAGICIAN_DIALOGUE)).not.toThrow();
+  });
+
+  it('rejects an entrance with no idle to settle on', () => {
+    const s = script({ id: 'no-settle', lines: [{ text: 'HI', speaker: playerRef() }] });
+    const original = DIALOGUE_SCENE_CASTS.metroStation.arrivingActor;
+    (DIALOGUE_SCENE_CASTS.metroStation as { arrivingActor: unknown }).arrivingActor =
+      characterRef('drifter');
+    try {
+      expect(() => assertDialogueCastCapabilities(s)).toThrow(DialogueCastError);
+      expect(() => assertDialogueCastCapabilities(s)).toThrow(/gameplay\/idle\.png/);
+      expect(() => assertDialogueCastCapabilities(s)).toThrow(/no-settle/);
+      expect(() => assertDialogueCastCapabilities(s)).toThrow(/Drifter/);
+      // The entrance itself is fine; only the settled pose is missing.
+      expect(() => assertDialogueCastCapabilities(s)).not.toThrow(/dialogue\/appear/);
+    } finally {
+      (DIALOGUE_SCENE_CASTS.metroStation as { arrivingActor: unknown }).arrivingActor = original;
+    }
+  });
+});
+
 describe('portrait assets come from the manifest', () => {
   it('uses the resolved character’s discovered portrait keys', () => {
     const disus = getCharacter('disus');

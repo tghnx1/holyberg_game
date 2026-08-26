@@ -46,6 +46,13 @@ export const CHARACTER_MANIFEST: CharacterDefinition[] = buildCharacterManifest(
   // Artwork-poor NPC: discoverable, but has no portraits, so casting it as a
   // speaker must fail rather than render nothing.
   scan('Mute', ['gameplay/idle.png']),
+  // Has an entrance but no idle, so it can appear and then has nothing to
+  // stand in — the case the arriving-actor contract exists to catch.
+  scan('Drifter', [
+    'dialogue/portrait/idle.png',
+    'dialogue/portrait/talk.png',
+    ...frames('dialogue/appear', 4),
+  ]),
 ]);
 
 export default CHARACTER_MANIFEST;

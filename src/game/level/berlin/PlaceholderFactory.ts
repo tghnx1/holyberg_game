@@ -17,7 +17,7 @@ const colors = {
 
 /**
  * Scenery sits behind the street, the gameplay objects and the player, so
- * Atmos visibly runs in front of the building toward its doorway.
+ * the player visibly runs in front of the building toward its doorway.
  */
 function depthFor(entity: BerlinEntity): number {
   if (entity.type === 'collectible') return Depth.COLLECTIBLES;

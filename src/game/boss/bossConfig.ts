@@ -8,7 +8,7 @@ import type { AttackTiming, BossAttackType, BossPhaseDefinition } from './types'
 export const BOSS_ARENA = {
   /** Horizontal inset from the camera edges that walls the playfield in. */
   sideMarginPx: 70,
-  /** Feet line for Atmos; the arena floor. */
+  /** Feet line for the player; the arena floor. */
   floorY: 640,
   /** Boss sits above this, the player below it. */
   bossCenterY: 130,

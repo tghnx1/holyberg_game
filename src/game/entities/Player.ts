@@ -75,7 +75,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setAlpha(0);
 
     // Shown immediately, before the run starts and before the first run()
-    // call ever fires: without this Atmos would flash whatever placeholder
+    // call ever fires: without this the player would flash whatever placeholder
     // texture the constructor happened to pass, for the whole intro screen.
     const idle = character.gameplay.idle!;
     this.currentVisualFrameKey = idle.key;

@@ -10,7 +10,7 @@ import type { CharacterAssetRef, CharacterDefinition } from './characterManifest
  * costs the frames its scene uses.
  *
  * Every texture key comes from the manifest. Scenes must not build keys from
- * strings — that is what made the old ATMOS_* constants impossible to
+ * strings — that is what made the old per-character constants impossible to
  * generalise.
  *
  * Loads artwork only. Nothing here knows or sets speed, physics or animation

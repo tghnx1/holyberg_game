@@ -92,8 +92,9 @@ export class StationSceneView {
   /** The arriving actor's entrance frames, in order. */
   private readonly appearFrames: readonly CharacterAssetRef[];
   /**
-   * Pose held once the entrance finishes. The character's discovered idle,
-   * which is what the previous hardcoded "stay" frame was.
+   * Pose held once the entrance finishes: the character's discovered idle,
+   * which is what the previous hardcoded "stay" frame was. Required by
+   * staging validation, so it is never substituted.
    */
   private readonly settledFrame: CharacterAssetRef;
 
@@ -126,7 +127,9 @@ export class StationSceneView {
     // Read before any actor is built; capability validation upstream has
     // already guaranteed both are present for this cast.
     this.appearFrames = cast.arriving.dialogue.appear;
-    this.settledFrame = cast.arriving.gameplay.idle ?? cast.arriving.dialogue.appear[0];
+    // Non-null: assertDialogueCastCapabilities has already rejected a cast
+    // whose arriving actor lacks one, so there is nothing to fall back to.
+    this.settledFrame = cast.arriving.gameplay.idle!;
 
     const children: Phaser.GameObjects.GameObject[] = [];
 

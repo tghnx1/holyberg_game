@@ -152,11 +152,22 @@ export function assertDialogueCastCapabilities(script: DialogueScript): void {
     'dialogue/poses/metro_sit.png',
     `seated actor ${describeRef(sceneRefs.seatedActor)}`,
   );
+  const arrivingWhere = `arriving actor ${describeRef(sceneRefs.arrivingActor)}`;
   require(
     cast.arriving,
     cast.arriving.capabilities.appearAnimation,
     'dialogue/appear/*.png',
-    `arriving actor ${describeRef(sceneRefs.arrivingActor)}`,
+    arrivingWhere,
+  );
+  // The entrance leaves the actor standing there for the rest of the scene,
+  // so it needs a pose to settle on. An appear frame is not a substitute:
+  // those are mid-materialisation poses and only the last happens to look
+  // settled for the character that exists today.
+  require(
+    cast.arriving,
+    Boolean(cast.arriving.gameplay.idle),
+    'gameplay/idle.png to settle on after its entrance',
+    arrivingWhere,
   );
 
   if (problems.length > 0) {
