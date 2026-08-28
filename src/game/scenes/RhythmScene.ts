@@ -671,7 +671,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
         retryScene: 'RhythmScene',
         // Preserves the already-earned Berlin score; resets only the rhythm run.
         retryData: { score: this.berlinScore },
-        continueScene: 'BossScene',
+        continueScene: 'Level4Scene',
         continueData: {
           rhythmResult: {
             ...this.scoreState,

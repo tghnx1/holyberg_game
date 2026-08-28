@@ -63,6 +63,10 @@ export const DIALOGUE_SCENE_CASTS: Readonly<Record<DialogueSceneId, DialogueScen
     seatedActor: playerRef(),
     arrivingActor: roleRef('magician'),
   },
+  toilet: {
+    seatedActor: playerRef(),
+    arrivingActor: roleRef('magician'),
+  },
 };
 
 export interface ResolvedSceneCast {
@@ -96,8 +100,11 @@ export function resolveDialogueSpeaker(
   return { character, displayName: line.speakerName ?? character.name };
 }
 
-export function resolveSceneCast(script: DialogueScript): ResolvedSceneCast {
-  const cast = DIALOGUE_SCENE_CASTS[script.sceneId];
+export function resolveSceneCast(
+  script: DialogueScript,
+  override?: DialogueSceneCast,
+): ResolvedSceneCast {
+  const cast = override ?? DIALOGUE_SCENE_CASTS[script.sceneId];
   if (!cast) {
     throw new DialogueCastError(`Dialogue scene "${script.sceneId}" has no cast configured.`);
   }
@@ -115,13 +122,16 @@ export function resolveSceneCast(script: DialogueScript): ResolvedSceneCast {
  * character. A character appearing as both the player and an NPC shows up
  * once, so the loader has nothing to deduplicate afterwards.
  */
-export function resolveDialogueCast(script: DialogueScript): CharacterDefinition[] {
+export function resolveDialogueCast(
+  script: DialogueScript,
+  override?: DialogueSceneCast,
+): CharacterDefinition[] {
   const seen = new Map<string, CharacterDefinition>();
   const add = (character: CharacterDefinition): void => {
     if (!seen.has(character.id)) seen.set(character.id, character);
   };
   for (const line of script.lines) add(resolveDialogueSpeaker(line, script).character);
-  const sceneCast = resolveSceneCast(script);
+  const sceneCast = resolveSceneCast(script, override);
   add(sceneCast.seated);
   add(sceneCast.arriving);
   return [...seen.values()];
@@ -136,7 +146,10 @@ export function resolveDialogueCast(script: DialogueScript): CharacterDefinition
  * Names the dialogue, the reference, the character and the missing capability
  * instead of substituting a placeholder.
  */
-export function assertDialogueCastCapabilities(script: DialogueScript): void {
+export function assertDialogueCastCapabilities(
+  script: DialogueScript,
+  override?: DialogueSceneCast,
+): void {
   const problems: string[] = [];
   const require = (
     character: CharacterDefinition,
@@ -160,8 +173,8 @@ export function assertDialogueCastCapabilities(script: DialogueScript): void {
     );
   }
 
-  const cast = resolveSceneCast(script);
-  const sceneRefs = DIALOGUE_SCENE_CASTS[script.sceneId];
+  const cast = resolveSceneCast(script, override);
+  const sceneRefs = override ?? DIALOGUE_SCENE_CASTS[script.sceneId];
   require(
     cast.seated,
     cast.seated.capabilities.metroActor,

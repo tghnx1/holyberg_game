@@ -21,10 +21,12 @@ import {
   resolveDialogueCast,
   resolveDialogueSpeaker,
   resolveSceneCast,
+  type DialogueSceneCast,
   type ResolvedSceneCast,
 } from '../dialogue/dialogueCast';
 import { queueCharacterAssets } from '../characters/characterAssets';
 import { StationSceneView } from '../dialogue/StationSceneView';
+import { ToiletSceneView } from '../dialogue/ToiletSceneView';
 import { TalkingPortrait, type PortraitFrames } from '../dialogue/TalkingPortrait';
 import type { CharacterDefinition } from '../characters/characterManifest';
 import type { DialogueScript } from '../dialogue/types';
@@ -37,8 +39,21 @@ import type { PausableScene } from '../systems/pause/PausableScene';
 export interface DialogueSceneData {
   /** Id from dialogueScripts; defaults to the metro/Magician dialogue. */
   scriptId?: string;
+  /** Optional dynamic script, used when another scene builds the dialogue at runtime. */
+  script?: DialogueScript;
+  /** Optional runtime cast override, used by scenes that do not use the static registry entry. */
+  sceneCast?: DialogueSceneCast;
   /** Forwarded untouched to the next scene, so level payloads survive. */
   payload?: Record<string, unknown>;
+}
+
+interface DialogueSceneStage {
+  root: Phaser.GameObjects.Container;
+  resize(width: number, height: number): void;
+  playArrival(onComplete: () => void): void;
+  getEditableObjects(): import('../systems/SceneEditor').EditableObject[];
+  update?(now: number): void;
+  destroy(): void;
 }
 
 type DialoguePhase = 'slidingIn' | 'typing' | 'holding' | 'glitching' | 'slidingOut' | 'done';
@@ -70,10 +85,12 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
   private script!: DialogueScript;
   private payload: Record<string, unknown> = {};
   private panels!: DialoguePanels;
+  private sceneStage?: DialogueSceneStage;
   private stationScene?: StationSceneView;
   private portrait?: TalkingPortrait;
   /** Resolved once per run, so casting cannot change mid-dialogue. */
   private sceneCast!: ResolvedSceneCast;
+  private sceneCastOverride?: DialogueSceneCast;
   private topBarShape!: Phaser.GameObjects.Rectangle;
   private topBarTitle!: Phaser.GameObjects.Text;
   private topBarContainer!: Phaser.GameObjects.Container;
@@ -113,8 +130,9 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
   }
 
   init(data: DialogueSceneData): void {
-    this.script = getDialogueScript(data.scriptId ?? '') ?? METRO_MAGICIAN_DIALOGUE;
+    this.script = data.script ?? (getDialogueScript(data.scriptId ?? '') ?? METRO_MAGICIAN_DIALOGUE);
     this.payload = data.payload ?? {};
+    this.sceneCastOverride = data.sceneCast;
     this.lineIndex = 0;
     this.phase = 'slidingIn';
     this.spaceHeldSince = undefined;
@@ -133,12 +151,12 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
     //
     // Fails now, naming the role and what it lacks, rather than part-way
     // through the scene when a portrait turns out to be missing.
-    assertDialogueCastCapabilities(this.script);
-    this.sceneCast = resolveSceneCast(this.script);
+    assertDialogueCastCapabilities(this.script, this.sceneCastOverride);
+    this.sceneCast = resolveSceneCast(this.script, this.sceneCastOverride);
     // Only the characters this invocation can actually show. A character
     // cast as both the player and an NPC appears once, and the loader skips
     // anything already in the texture manager.
-    for (const character of resolveDialogueCast(this.script)) {
+    for (const character of resolveDialogueCast(this.script, this.sceneCastOverride)) {
       queueCharacterAssets(this, character, DIALOGUE_ASSET_GROUPS);
     }
   }
@@ -173,13 +191,11 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
     });
 
     this.panels.slideIn(() => {
-      if (this.stationScene) {
-        // The station scene's own departure/appearance sequence gates the
-        // first line: it fires once the arriving actor has finished appearing.
-        this.stationScene.playArrival(() => this.startLine(0));
-      } else {
-        this.startLine(0);
-      }
+      // The scene art can optionally gate the first line with its own tiny
+      // arrival beat; when there is no such intro, the dialogue can begin
+      // immediately once the panels are in place.
+      if (this.sceneStage) this.sceneStage.playArrival(() => this.startLine(0));
+      else this.startLine(0);
     });
 
     void this.createDevelopmentTools();
@@ -199,7 +215,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
       onEnable: () => this.pauseDialogue(),
       onDisable: () => this.resumeDialogue(),
     });
-    for (const object of this.stationScene?.getEditableObjects() ?? []) editor.register(object);
+    for (const object of this.sceneStage?.getEditableObjects() ?? []) editor.register(object);
     this.editor = editor;
     this.editorKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
   }
@@ -262,19 +278,24 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
 
   private buildScenePanel(): void {
     const { x, y, width, height } = this.layout.scenePanel;
-    this.stationScene = new StationSceneView(
-      this,
-      width,
-      height,
-      this.sceneCast,
-      undefined,
-      // The seam leans right as it descends, so the station has to keep
-      // rendering past its own vertical edge to stay behind the divider all
-      // the way down. The panel's logical `width` is unchanged.
-      DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
-    );
-    this.stationScene.root.setDepth(DialogueDepth.SCENE);
-    this.panels.add('scene', this.stationScene.root, {
+    const sceneStage =
+      this.script.sceneId === 'toilet'
+        ? new ToiletSceneView(this, width, height, this.sceneCast)
+        : new StationSceneView(
+            this,
+            width,
+            height,
+            this.sceneCast,
+            undefined,
+            // The seam leans right as it descends, so the station has to keep
+            // rendering past its own vertical edge to stay behind the divider all
+            // the way down. The panel's logical `width` is unchanged.
+            DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
+          );
+    if (sceneStage instanceof StationSceneView) this.stationScene = sceneStage;
+    this.sceneStage = sceneStage;
+    sceneStage.root.setDepth(DialogueDepth.SCENE);
+    this.panels.add('scene', sceneStage.root, {
       restX: x,
       restY: y,
       // Enters from the left, entirely off-screen.
@@ -437,7 +458,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
       offY: layout.height,
     });
 
-    this.stationScene?.resize(layout.scenePanel.width, layout.scenePanel.height);
+    this.sceneStage?.resize(layout.scenePanel.width, layout.scenePanel.height);
     this.panels.updateGeometry('scene', {
       restX: layout.scenePanel.x,
       restY: layout.scenePanel.y,
@@ -512,7 +533,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
 
   update(): void {
     const now = this.time.now;
-    this.stationScene?.update();
+    this.sceneStage?.update?.(now);
     if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
     this.editor?.update();
     if (this.dialoguePaused) return;
@@ -683,8 +704,9 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
     this.time.removeAllEvents();
     this.editor?.destroy();
     this.editor = undefined;
-    this.stationScene?.destroy();
+    this.sceneStage?.destroy();
     this.portrait?.destroy();
+    this.sceneStage = undefined;
     this.stationScene = undefined;
     this.portrait = undefined;
   }

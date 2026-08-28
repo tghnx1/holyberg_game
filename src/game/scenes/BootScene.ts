@@ -19,6 +19,8 @@ import {
   getCollectibleAnimationAssetUrls,
 } from '../level/berlin/collectibleAnimations';
 import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/sceneryAssets';
+import { getLevel4AssetUrls } from '../level/level4/level4Assets';
+import { createEmptyRhythmResult } from '../level/level4/level4Flow';
 import { CLUB_ROOMS } from '../level/club/clubRooms';
 import { selectFallbackCharacter } from '../characters/characterSelection';
 
@@ -88,6 +90,9 @@ export class BootScene extends Phaser.Scene {
     for (const asset of getSceneryAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
+    for (const asset of getLevel4AssetUrls()) {
+      this.load.image(asset.key, asset.url);
+    }
     // Room stills only, ~200 KB for all three. The videos themselves are
     // never queued here; they stream in ClubScene.
     for (const room of CLUB_ROOMS) {
@@ -114,6 +119,10 @@ export class BootScene extends Phaser.Scene {
       this.scene.start('RhythmScene', { score: 500 });
       return;
     }
+    if (import.meta.env.DEV && developmentScene === 'level4') {
+      this.scene.start('Level4Scene', { rhythmResult: createEmptyRhythmResult() });
+      return;
+    }
     if (import.meta.env.DEV && developmentScene === 'club') {
       this.scene.start('ClubScene', { score: 500 });
       return;
@@ -130,7 +139,8 @@ export class BootScene extends Phaser.Scene {
     // Character Select comes first and starts the opening dialogue itself;
     // from there the sequence is DialogueScene -> BerlinScene ->
     // LevelCompleteScene -> ClubScene -> LevelCompleteScene -> RhythmScene ->
-    // LevelCompleteScene -> BossScene -> ResultScene.
+    // LevelCompleteScene -> Level4Scene -> LevelCompleteScene -> BossScene ->
+    // ResultScene.
     this.scene.start('CharacterSelectScene');
   }
 }

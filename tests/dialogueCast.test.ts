@@ -127,6 +127,25 @@ describe('scene actors', () => {
     expect(cast.arriving.id).toBe('disus');
   });
 
+  it('accepts an explicit cast override for a runtime dialogue scene', () => {
+    const s = script({
+      id: 'toilet-intro',
+      sceneId: 'toilet',
+      lines: [{ text: 'HI', speaker: playerRef() }],
+      nextScene: 'Level4Scene',
+    });
+    const cast = resolveSceneCast(s, {
+      seatedActor: playerRef(),
+      arrivingActor: characterRef('klaus'),
+    });
+    expect(cast.seated.id).toBe('atmos');
+    expect(cast.arriving.id).toBe('klaus');
+    expect(resolveDialogueCast(s, {
+      seatedActor: playerRef(),
+      arrivingActor: characterRef('klaus'),
+    }).map((entry) => entry.id).sort()).toEqual(['atmos', 'klaus']);
+  });
+
   it('reseats when the selected character changes', () => {
     selectCharacter('klaus');
     expect(resolveSceneCast(METRO_MAGICIAN_DIALOGUE).seated.id).toBe('klaus');

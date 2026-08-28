@@ -26,7 +26,7 @@ export interface DialogueLine {
 }
 
 /** Which prebuilt left-hand scene a dialogue plays over. */
-export type DialogueSceneId = 'metroStation';
+export type DialogueSceneId = 'metroStation' | 'toilet';
 
 export interface DialogueScript {
   id: string;
