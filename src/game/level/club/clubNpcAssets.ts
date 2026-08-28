@@ -34,6 +34,7 @@ export const CLUB_NPC_GROUP_IDS = [
   'pink_drinker',
   'seated_pair',
   'violet_pair',
+  'dancefloor_crowd',
 ] as const;
 
 export type ClubNpcGroupId = (typeof CLUB_NPC_GROUP_IDS)[number];
@@ -68,6 +69,7 @@ const GROUP_SPECS: Record<ClubNpcGroupId, GroupSpec> = {
   pink_drinker: { frameCount: 6, contentHeight: 357, footGap: 109 },
   seated_pair: { frameCount: 6, contentHeight: 386, footGap: 112 },
   violet_pair: { frameCount: 9, contentHeight: 362, footGap: 107 },
+  dancefloor_crowd: { frameCount: 4, contentHeight: 480, footGap: 22 },
 };
 
 const ASSET_ROOT = 'assets/level_2/npcs';

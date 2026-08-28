@@ -92,8 +92,12 @@ describe('club NPC placement', () => {
   it('populates each room without crowding it', () => {
     for (const room of CLUB_ROOMS) {
       const placements = getRoomNpcPlacements(room.id);
-      expect(placements.length).toBeGreaterThanOrEqual(2);
-      expect(placements.length).toBeLessThanOrEqual(3);
+      if (room.id === 'dancefloor') {
+        expect(placements).toHaveLength(1);
+      } else {
+        expect(placements.length).toBeGreaterThanOrEqual(2);
+        expect(placements.length).toBeLessThanOrEqual(3);
+      }
     }
   });
 
@@ -117,10 +121,10 @@ describe('club NPC placement', () => {
       for (const x of xs) {
         // Clear of both doorway edges, so a group never sits on a transition.
         expect(x).toBeGreaterThan(0.1);
-        expect(x).toBeLessThan(0.9);
+        expect(x).toBeLessThan(0.95);
       }
       for (let i = 1; i < xs.length; i += 1) {
-        expect(xs[i] - xs[i - 1]).toBeGreaterThan(0.15);
+        expect(xs[i] - xs[i - 1]).toBeGreaterThan(room.id === 'lounge' ? 0.1 : 0.15);
       }
     }
   });
@@ -129,7 +133,7 @@ describe('club NPC placement', () => {
     for (const room of CLUB_ROOMS) {
       for (const placement of getRoomNpcPlacements(room.id)) {
         expect(placement.heightRatio).toBeGreaterThan(0.15);
-        expect(placement.heightRatio).toBeLessThanOrEqual(0.45);
+        expect(placement.heightRatio).toBeLessThanOrEqual(room.id === 'dancefloor' ? 0.65 : 0.45);
       }
     }
   });

@@ -43,42 +43,27 @@
   "backstage": [
     {
       "group": "three_people_talk",
-      "xRatio": 0.28,
-      "heightRatio": 0.34,
-      "baselineRatio": 0.91,
+      "xRatio": 0.25788872348025976,
+      "heightRatio": 0.39280260449053134,
+      "baselineRatio": 0.8954733432323004,
       "phaseMs": 0
     },
     {
       "group": "pink_drinker",
-      "xRatio": 0.79,
-      "heightRatio": 0.32,
-      "baselineRatio": 0.89,
+      "xRatio": 0.7668011815837447,
+      "heightRatio": 0.37369940517682043,
+      "baselineRatio": 0.8734013020608588,
       "flipX": true,
       "phaseMs": 700
     }
   ],
   "dancefloor": [
     {
-      "group": "three_people_smoke",
-      "xRatio": 0.2,
-      "heightRatio": 0.3,
-      "baselineRatio": 0.88,
-      "phaseMs": 150
-    },
-    {
-      "group": "violet_pair",
-      "xRatio": 0.53,
-      "heightRatio": 0.31,
-      "baselineRatio": 0.9,
-      "phaseMs": 650
-    },
-    {
-      "group": "green_drinker",
-      "xRatio": 0.82,
-      "heightRatio": 0.33,
-      "baselineRatio": 0.91,
-      "flipX": true,
-      "phaseMs": 1050
+      "group": "dancefloor_crowd",
+      "xRatio": 0.454434051398337,
+      "heightRatio": 0.52,
+      "baselineRatio": 0.8628946744737209,
+      "phaseMs": 0
     }
   ]
 }
