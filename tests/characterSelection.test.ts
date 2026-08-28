@@ -108,11 +108,15 @@ describe('dev fallback selection', () => {
     expect(selectFallbackCharacter('klaus')?.id).toBe('klaus');
   });
 
-  it('ignores a requested character that is not playable and falls back', () => {
-    expect(selectFallbackCharacter('disus')?.id).toBe('atmos');
+  it('rejects a requested character that is not playable instead of falling back', () => {
+    expect(() => selectFallbackCharacter('disus')).toThrow(/is not playable/);
+    expect(hasSelectedCharacter()).toBe(false);
   });
 
-  it('ignores an unknown request rather than throwing at a dev entry point', () => {
-    expect(selectFallbackCharacter('nobody')?.id).toBe('atmos');
+  it('rejects an unknown request instead of silently selecting a random character', () => {
+    expect(() => selectFallbackCharacter('nobody')).toThrow(
+      /Cannot select unknown character "nobody"/,
+    );
+    expect(hasSelectedCharacter()).toBe(false);
   });
 });

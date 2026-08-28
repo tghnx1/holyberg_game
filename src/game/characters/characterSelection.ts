@@ -76,19 +76,20 @@ export function selectCharacter(id: string): CharacterDefinition {
 
 /**
  * Dev convenience for direct `?scene=` entry points, which skip Character
- * Select. Prefers an explicitly requested id, then Atmos, then the first
- * playable character, so the workflow keeps working as characters come and go.
+ * Select. An explicitly requested id is strict: an unknown or NPC-only
+ * character is a bad DEV URL and must surface the same clear selection error
+ * as Character Select. With no request, Atmos and then the first playable
+ * character preserve the existing direct-scene fallback.
  *
  * Returns undefined only when nothing playable was discovered at all.
  */
-export function selectFallbackCharacter(preferredId?: string): CharacterDefinition | undefined {
+export function selectFallbackCharacter(requestedId?: string): CharacterDefinition | undefined {
+  if (requestedId !== undefined) return selectCharacter(requestedId);
+
   const playable = getPlayableCharacters();
   if (playable.length === 0) return undefined;
-  const preferred =
-    (preferredId ? playable.find((entry) => entry.id === preferredId) : undefined) ??
-    playable.find((entry) => entry.id === 'atmos') ??
-    playable[0];
-  return selectCharacter(preferred.id);
+  const fallback = playable.find((entry) => entry.id === 'atmos') ?? playable[0];
+  return selectCharacter(fallback.id);
 }
 
 /** Test hook; the game itself never clears a selection mid-session. */
