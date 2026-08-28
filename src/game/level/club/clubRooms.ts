@@ -1,5 +1,5 @@
 /**
- * Level 2's three club interiors, in walking order.
+ * Level 2's four club interiors, in walking order.
  *
  * Pure data, free of Phaser, so the room sequence and the edge-transition
  * rules can be unit tested without a running scene.
@@ -59,6 +59,13 @@ export const CLUB_ROOMS: readonly ClubRoom[] = [
     videoUrl: 'assets/level_2/animation_3.mp4',
     posterKey: 'club-room-3-poster',
     posterUrl: 'assets/level_2/room_3_poster.webp',
+  },
+  {
+    id: 'dancefloor',
+    label: 'MADAME CLAUDE — DANCEFLOOR',
+    videoUrl: 'assets/level_2/animation_4.mp4',
+    posterKey: 'club-room-4-poster',
+    posterUrl: 'assets/level_2/room_4_poster.webp',
   },
 ] as const;
 

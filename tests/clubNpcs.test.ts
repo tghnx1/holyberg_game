@@ -81,7 +81,7 @@ describe('club NPC artwork', () => {
 });
 
 describe('club NPC placement', () => {
-  it('places every group somewhere across the three rooms', () => {
+  it('places every group somewhere across the club rooms', () => {
     const placed = new Set<ClubNpcGroupId>();
     for (const room of CLUB_ROOMS) {
       for (const group of getRoomNpcGroups(room.id)) placed.add(group);

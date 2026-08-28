@@ -56,5 +56,29 @@
       "flipX": true,
       "phaseMs": 700
     }
+  ],
+  "dancefloor": [
+    {
+      "group": "three_people_smoke",
+      "xRatio": 0.2,
+      "heightRatio": 0.3,
+      "baselineRatio": 0.88,
+      "phaseMs": 150
+    },
+    {
+      "group": "violet_pair",
+      "xRatio": 0.53,
+      "heightRatio": 0.31,
+      "baselineRatio": 0.9,
+      "phaseMs": 650
+    },
+    {
+      "group": "green_drinker",
+      "xRatio": 0.82,
+      "heightRatio": 0.33,
+      "baselineRatio": 0.91,
+      "flipX": true,
+      "phaseMs": 1050
+    }
   ]
 }

@@ -5,12 +5,13 @@ import {
 } from '../src/game/level/club/clubRooms';
 
 describe('club room sequence', () => {
-  it('has three rooms, each with its own video', () => {
-    expect(CLUB_ROOMS).toHaveLength(3);
+  it('has four rooms, each with its own video', () => {
+    expect(CLUB_ROOMS).toHaveLength(4);
     expect(CLUB_ROOMS.map((room) => room.videoUrl)).toEqual([
       'assets/level_2/animation_1.mp4',
       'assets/level_2/animation_2.mp4',
       'assets/level_2/animation_3.mp4',
+      'assets/level_2/animation_4.mp4',
     ]);
     expect(new Set(CLUB_ROOMS.map((room) => room.id)).size).toBe(CLUB_ROOMS.length);
   });
@@ -40,9 +41,19 @@ describe('club room sequence', () => {
       completesLevel: false,
       enterFrom: 'left',
     });
+    expect(resolveClubRoomTransition(2, 'right')).toEqual({
+      roomIndex: 3,
+      completesLevel: false,
+      enterFrom: 'left',
+    });
   });
 
   it('walks back through the rooms, entering each from its right edge', () => {
+    expect(resolveClubRoomTransition(3, 'left')).toEqual({
+      roomIndex: 2,
+      completesLevel: false,
+      enterFrom: 'right',
+    });
     expect(resolveClubRoomTransition(2, 'left')).toEqual({
       roomIndex: 1,
       completesLevel: false,
