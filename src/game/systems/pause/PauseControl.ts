@@ -3,6 +3,7 @@ import { Depth } from '../../constants';
 import { FullscreenExitReservedWidth } from '../../responsive/FullscreenExitReservedWidth';
 import { getViewportInfo } from '../../responsive/ResponsiveLayout';
 import type { ViewportInfo } from '../../responsive/ViewportInfo';
+import { isSceneEditorActive } from '../sceneEditorState';
 import { isPaused, requestPause } from './PauseCoordinator';
 import { isPausable } from './PausableScene';
 import { PauseHudReservedWidth } from './PauseHudReservedWidth';
@@ -86,9 +87,13 @@ export function attachPauseControl(scene: Phaser.Scene): void {
     requestPause(scene);
   };
 
-  const onKey = (): void => triggerPause();
-  scene.input.keyboard?.on('keydown-ESC', onKey);
-  scene.input.keyboard?.on('keydown-P', onKey);
+  const onEscapeKey = (): void => triggerPause();
+  const onSaveKey = (): void => {
+    if (isSceneEditorActive(scene)) return;
+    triggerPause();
+  };
+  scene.input.keyboard?.on('keydown-ESC', onEscapeKey);
+  scene.input.keyboard?.on('keydown-P', onSaveKey);
 
   // Plain ASCII/basic-Latin glyphs, not the pause/emoji symbol blocks: those
   // aren't guaranteed to be in every desktop font's fallback chain, which is
@@ -136,8 +141,8 @@ export function attachPauseControl(scene: Phaser.Scene): void {
 
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
     attached.delete(scene);
-    scene.input.keyboard?.off('keydown-ESC', onKey);
-    scene.input.keyboard?.off('keydown-P', onKey);
+    scene.input.keyboard?.off('keydown-ESC', onEscapeKey);
+    scene.input.keyboard?.off('keydown-P', onSaveKey);
     pauseButton.off('pointerdown', onPauseDown);
     scene.scale.off(Phaser.Scale.Events.RESIZE, onResize);
     unsubscribeFullscreen();

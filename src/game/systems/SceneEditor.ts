@@ -13,6 +13,7 @@ import {
   worldPointToParentLocal,
   type AncestorTransform,
 } from './sceneEditorCoords';
+import { setSceneEditorActive } from './sceneEditorState';
 
 /**
  * Generic, reusable dev-only visual editor core.
@@ -216,6 +217,7 @@ export class SceneEditor {
       this.drag = undefined;
       this.resize = undefined;
     }
+    setSceneEditorActive(this.scene, this.enabled);
     if (this.enabled) this.options.onEnable?.();
     else this.options.onDisable?.();
   }
@@ -531,6 +533,7 @@ export class SceneEditor {
   }
 
   destroy(): void {
+    setSceneEditorActive(this.scene, false);
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.onPointerUp, this);
