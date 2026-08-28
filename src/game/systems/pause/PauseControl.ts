@@ -1,11 +1,15 @@
 import Phaser from 'phaser';
 import { Depth } from '../../constants';
+import { FullscreenExitReservedWidth } from '../../responsive/FullscreenExitReservedWidth';
 import { getViewportInfo } from '../../responsive/ResponsiveLayout';
 import type { ViewportInfo } from '../../responsive/ViewportInfo';
 import { SoundManager } from '../../audio/SoundManager';
 import { isPaused, requestPause } from './PauseCoordinator';
 import { isPausable } from './PausableScene';
 import { PauseHudReservedWidth } from './PauseHudReservedWidth';
+
+/** Clearance between the fullscreen exit "✕" and the button row, desktop only. */
+const FULLSCREEN_EXIT_CLEARANCE_GAP = 16;
 
 /** Compact: desktop has a mouse, so the touch-target floor doesn't apply. */
 const DESKTOP_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
@@ -73,6 +77,13 @@ const attached = new WeakSet<Phaser.Scene>();
  * through `PauseHudReservedWidth` so anything else anchored to that corner
  * (currently `HudSystem`'s SCORE label) can offset itself and never overlap,
  * without this module knowing that label exists.
+ *
+ * On desktop, the whole row also shifts left as one unit — preserving the
+ * spacing above — by however much `FullscreenExitReservedWidth` reports the
+ * fullscreen "✕" is currently occupying, so entering fullscreen never lets
+ * the two collide. Touch layouts ignore it: fullscreen there is normally a
+ * full-bleed canvas where the ✕ isn't competing for the same corner in
+ * practice, and the requirement was desktop-only.
  */
 export function attachPauseControl(scene: Phaser.Scene): void {
   if (!isPausable(scene)) return;
@@ -102,8 +113,15 @@ export function attachPauseControl(scene: Phaser.Scene): void {
     pauseButton.setStyle(style);
     soundButton.setStyle(style);
 
+    // Desktop-only: shifts the whole row left, as one unit, clear of the
+    // fullscreen exit "✕" when it's showing in that same corner.
+    const fullscreenClearance =
+      !viewport.touchOriented && FullscreenExitReservedWidth.value > 0
+        ? FullscreenExitReservedWidth.value + FULLSCREEN_EXIT_CLEARANCE_GAP
+        : 0;
+
     const width = scene.cameras.main.width;
-    soundButton.setPosition(width - margin, margin);
+    soundButton.setPosition(width - margin - fullscreenClearance, margin);
     pauseButton.setPosition(soundButton.x - soundButton.displayWidth - gap, margin);
 
     // Distance from the margin line to the left edge of the row: what a
@@ -142,6 +160,7 @@ export function attachPauseControl(scene: Phaser.Scene): void {
   soundButton.on('pointerdown', onSoundDown);
   scene.scale.on(Phaser.Scale.Events.RESIZE, onResize);
   const unsubscribeSound = SoundManager.onChange(applyMuteState);
+  const unsubscribeFullscreen = FullscreenExitReservedWidth.onChange(() => place());
   place();
 
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -152,6 +171,7 @@ export function attachPauseControl(scene: Phaser.Scene): void {
     soundButton.off('pointerdown', onSoundDown);
     scene.scale.off(Phaser.Scale.Events.RESIZE, onResize);
     unsubscribeSound();
+    unsubscribeFullscreen();
     pauseButton.destroy();
     soundButton.destroy();
     // So the next scene's HUD doesn't briefly reserve space for a button row

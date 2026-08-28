@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { Depth } from '../constants';
+import { FullscreenExitReservedWidth } from './FullscreenExitReservedWidth';
 import { getViewportInfo } from './ResponsiveLayout';
 
 /**
@@ -82,6 +83,7 @@ export function attachFullscreenExitControl(scene: Phaser.Scene): void {
   const place = (): void => {
     const margin = getViewportInfo(scene.scale).safeMargin;
     button.setPosition(scene.cameras.main.width - margin, margin);
+    FullscreenExitReservedWidth.set(button.visible ? button.displayWidth : 0);
   };
 
   const onDown = (pointer: Phaser.Input.Pointer, _x: number, _y: number, event: Phaser.Types.Input.EventData): void => {
@@ -96,6 +98,7 @@ export function attachFullscreenExitControl(scene: Phaser.Scene): void {
   };
   const onLeave = (): void => {
     button.setVisible(false);
+    FullscreenExitReservedWidth.set(0);
   };
   const onResize = (): void => place();
 
@@ -111,6 +114,7 @@ export function attachFullscreenExitControl(scene: Phaser.Scene): void {
     scene.scale.off(Phaser.Scale.Events.LEAVE_FULLSCREEN, onLeave);
     scene.scale.off(Phaser.Scale.Events.RESIZE, onResize);
     button.destroy();
+    FullscreenExitReservedWidth.set(0);
   });
 }
 
