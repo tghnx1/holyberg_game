@@ -1,0 +1,60 @@
+{
+  "lounge": [
+    {
+      "group": "seated_pair",
+      "xRatio": 0.17,
+      "heightRatio": 0.33,
+      "baselineRatio": 0.9,
+      "phaseMs": 0
+    },
+    {
+      "group": "three_people_smoke",
+      "xRatio": 0.53,
+      "heightRatio": 0.31,
+      "baselineRatio": 0.88,
+      "phaseMs": 400
+    },
+    {
+      "group": "green_drinker",
+      "xRatio": 0.84,
+      "heightRatio": 0.34,
+      "baselineRatio": 0.92,
+      "flipX": true,
+      "phaseMs": 850
+    }
+  ],
+  "corridor": [
+    {
+      "group": "two_people_talk",
+      "xRatio": 0.24,
+      "heightRatio": 0.35,
+      "baselineRatio": 0.93,
+      "phaseMs": 0
+    },
+    {
+      "group": "violet_pair",
+      "xRatio": 0.74,
+      "heightRatio": 0.33,
+      "baselineRatio": 0.9,
+      "flipX": true,
+      "phaseMs": 600
+    }
+  ],
+  "backstage": [
+    {
+      "group": "three_people_talk",
+      "xRatio": 0.28,
+      "heightRatio": 0.34,
+      "baselineRatio": 0.91,
+      "phaseMs": 0
+    },
+    {
+      "group": "pink_drinker",
+      "xRatio": 0.79,
+      "heightRatio": 0.32,
+      "baselineRatio": 0.89,
+      "flipX": true,
+      "phaseMs": 700
+    }
+  ]
+}

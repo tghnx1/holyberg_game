@@ -15,6 +15,10 @@ import {
   resolveClubRoomTransition,
   type ClubRoomEdge,
 } from '../level/club/clubRooms';
+import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
+import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
+import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
+import type { SceneEditor } from '../systems/SceneEditor';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import { OrientationController } from '../responsive/OrientationController';
@@ -117,6 +121,11 @@ export class ClubScene extends Phaser.Scene {
   private currentFrameKey?: string;
   private transitioning = false;
   private finished = false;
+  /** Ambient crowd for the current room; scenery only, never consulted by gameplay. */
+  private npcs?: ClubNpcLayer;
+  /** Dev-only layout editor for the crowd; never created outside `import.meta.env.DEV`. */
+  private editor?: SceneEditor;
+  private editorKey?: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super('ClubScene');
@@ -152,6 +161,11 @@ export class ClubScene extends Phaser.Scene {
       .setDepth(Depth.FAR_BACKGROUND - 1)
       .setVisible(false);
 
+    // Above the room video and poster, below the player: the crowd is part of
+    // the room, and the player walks in front of it. Well below Depth.UI, so
+    // it can never cover the HUD.
+    this.npcs = new ClubNpcLayer(this, Depth.ENVIRONMENT, FLOOR_RATIO);
+
     this.playerSprite = this.add
       .sprite(0, 0, this.character.gameplay.idle!.key)
       .setOrigin(0.5, 1)
@@ -175,6 +189,49 @@ export class ClubScene extends Phaser.Scene {
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
     this.applyResponsiveLayout();
+
+    void this.createDevelopmentTools();
+  }
+
+  /**
+   * Dev-only: registers the ambient crowd with the same generic SceneEditor
+   * the dialogue station uses, so their positions are dragged and saved back
+   * to `clubNpcPlacement.json` rather than tuned by editing numbers blind.
+   * Guarded so production bundles never include it, matching Berlin and
+   * DialogueScene.
+   */
+  private async createDevelopmentTools(): Promise<void> {
+    if (!import.meta.env.DEV) return;
+    const { SceneEditor } = await import('../systems/SceneEditor');
+    this.editor = new SceneEditor(this, {
+      onSave: (snapshot) => this.saveNpcPlacement(snapshot),
+    });
+    this.registerNpcsWithEditor();
+    this.editorKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+  }
+
+  /** Re-registers the current room's crowd; the editor is keyed by object id. */
+  private registerNpcsWithEditor(): void {
+    const editor = this.editor;
+    if (!editor || !this.npcs) return;
+    for (const object of this.npcs.getEditableObjects()) editor.register(object);
+  }
+
+  private saveNpcPlacement(
+    snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
+  ): void {
+    const npcs = this.npcs;
+    if (!npcs) return;
+    void fetch('/__club-editor/save-npcs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId: npcs.getRoomId(),
+        placements: npcs.buildLayoutFromSnapshot(snapshot),
+      }),
+    }).catch((error: unknown) => {
+      console.error('[ClubScene] failed to save NPC placement', error);
+    });
   }
 
   // ---------------------------------------------------------------- input
@@ -249,6 +306,11 @@ export class ClubScene extends Phaser.Scene {
   // ----------------------------------------------------------------- loop
 
   update(_time: number, delta: number): void {
+    if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
+    this.editor?.update();
+    // Ambient only: the crowd keeps looping regardless of what the player is
+    // doing, and drives nothing else in the scene.
+    this.npcs?.update(this.time.now);
     if (this.finished) return;
     const direction = this.transitioning ? 0 : this.readDirection();
     if (direction !== 0) {
@@ -355,7 +417,48 @@ export class ClubScene extends Phaser.Scene {
     this.walkX = enterFrom === 'left' ? ENTRY_INSET : width - ENTRY_INSET;
     this.applyWalkFrame(false);
 
+    this.loadRoomNpcs(room.id);
     this.prefetchNeighbour(roomIndex + 1);
+  }
+
+  /**
+   * Builds the room's crowd, loading only that room's artwork and only the
+   * frames not already in the texture manager — so walking into the lounge
+   * never costs the backstage's groups, and walking back into a room already
+   * visited costs nothing at all.
+   *
+   * `setRoom` runs immediately so a revisited room populates on the same
+   * frame, and again on load completion for a first visit; it skips
+   * placements whose frames are missing rather than drawing an error texture,
+   * which is what makes that two-phase call safe.
+   */
+  private loadRoomNpcs(roomId: string): void {
+    const npcs = this.npcs;
+    if (!npcs) return;
+    npcs.setRoom(roomId);
+
+    const missing = collectClubNpcFrames(getRoomNpcGroups(roomId)).filter(
+      (frame) => !this.textures.exists(frame.key),
+    );
+    if (missing.length === 0) {
+      this.registerNpcsWithEditor();
+      return;
+    }
+
+    for (const frame of missing) this.load.image(frame.key, frame.url);
+    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+      // The player may have walked on, or left Level 2 entirely, while this
+      // was in flight; rebuilding then would populate the wrong room.
+      if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
+      npcs.setRoom(roomId);
+      this.registerNpcsWithEditor();
+    });
+    this.load.start();
+  }
+
+  /** Id of the room currently being shown. */
+  private roomIndexId(): string {
+    return CLUB_ROOMS[this.roomIndex]?.id ?? '';
   }
 
   /**
@@ -490,6 +593,9 @@ export class ClubScene extends Phaser.Scene {
       this.rightZone.setPosition(half, 0).setSize(half, camera.height);
     }
 
+    // Ratio-based, so the crowd re-seats itself on the new viewport.
+    this.npcs?.layout();
+
     // Keep the player inside the new width, and on the floor line.
     this.walkX = Phaser.Math.Clamp(this.walkX, EDGE_MARGIN, camera.width - EDGE_MARGIN);
     this.applyWalkFrame(false);
@@ -497,6 +603,10 @@ export class ClubScene extends Phaser.Scene {
 
   private cleanup(): void {
     this.releaseVideo();
+    this.npcs?.destroy();
+    this.npcs = undefined;
+    this.editor?.destroy();
+    this.editor = undefined;
     // Leaving Level 2: every room file is done with, and a retry re-warms
     // from the HTTP cache rather than the network.
     for (const room of CLUB_ROOMS) releasePrefetchedVideo(room.videoUrl);
