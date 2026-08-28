@@ -22,8 +22,8 @@ export interface ObstacleAnimationDefinition {
 export const OBSTACLE_ANIMATIONS = {
   homeless: {
     artSlot: 'obstacle.homeless',
-    animKey: 'homeless-walk',
-    frameKeys: ['homeless-1', 'homeless-2', 'homeless-3', 'homeless-4', 'homeless-5', 'homeless-6'],
+    animKey: 'luk-walk',
+    frameKeys: ['luk-1', 'luk-2', 'luk-3', 'luk-4'],
     frameRate: 8,
   },
   stinkyCloud: {
@@ -43,7 +43,7 @@ export function getObstacleAnimationAssetUrls(): ObstacleAnimationAsset[] {
   return [
     ...OBSTACLE_ANIMATIONS.homeless.frameKeys.map((key, index) => ({
       key,
-      url: `assets/level_1/homeless ${index + 1}.png`,
+      url: `assets/level_1/luk ${index + 1}.png`,
     })),
     ...OBSTACLE_ANIMATIONS.stinkyCloud.frameKeys.map((key, index) => ({
       key,
