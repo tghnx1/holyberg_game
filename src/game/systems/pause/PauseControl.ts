@@ -1,23 +1,47 @@
 import Phaser from 'phaser';
 import { Depth } from '../../constants';
 import { getViewportInfo } from '../../responsive/ResponsiveLayout';
+import type { ViewportInfo } from '../../responsive/ViewportInfo';
 import { SoundManager } from '../../audio/SoundManager';
 import { isPaused, requestPause } from './PauseCoordinator';
 import { isPausable } from './PausableScene';
+import { PauseHudReservedWidth } from './PauseHudReservedWidth';
 
-const BUTTON_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
+/** Compact: desktop has a mouse, so the touch-target floor doesn't apply. */
+const DESKTOP_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: 'Space Mono',
   fontSize: '20px',
   color: '#ffdd57',
   backgroundColor: '#23132fdd',
-  // Padding is the touch target: small mark, finger-sized hit area.
   padding: { x: 12, y: 8 },
 };
 
+/**
+ * Noticeably larger on touch — comparable in visual weight to the SCORE
+ * label rather than a small icon — and padded well past the ~44px minimum
+ * comfortable tap target.
+ */
+const TOUCH_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
+  fontFamily: 'Space Mono',
+  fontSize: '30px',
+  color: '#ffdd57',
+  backgroundColor: '#23132fdd',
+  padding: { x: 22, y: 20 },
+};
+
+function buttonStyle(viewport: ViewportInfo): Phaser.Types.GameObjects.Text.TextStyle {
+  return viewport.touchOriented ? TOUCH_STYLE : DESKTOP_STYLE;
+}
+
+/** Gap between the pause and sound buttons; a bit wider on touch so two adjacent targets aren't easy to fat-finger together. */
+function buttonGap(viewport: ViewportInfo): number {
+  return viewport.touchOriented ? 14 : 10;
+}
+
 function makeHudButton(scene: Phaser.Scene, label: string): Phaser.GameObjects.Text {
   return scene.add
-    .text(0, 0, label, BUTTON_STYLE)
-    .setOrigin(0, 0)
+    .text(0, 0, label, buttonStyle(getViewportInfo(scene.scale)))
+    .setOrigin(1, 0)
     .setScrollFactor(0)
     .setDepth(Depth.UI + 50)
     // useHandCursor is desktop-only chrome; the object still fully responds
@@ -27,13 +51,6 @@ function makeHudButton(scene: Phaser.Scene, label: string): Phaser.GameObjects.T
 }
 
 /**
- * Attaches an always-visible pause button and sound toggle to `scene`, plus
- * ESC/P as keyboard shortcuts for pause. Called once per scene create by
- * `installPauseLifecycle`, so every current and future playable scene gets
- * this automatically — nothing here names a scene, it only checks
- * `isPausable(scene)`, the opt-out a non-game screen sets.
- */
-/**
  * Scenes with controls attached for their current run. `installPauseLifecycle`
  * can reach a scene by two paths (its CREATE event, or the immediate attach
  * for a scene already running when the installer boots), and this keeps the
@@ -42,6 +59,21 @@ function makeHudButton(scene: Phaser.Scene, label: string): Phaser.GameObjects.T
  */
 const attached = new WeakSet<Phaser.Scene>();
 
+/**
+ * Attaches an always-visible pause button and sound toggle to `scene`, plus
+ * ESC/P as keyboard shortcuts for pause. Called once per scene create by
+ * `installPauseLifecycle`, so every current and future playable scene gets
+ * this automatically — nothing here names a scene, it only checks
+ * `isPausable(scene)`, the opt-out a non-game screen sets.
+ *
+ * Both buttons right-anchor to the safe-margin line, sound outermost and
+ * pause just to its left, so they read as one top-right HUD row. Their
+ * combined width — measured from the actual rendered buttons, not
+ * estimated, since "SND ON"/"SND OFF" aren't the same width — is published
+ * through `PauseHudReservedWidth` so anything else anchored to that corner
+ * (currently `HudSystem`'s SCORE label) can offset itself and never overlap,
+ * without this module knowing that label exists.
+ */
 export function attachPauseControl(scene: Phaser.Scene): void {
   if (!isPausable(scene)) return;
   if (attached.has(scene)) return;
@@ -63,9 +95,21 @@ export function attachPauseControl(scene: Phaser.Scene): void {
   const soundButton = makeHudButton(scene, SoundManager.isMuted ? 'SND OFF' : 'SND ON');
 
   const place = (): void => {
-    const margin = getViewportInfo(scene.scale).safeMargin;
-    pauseButton.setPosition(margin, margin);
-    soundButton.setPosition(margin + pauseButton.width + 10, margin);
+    const viewport = getViewportInfo(scene.scale);
+    const margin = viewport.safeMargin;
+    const gap = buttonGap(viewport);
+    const style = buttonStyle(viewport);
+    pauseButton.setStyle(style);
+    soundButton.setStyle(style);
+
+    const width = scene.cameras.main.width;
+    soundButton.setPosition(width - margin, margin);
+    pauseButton.setPosition(soundButton.x - soundButton.displayWidth - gap, margin);
+
+    // Distance from the margin line to the left edge of the row: what a
+    // right-anchored neighbour (SCORE) needs to stay clear of both buttons.
+    const leftEdge = pauseButton.x - pauseButton.displayWidth;
+    PauseHudReservedWidth.set(width - margin - leftEdge);
   };
 
   const onPauseDown = (
@@ -110,5 +154,8 @@ export function attachPauseControl(scene: Phaser.Scene): void {
     unsubscribeSound();
     pauseButton.destroy();
     soundButton.destroy();
+    // So the next scene's HUD doesn't briefly reserve space for a button row
+    // that hasn't attached yet (or, for a non-pausable scene, never will).
+    PauseHudReservedWidth.set(0);
   });
 }

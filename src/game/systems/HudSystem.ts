@@ -2,7 +2,11 @@ import Phaser from 'phaser';
 import { Depth } from '../constants';
 import { getViewportInfo } from '../responsive/ResponsiveLayout';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
+import { PauseHudReservedWidth } from './pause/PauseHudReservedWidth';
 import type { BerlinProgress } from '../types/game';
+
+/** Clearance between SCORE and the pause/sound button row it never overlaps. */
+const SCORE_BUTTON_ROW_GAP = 20;
 
 const style: Phaser.Types.GameObjects.Text.TextStyle = {
   fontFamily: 'Space Mono',
@@ -51,6 +55,7 @@ export class HudSystem {
   private readonly onPointerUp: (pointer: Phaser.Input.Pointer) => void;
   private readonly onGameOut: () => void;
   private readonly onBlur: () => void;
+  private readonly unsubscribeReservedWidth: () => void;
 
   constructor(
     scene: Phaser.Scene,
@@ -88,6 +93,12 @@ export class HudSystem {
     scene.input.on(Phaser.Input.Events.GAME_OUT, this.onGameOut);
     scene.game.events.on(Phaser.Core.Events.BLUR, this.onBlur);
 
+    // Re-lays out whenever the pause/sound button row's real width changes —
+    // on first attach, on resize, and on every mute toggle (SND ON/OFF
+    // aren't the same width) — so SCORE can never overlap it.
+    this.unsubscribeReservedWidth = PauseHudReservedWidth.onChange(() =>
+      this.applyLayout(getViewportInfo(scene.scale)),
+    );
     this.applyLayout(getViewportInfo(scene.scale));
   }
 
@@ -180,7 +191,10 @@ export class HudSystem {
     const width = camera.width;
     const height = camera.height;
     const margin = viewport.safeMargin;
-    this.score.setPosition(width - margin, margin).setScale(viewport.hudScale);
+    // Reserved width already measures from the margin line to the buttons'
+    // left edge, so this simply sits SCORE one more gap left of that.
+    const scoreRightEdge = width - margin - PauseHudReservedWidth.value - SCORE_BUTTON_ROW_GAP;
+    this.score.setPosition(scoreRightEdge, margin).setScale(viewport.hudScale);
     this.message.setPosition(width / 2, margin + 66).setScale(viewport.hudScale);
 
     // Zones span the full height and split the width; resizing them here keeps
@@ -201,5 +215,6 @@ export class HudSystem {
     this.scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onPointerUp);
     this.scene.input.off(Phaser.Input.Events.GAME_OUT, this.onGameOut);
     this.scene.game.events.off(Phaser.Core.Events.BLUR, this.onBlur);
+    this.unsubscribeReservedWidth();
   }
 }
