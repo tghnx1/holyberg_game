@@ -3,12 +3,11 @@ import { Depth } from '../../constants';
 import { FullscreenExitReservedWidth } from '../../responsive/FullscreenExitReservedWidth';
 import { getViewportInfo } from '../../responsive/ResponsiveLayout';
 import type { ViewportInfo } from '../../responsive/ViewportInfo';
-import { SoundManager } from '../../audio/SoundManager';
 import { isPaused, requestPause } from './PauseCoordinator';
 import { isPausable } from './PausableScene';
 import { PauseHudReservedWidth } from './PauseHudReservedWidth';
 
-/** Clearance between the fullscreen exit "✕" and the button row, desktop only. */
+/** Clearance between the fullscreen exit "✕" and the pause button, desktop only. */
 const FULLSCREEN_EXIT_CLEARANCE_GAP = 16;
 
 /** Compact: desktop has a mouse, so the touch-target floor doesn't apply. */
@@ -37,11 +36,6 @@ function buttonStyle(viewport: ViewportInfo): Phaser.Types.GameObjects.Text.Text
   return viewport.touchOriented ? TOUCH_STYLE : DESKTOP_STYLE;
 }
 
-/** Gap between the pause and sound buttons; a bit wider on touch so two adjacent targets aren't easy to fat-finger together. */
-function buttonGap(viewport: ViewportInfo): number {
-  return viewport.touchOriented ? 14 : 10;
-}
-
 function makeHudButton(scene: Phaser.Scene, label: string): Phaser.GameObjects.Text {
   return scene.add
     .text(0, 0, label, buttonStyle(getViewportInfo(scene.scale)))
@@ -64,26 +58,23 @@ function makeHudButton(scene: Phaser.Scene, label: string): Phaser.GameObjects.T
 const attached = new WeakSet<Phaser.Scene>();
 
 /**
- * Attaches an always-visible pause button and sound toggle to `scene`, plus
- * ESC/P as keyboard shortcuts for pause. Called once per scene create by
- * `installPauseLifecycle`, so every current and future playable scene gets
- * this automatically — nothing here names a scene, it only checks
- * `isPausable(scene)`, the opt-out a non-game screen sets.
+ * Attaches an always-visible pause button to `scene`, plus ESC/P as keyboard
+ * shortcuts. Called once per scene create by `installPauseLifecycle`, so
+ * every current and future playable scene gets this automatically — nothing
+ * here names a scene, it only checks `isPausable(scene)`, the opt-out a
+ * non-game screen sets. Sound is toggled from inside the pause menu, not
+ * from its own HUD button.
  *
- * Both buttons right-anchor to the safe-margin line, sound outermost and
- * pause just to its left, so they read as one top-right HUD row. Their
- * combined width — measured from the actual rendered buttons, not
- * estimated, since "SND ON"/"SND OFF" aren't the same width — is published
- * through `PauseHudReservedWidth` so anything else anchored to that corner
- * (currently `HudSystem`'s SCORE label) can offset itself and never overlap,
- * without this module knowing that label exists.
+ * The button right-anchors to the safe-margin line. Its real, measured width
+ * is published through `PauseHudReservedWidth` so anything else anchored to
+ * that corner (currently `HudSystem`'s SCORE label) can offset itself and
+ * never overlap, without this module knowing that label exists.
  *
- * On desktop, the whole row also shifts left as one unit — preserving the
- * spacing above — by however much `FullscreenExitReservedWidth` reports the
- * fullscreen "✕" is currently occupying, so entering fullscreen never lets
- * the two collide. Touch layouts ignore it: fullscreen there is normally a
- * full-bleed canvas where the ✕ isn't competing for the same corner in
- * practice, and the requirement was desktop-only.
+ * On desktop, it also shifts left by however much `FullscreenExitReservedWidth`
+ * reports the fullscreen "✕" is currently occupying, so entering fullscreen
+ * never lets the two collide. Touch layouts ignore it: fullscreen there is
+ * normally a full-bleed canvas where the ✕ isn't competing for the same
+ * corner in practice, and the requirement was desktop-only.
  */
 export function attachPauseControl(scene: Phaser.Scene): void {
   if (!isPausable(scene)) return;
@@ -103,29 +94,25 @@ export function attachPauseControl(scene: Phaser.Scene): void {
   // aren't guaranteed to be in every desktop font's fallback chain, which is
   // why the earlier "⏸" button could render as nothing at all on desktop.
   const pauseButton = makeHudButton(scene, 'II');
-  const soundButton = makeHudButton(scene, SoundManager.isMuted ? 'SND OFF' : 'SND ON');
 
   const place = (): void => {
     const viewport = getViewportInfo(scene.scale);
     const margin = viewport.safeMargin;
-    const gap = buttonGap(viewport);
     const style = buttonStyle(viewport);
     pauseButton.setStyle(style);
-    soundButton.setStyle(style);
 
-    // Desktop-only: shifts the whole row left, as one unit, clear of the
-    // fullscreen exit "✕" when it's showing in that same corner.
+    // Desktop-only: shifts the button left, clear of the fullscreen exit
+    // "✕" when it's showing in that same corner.
     const fullscreenClearance =
       !viewport.touchOriented && FullscreenExitReservedWidth.value > 0
         ? FullscreenExitReservedWidth.value + FULLSCREEN_EXIT_CLEARANCE_GAP
         : 0;
 
     const width = scene.cameras.main.width;
-    soundButton.setPosition(width - margin - fullscreenClearance, margin);
-    pauseButton.setPosition(soundButton.x - soundButton.displayWidth - gap, margin);
+    pauseButton.setPosition(width - margin - fullscreenClearance, margin);
 
-    // Distance from the margin line to the left edge of the row: what a
-    // right-anchored neighbour (SCORE) needs to stay clear of both buttons.
+    // Distance from the margin line to the button's left edge: what a
+    // right-anchored neighbour (SCORE) needs to stay clear of it.
     const leftEdge = pauseButton.x - pauseButton.displayWidth;
     PauseHudReservedWidth.set(width - margin - leftEdge);
   };
@@ -140,26 +127,10 @@ export function attachPauseControl(scene: Phaser.Scene): void {
     event.stopPropagation();
     triggerPause();
   };
-  const onSoundDown = (
-    _pointer: Phaser.Input.Pointer,
-    _x: number,
-    _y: number,
-    event: Phaser.Types.Input.EventData,
-  ): void => {
-    event.stopPropagation();
-    SoundManager.toggle();
-  };
-  const applyMuteState = (muted: boolean): void => {
-    soundButton.setText(muted ? 'SND OFF' : 'SND ON');
-    soundButton.setColor(muted ? '#8f8f9c' : '#ffdd57');
-    place();
-  };
   const onResize = (): void => place();
 
   pauseButton.on('pointerdown', onPauseDown);
-  soundButton.on('pointerdown', onSoundDown);
   scene.scale.on(Phaser.Scale.Events.RESIZE, onResize);
-  const unsubscribeSound = SoundManager.onChange(applyMuteState);
   const unsubscribeFullscreen = FullscreenExitReservedWidth.onChange(() => place());
   place();
 
@@ -168,13 +139,10 @@ export function attachPauseControl(scene: Phaser.Scene): void {
     scene.input.keyboard?.off('keydown-ESC', onKey);
     scene.input.keyboard?.off('keydown-P', onKey);
     pauseButton.off('pointerdown', onPauseDown);
-    soundButton.off('pointerdown', onSoundDown);
     scene.scale.off(Phaser.Scale.Events.RESIZE, onResize);
-    unsubscribeSound();
     unsubscribeFullscreen();
     pauseButton.destroy();
-    soundButton.destroy();
-    // So the next scene's HUD doesn't briefly reserve space for a button row
+    // So the next scene's HUD doesn't briefly reserve space for a button
     // that hasn't attached yet (or, for a non-pausable scene, never will).
     PauseHudReservedWidth.set(0);
   });
