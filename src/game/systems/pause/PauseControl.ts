@@ -33,8 +33,19 @@ function makeHudButton(scene: Phaser.Scene, label: string): Phaser.GameObjects.T
  * this automatically — nothing here names a scene, it only checks
  * `isPausable(scene)`, the opt-out a non-game screen sets.
  */
+/**
+ * Scenes with controls attached for their current run. `installPauseLifecycle`
+ * can reach a scene by two paths (its CREATE event, or the immediate attach
+ * for a scene already running when the installer boots), and this keeps the
+ * second one from stacking a duplicate set of buttons on top of the first.
+ * Cleared on SHUTDOWN, so the next run of the same scene attaches again.
+ */
+const attached = new WeakSet<Phaser.Scene>();
+
 export function attachPauseControl(scene: Phaser.Scene): void {
   if (!isPausable(scene)) return;
+  if (attached.has(scene)) return;
+  attached.add(scene);
 
   const triggerPause = (): void => {
     if (isPaused()) return;
@@ -90,6 +101,7 @@ export function attachPauseControl(scene: Phaser.Scene): void {
   place();
 
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    attached.delete(scene);
     scene.input.keyboard?.off('keydown-ESC', onKey);
     scene.input.keyboard?.off('keydown-P', onKey);
     pauseButton.off('pointerdown', onPauseDown);
