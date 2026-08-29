@@ -37,18 +37,11 @@ const playable = (counts: { run: number; jump: number; crouch: number; damage: n
 ];
 
 export const CHARACTER_MANIFEST: CharacterDefinition[] = buildCharacterManifest([
-  // Mirrors the real Atmos: playable, with a walk set nothing draws yet.
-  scan(
-    'Atmos',
-    [...playable({ run: 6, jump: 5, crouch: 3, damage: 4 }), ...frames('gameplay/walk', 5)],
-    {
-      overrides: {
-        presentation: {
-          dialogueScale: 1.857,
-        },
-      },
-    },
-  ),
+  // Mirrors the real Atmos: playable, with a walk set the connective levels draw.
+  scan('Atmos', [
+    ...playable({ run: 6, jump: 5, crouch: 3, damage: 4 }),
+    ...frames('gameplay/walk', 5),
+  ]),
   // Mirrors the real Disus: NPC only, with an appear animation.
   scan('Disus', [
     'gameplay/idle.png',
@@ -58,27 +51,12 @@ export const CHARACTER_MANIFEST: CharacterDefinition[] = buildCharacterManifest(
   ]),
   // A second playable character with different frame counts.
   scan('Klaus', playable({ run: 4, jump: 2, crouch: 1, damage: 1 })),
-  // Mirrors the real Doctor Doms: playable, with presentation overrides for
-  // gameplay alignment and the larger dialogue portrait fit.
-  scan(
-    'Doctor Doms',
-    [...playable({ run: 6, jump: 5, crouch: 3, damage: 4 }), ...frames('gameplay/walk', 5)],
-    {
-      overrides: {
-        presentation: {
-          gameplayScale: 0.757,
-          gameplayPoseScales: {
-            run: 0.787,
-            jump: 0.849,
-            crouch: 0.684,
-            damage: 0.785,
-            walk: 0.696,
-          },
-          dialogueScale: 1.857,
-        },
-      },
-    },
-  ),
+  // Mirrors the real Doctor Doms: playable, and since its artwork was
+  // normalised to Atmos's dimensions it carries no presentation overrides.
+  scan('Doctor Doms', [
+    ...playable({ run: 6, jump: 5, crouch: 3, damage: 4 }),
+    ...frames('gameplay/walk', 5),
+  ]),
   // Artwork-poor NPC: discoverable, but has no portraits, so casting it as a
   // speaker must fail rather than render nothing.
   scan('Mute', ['gameplay/idle.png']),

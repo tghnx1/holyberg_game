@@ -5,10 +5,13 @@ export type WalkDirection = -1 | 0 | 1;
 
 /**
  * Walking pace in logical pixels per second, shared by every level that moves
- * the player by hand rather than through the Berlin runner's physics. This is
- * the knob for how fast the player crosses a room: higher is faster.
+ * the player by hand rather than through the Berlin runner's physics.
+ *
+ * Deliberately well below the runner's RUN_SPEED: these levels play a walk
+ * cycle, and a run-speed traversal under walk artwork reads as skating. This
+ * is the knob for how fast the player crosses a room.
  */
-export const WALK_SPEED = 420;
+export const WALK_SPEED = 240;
 
 export interface WalkInputOptions {
   /**

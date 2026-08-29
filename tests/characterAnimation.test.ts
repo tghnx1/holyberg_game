@@ -145,7 +145,9 @@ describe('character data carries no gameplay values', () => {
       'rootUrl',
     ]);
     expect(atmos.presentation.gameplayScale).toBe(0.8);
-    expect(atmos.presentation.dialogueScale).toBeCloseTo(1.857, 3);
+    // Every portrait now shares one 1024x575 canvas, so no character carries a
+    // dialogue zoom of its own and all of them fit identically.
+    expect(atmos.presentation.dialogueScale).toBe(1);
     for (const frame of atmos.gameplay.run) {
       expect(Object.keys(frame).sort()).toEqual(['footGap', 'key', 'url']);
     }

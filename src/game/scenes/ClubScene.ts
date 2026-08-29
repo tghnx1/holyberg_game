@@ -1,7 +1,12 @@
 import Phaser from 'phaser';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
 import { queueCharacterGameplay } from '../characters/characterAssets';
-import { footOffset, loopedFrameIndex, RUN_CYCLE_MS } from '../characters/characterAnimation';
+import { footOffset } from '../characters/characterAnimation';
+import {
+  resolveLocomotionFrame,
+  resolveLocomotionPose,
+  type LocomotionMotion,
+} from '../characters/characterLocomotion';
 import {
   resolveGameplayScale,
   type CharacterAssetRef,
@@ -250,13 +255,12 @@ export class ClubScene extends Phaser.Scene {
   }
 
   private applyWalkFrame(walking: boolean): void {
-    // Still the run cycle, exactly as before: the discovered walk frames stay
-    // unused until Club's presentation is revisited on purpose.
-    const { run, idle } = this.character.gameplay;
-    const frame: CharacterAssetRef = walking
-      ? run[loopedFrameIndex(this.time.now, run.length, RUN_CYCLE_MS)]
-      : idle!;
-    const scale = resolveGameplayScale(this.character, walking ? 'run' : 'idle');
+    // Level 2 is a walk between Berlin and the DJ set, so it draws the
+    // discovered walk frames through the shared locomotion helper rather than
+    // looping the run cycle as it used to.
+    const motion: LocomotionMotion = walking ? 'walk' : 'idle';
+    const frame: CharacterAssetRef = resolveLocomotionFrame(this.character, motion, this.time.now);
+    const scale = resolveGameplayScale(this.character, resolveLocomotionPose(this.character, motion));
     if (frame.key !== this.currentFrameKey) {
       this.playerSprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;

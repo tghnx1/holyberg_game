@@ -16,6 +16,12 @@
  */
 
 export const RUN_CYCLE_MS = 552;
+/**
+ * Walking is a slower cadence than running, not the same cycle replayed with
+ * different artwork: the connective levels move the player at WALK_SPEED, and
+ * a run-speed cycle over walk frames reads as a nervous shuffle.
+ */
+export const WALK_CYCLE_MS = 840;
 export const CROUCH_CYCLE_MS = 330;
 /** Spread across however many airborne frames a character has. */
 export const JUMP_AIRBORNE_MS = 280;

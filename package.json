@@ -17,7 +17,9 @@
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:level4-toilet": "node scripts/generate-level4-toilet-asset.mjs",
+    "normalize:portraits": "node scripts/normalize-portrait-framing.mjs"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",

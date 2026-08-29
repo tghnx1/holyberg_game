@@ -1,7 +1,4 @@
 {
-  "presentation": {
-    "dialogueScale": 1.857
-  },
   "footGaps": {
     "gameplay/run/01.png": 4,
     "gameplay/run/02.png": 4,
