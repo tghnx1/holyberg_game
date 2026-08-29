@@ -19,8 +19,9 @@ export const DialogueLayout = {
   textPaddingX: 56,
   speakerOffsetY: 12,
   textOffsetY: 46,
-  /** How much of the portrait panel's box the Magician composition fills. */
-  portraitFillRatio: 0.96,
+  // How much of the portrait panel a speaker fills is the *global* dialogue
+  // head size and lives in `assets/dialoguePresentation.json`, edited through
+  // SceneEditor — not here, so there is one source of truth for every scene.
   /** Thickness of the diagonal seam between the scene and portrait panels. */
   dividerThickness: 26,
   /** Horizontal drift of the diagonal from top to bottom of the body. */

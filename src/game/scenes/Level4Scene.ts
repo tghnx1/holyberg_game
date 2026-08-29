@@ -34,6 +34,10 @@ import {
   TOILET_TEXTURE_UPSCALE,
 } from '../level/level4/level4Assets';
 import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
+import type { EditableObject } from '../systems/SceneEditor';
+import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
+import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 
 // Native pixel dimensions of assets/level_4/toilet-full.png. The artwork is
 // authored as a short wide strip (floor-to-ceiling height, full room width)
@@ -45,32 +49,41 @@ const TOILET_STRIP_HEIGHT = TOILET_STRIP_NATIVE_HEIGHT;
 // Native pixel height of assets/level_4/holyworld-background.png.
 const HOLYWORLD_BG_HEIGHT = 940;
 
+/** Native row the characters stand on: the floor the stall bases sit on. */
+const TOILET_FLOOR_NATIVE_Y_RAW = 147;
+
 /**
- * How tall the authored room is drawn, as a fraction of the logical viewport.
- *
- * The strip is only 175px tall for a whole floor-to-ceiling bathroom, so
- * stretching it to fill 720px made the room about five character-heights tall
- * — urinals as tall as the player. Characters are drawn at the same shared
- * `gameplayScale` as Berlin (0.8, ~147px), and that size is fixed, so the room
- * has to come to them: at this ratio it stands ~448px, about three character
- * heights, matching the character-to-room proportion Dialogue 1's metro panel
- * already uses.
- *
- * The artwork itself is never stretched — only uniformly scaled — so the strip
- * cannot fill the frame at an honest proportion. `buildRoomBands` fills what is
- * left above and below with tones taken from the artwork's own edges.
+ * Horizontal scale for the room, keeping the character's width correct against
+ * the fittings it walks past: the strip holds a whole bathroom in 175px, so
+ * scaling it uniformly to fill the frame made urinals as tall as the player.
+ * Every horizontal position in the level is expressed through this.
  */
 const TOILET_HEIGHT_RATIO = 448 / 720;
 const TOILET_SCALE = (DESIGN_HEIGHT * TOILET_HEIGHT_RATIO) / TOILET_STRIP_HEIGHT;
 
 /**
- * Native row the characters stand on: the floor the stall bases sit on, which
- * is also the door opening's bottom edge, so actors and door share one floor.
+ * Vertical scale, chosen so the room fills the frame instead of standing at
+ * its own proportional height with dead space above and below it.
+ *
+ * Derived from the artwork's own floor row rather than its full height: at
+ * this scale native y 147 lands exactly on GROUND_Y, so the characters keep
+ * standing on the floor the stalls stand on, and the remaining walkway rows
+ * carry past the bottom of the frame.
+ *
+ * Applied on Y only. `TOILET_SCALE` still governs X, so every horizontal
+ * position below — the stall, the door, the walk distances, the crumbling
+ * edge — is completely unaffected, and the character keeps its correct width
+ * relative to the fittings. The artwork is stretched vertically as a result,
+ * which is a deliberate trade of physical proportion for a full-height frame.
  */
-const TOILET_FLOOR_NATIVE_Y = 147;
-/** World y of the artwork's top edge, placing that floor row on GROUND_Y. */
-const TOILET_TOP_Y = GROUND_Y - TOILET_FLOOR_NATIVE_Y * TOILET_SCALE;
-const TOILET_BOTTOM_Y = TOILET_TOP_Y + TOILET_STRIP_HEIGHT * TOILET_SCALE;
+const TOILET_SCALE_Y = GROUND_Y / TOILET_FLOOR_NATIVE_Y_RAW;
+
+/**
+ * The artwork is anchored at the top of the frame; the vertical scale above is
+ * what puts its floor row on GROUND_Y, so no y offset is needed any more.
+ */
+const TOILET_FLOOR_NATIVE_Y = TOILET_FLOOR_NATIVE_Y_RAW;
+const TOILET_TOP_Y = 0;
 
 // Native-pixel x where the artwork starts crumbling away to transparency
 // (measured against toilet-full.png), scaled into world space.
@@ -83,9 +96,9 @@ const DISSOLVE_START_X = DISSOLVE_START_X_NATIVE * TOILET_SCALE;
 // derived from that rect so the door and the actors cannot drift apart.
 const STALL_OPENING_LEFT = 665 * TOILET_SCALE;
 const STALL_OPENING_RIGHT = 700 * TOILET_SCALE;
-const STALL_OPENING_TOP = TOILET_TOP_Y + 50 * TOILET_SCALE;
+const STALL_OPENING_TOP = 50 * TOILET_SCALE_Y;
 // The opening's floor row is the row the actors stand on, so this is GROUND_Y.
-const STALL_OPENING_BOTTOM = TOILET_TOP_Y + TOILET_FLOOR_NATIVE_Y * TOILET_SCALE;
+const STALL_OPENING_BOTTOM = TOILET_FLOOR_NATIVE_Y * TOILET_SCALE_Y;
 const STALL_OPENING_WIDTH = STALL_OPENING_RIGHT - STALL_OPENING_LEFT;
 const STALL_OPENING_HEIGHT = STALL_OPENING_BOTTOM - STALL_OPENING_TOP;
 
@@ -110,16 +123,6 @@ const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 const LEVEL4_WORLD_WIDTH = TOILET_STRIP_WIDTH * TOILET_SCALE + DESIGN_WIDTH;
 const NPC_WAIT_FACING: 1 | -1 = -1;
 
-/** Same hue, `factor` of the brightness. */
-function darken(color: number, factor: number): number {
-  const c = Phaser.Display.Color.IntegerToColor(color);
-  return Phaser.Display.Color.GetColor(
-    Math.round(c.red * factor),
-    Math.round(c.green * factor),
-    Math.round(c.blue * factor),
-  );
-}
-
 interface Level4Actor {
   sprite: Phaser.GameObjects.Sprite;
   character: CharacterDefinition;
@@ -138,7 +141,7 @@ export interface Level4SceneData {
   npcId?: string;
 }
 
-export class Level4Scene extends Phaser.Scene {
+export class Level4Scene extends Phaser.Scene implements EditableScene {
   private rhythmResult: RhythmResult = createEmptyRhythmResult();
   private introComplete = false;
   private playerX = PLAYER_START_X;
@@ -150,15 +153,14 @@ export class Level4Scene extends Phaser.Scene {
   private npc!: Level4Actor;
   private holyworldBackground!: Phaser.GameObjects.TileSprite;
   private toiletStrip!: Phaser.GameObjects.Image;
-  private roomBands!: Phaser.GameObjects.Graphics;
-  private ceilingTone = 0x0a0612;
-  private floorTone = 0x0a0612;
   private stallDoor!: Phaser.GameObjects.Image;
   private walk!: WalkInput;
   /** The door's scaleX when shut, derived from the measured stall opening. */
   private doorClosedScaleX = 1;
   /** True only while the dialogue hand-off and the stall cutscene are running. */
   private controlsLocked = false;
+  /** Restored when the editor closes, so it cannot free a cutscene's controls. */
+  private controlsLockedBeforeEditor = false;
   private dialogueTriggered = false;
   private finished = false;
 
@@ -195,7 +197,6 @@ export class Level4Scene extends Phaser.Scene {
 
     this.buildBackground();
     this.buildToiletStrip();
-    this.buildRoomBands();
     this.buildActors();
     this.buildDoor();
 
@@ -241,93 +242,14 @@ export class Level4Scene extends Phaser.Scene {
     this.toiletStrip = this.add
       .image(0, TOILET_TOP_Y, LEVEL4_ASSET_KEYS.toiletStrip)
       .setOrigin(0, 0)
-      // Uniform: the artwork's aspect ratio is never distorted to fit the frame.
-      // Divided by the texture's own upscale so TOILET_SCALE stays expressed in
-      // authored pixels and the world geometry below is unaffected by it.
-      .setScale(TOILET_SCALE / TOILET_TEXTURE_UPSCALE)
+      // Deliberately non-uniform: X keeps the room's proportion against the
+      // character, Y stretches it to fill the frame. Both divided by the
+      // texture's own upscale so the scales stay expressed in authored pixels.
+      .setScale(
+        TOILET_SCALE / TOILET_TEXTURE_UPSCALE,
+        TOILET_SCALE_Y / TOILET_TEXTURE_UPSCALE,
+      )
       .setDepth(Depth.ENVIRONMENT + 5);
-  }
-
-  /**
-   * Fills the frame above and below the authored strip so the toilet reads as
-   * a whole room rather than a band floating in the void.
-   *
-   * The tones are sampled from the artwork's own top and bottom rows, so this
-   * is the room's existing wall and floor continuing, not new art — and it
-   * fades out across the same span where the artwork itself crumbles away, so
-   * the Holyworld reveal is never boxed in by a hard edge.
-   */
-  private buildRoomBands(): void {
-    // Sampled once: reading pixels back from a texture is not something to
-    // repeat on every orientation change.
-    this.ceilingTone = this.sampleStripRow(2);
-    this.floorTone = this.sampleStripRow(TOILET_STRIP_HEIGHT - 3);
-    this.roomBands = this.add.graphics().setDepth(Depth.ENVIRONMENT + 4);
-    this.layoutRoomBands();
-  }
-
-  /**
-   * Redrawn from the live camera height rather than the design height, so a
-   * viewport shorter or taller than 720 still has the floor band reach the
-   * bottom of the frame instead of stopping short or overrunning.
-   */
-  private layoutRoomBands(): void {
-    const ceiling = this.ceilingTone;
-    const floor = this.floorTone;
-    const toiletWidth = TOILET_STRIP_WIDTH * TOILET_SCALE;
-    const viewportHeight = Math.max(DESIGN_HEIGHT, this.cameras.main.height);
-    this.roomBands.clear();
-    /**
-     * `near` is the tone where the band meets the artwork; `far` is where it
-     * runs off the top or bottom of the frame. Shading between them reads as
-     * the room's own wall carrying on into the dark rather than as a flat bar,
-     * and each band fades out horizontally across the same span where the
-     * artwork crumbles, so the Holyworld reveal is never boxed in.
-     */
-    const band = (near: number, y: number, height: number, nearAtTop: boolean): void => {
-      if (height <= 0) return;
-      const far = darken(near, 0.42);
-      const top = nearAtTop ? near : far;
-      const bottom = nearAtTop ? far : near;
-      this.roomBands.fillGradientStyle(top, top, bottom, bottom, 1, 1, 1, 1);
-      this.roomBands.fillRect(0, y, DISSOLVE_START_X, height);
-      this.roomBands.fillGradientStyle(top, top, bottom, bottom, 1, 0, 1, 0);
-      this.roomBands.fillRect(DISSOLVE_START_X, y, toiletWidth - DISSOLVE_START_X, height);
-    };
-    // Above the room the wall recedes upward; below it the floor runs toward
-    // the camera, so each band keeps the artwork's own tone at the shared edge.
-    band(ceiling, 0, TOILET_TOP_Y, false);
-    band(floor, TOILET_BOTTOM_Y, viewportHeight - TOILET_BOTTOM_Y, true);
-  }
-
-  /** Average colour of one native row of the strip, across its intact span. */
-  private sampleStripRow(nativeY: number): number {
-    const key = LEVEL4_ASSET_KEYS.toiletStrip;
-    let r = 0;
-    let g = 0;
-    let b = 0;
-    let taken = 0;
-    for (let i = 1; i <= 8; i += 1) {
-      // Sampled only from the solid left-hand span; the right edge is the
-      // transparent crumble and would wash the average out.
-      const x = Math.round((DISSOLVE_START_X_NATIVE * i) / 9);
-      const pixel = this.textures.getPixel(
-        x * TOILET_TEXTURE_UPSCALE,
-        nativeY * TOILET_TEXTURE_UPSCALE,
-        key,
-      );
-      if (!pixel) continue;
-      r += pixel.red;
-      g += pixel.green;
-      b += pixel.blue;
-      taken += 1;
-    }
-    if (taken === 0) return 0x0a0612;
-    return Phaser.Display.Color.GetColor(
-      Math.round(r / taken),
-      Math.round(g / taken),
-      Math.round(b / taken),
-    );
   }
 
   private buildActors(): void {
@@ -378,7 +300,7 @@ export class Level4Scene extends Phaser.Scene {
 
   private syncActor(actor: Level4Actor, now: number): void {
     const frame = this.resolveActorFrame(actor, now);
-    const scale = resolveGameplayScale(
+    const baseScale = resolveGameplayScale(
       actor.character,
       resolveLocomotionPose(actor.character, actor.motion),
     );
@@ -386,17 +308,109 @@ export class Level4Scene extends Phaser.Scene {
       actor.sprite.setTexture(frame.key);
       actor.currentKey = frame.key;
     }
+    const anchor = this.actorAnchor(actor, frame.footGap, baseScale);
+    // Visual only: the editor's saved offset and scale move the drawn sprite,
+    // never `actor.x`, so triggers, the cutscene and completion are unaffected.
+    const visual = this.playerVisualOffset(actor);
     actor.sprite
       .setFlipX(actor.facing < 0)
-      .setScale(scale)
-      .setPosition(actor.x, actor.y + footOffset(frame.footGap, scale) + 10);
+      .setScale(baseScale * visual.scale)
+      .setPosition(anchor.x + visual.offsetX, anchor.y + visual.offsetY);
+  }
+
+  /** Where gameplay wants this actor drawn, before any editor offset. */
+  private actorAnchor(actor: Level4Actor, footGap: number, scale: number): { x: number; y: number } {
+    return { x: actor.x, y: actor.y + footOffset(footGap, scale) + 10 };
+  }
+
+  /** The saved visual override, which only the main player carries. */
+  private playerVisualOffset(actor: Level4Actor): {
+    offsetX: number;
+    offsetY: number;
+    scale: number;
+  } {
+    if (actor !== this.player) return { offsetX: 0, offsetY: 0, scale: 1 };
+    const camera = this.cameras.main;
+    return getPlayerVisualOffset(this.scene.key, camera.width, camera.height);
+  }
+
+  // ------------------------------------------------------- EditableScene
+
+  getEditableObjects(): EditableObject[] {
+    const frame = this.resolveActorFrame(this.player, this.time.now);
+    return [
+      {
+        id: 'toilet',
+        label: 'TOILET ROOM',
+        target: this.toiletStrip,
+        getNativeSize: () => ({ width: TOILET_STRIP_WIDTH, height: TOILET_STRIP_HEIGHT }),
+        allowNonUniformScale: true,
+      },
+      {
+        id: 'stall-door',
+        label: 'STALL DOOR',
+        target: this.stallDoor,
+        getNativeSize: () => ({
+          width: this.stallDoor.frame.realWidth,
+          height: this.stallDoor.frame.realHeight,
+        }),
+        allowNonUniformScale: true,
+      },
+      {
+        id: 'npc',
+        label: `STORY NPC (${this.npcCharacter.name})`,
+        target: this.npc.sprite,
+        getNativeSize: () => ({
+          width: this.npc.sprite.frame.realWidth,
+          height: this.npc.sprite.frame.realHeight,
+        }),
+      },
+      createPlayerEditable(this, {
+        sprite: this.player.sprite,
+        getAnchor: () =>
+          this.actorAnchor(
+            this.player,
+            frame.footGap,
+            resolveGameplayScale(
+              this.player.character,
+              resolveLocomotionPose(this.player.character, this.player.motion),
+            ),
+          ),
+        getBaseScale: () =>
+          resolveGameplayScale(
+            this.player.character,
+            resolveLocomotionPose(this.player.character, this.player.motion),
+          ),
+        refresh: () => this.syncActor(this.player, this.time.now),
+      }),
+    ];
+  }
+
+  buildEditorSave(): EditorSavePayload {
+    return {
+      route: '/__scene-editor/save-layout',
+      body: buildSceneLayoutPayload(this.scene.key),
+    };
+  }
+
+  /**
+   * Freezes the walk so the character stays put while being positioned, and
+   * restores exactly the previous state on exit — a cutscene that was already
+   * holding the controls must stay in control of them.
+   */
+  onEditorEnable(): void {
+    this.controlsLockedBeforeEditor = this.controlsLocked;
+    this.controlsLocked = true;
+  }
+
+  onEditorDisable(): void {
+    this.controlsLocked = this.controlsLockedBeforeEditor;
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
     const camera = this.cameras.main;
     this.cameraX = Phaser.Math.Clamp(this.cameraX, 0, Math.max(0, LEVEL4_WORLD_WIDTH - camera.width));
     this.walk.layout(camera.width, camera.height);
-    this.layoutRoomBands();
     this.syncActor(this.player, this.time.now);
     this.syncActor(this.npc, this.time.now);
     this.cameras.main.setScroll(this.cameraX, 0);
@@ -581,7 +595,6 @@ export class Level4Scene extends Phaser.Scene {
     this.walk?.destroy();
     this.holyworldBackground?.destroy();
     this.toiletStrip?.destroy();
-    this.roomBands?.destroy();
     this.stallDoor?.destroy();
     this.player?.sprite.destroy();
     this.npc?.sprite.destroy();

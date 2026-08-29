@@ -32,7 +32,9 @@ import type { CharacterDefinition } from '../characters/characterManifest';
 import { resolveDialogueScale } from '../characters/characterManifest';
 import type { DialogueScript } from '../dialogue/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
-import type { SceneEditor } from '../systems/SceneEditor';
+import type { EditableObject, EditableSnapshot } from '../systems/SceneEditor';
+import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
+import { getDialoguePresentation } from '../dialogue/dialoguePresentation';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { PausableScene } from '../systems/pause/PausableScene';
@@ -86,7 +88,7 @@ function portraitFramesFor(character: CharacterDefinition): PortraitFrames {
  * change, the same responsive pattern Berlin and Rhythm use — none of the
  * dialogue timing/typewriter/skip logic depends on layout at all.
  */
-export class DialogueScene extends Phaser.Scene implements PausableScene {
+export class DialogueScene extends Phaser.Scene implements PausableScene, EditableScene {
   private script!: DialogueScript;
   private payload: Record<string, unknown> = {};
   private panels!: DialoguePanels;
@@ -122,9 +124,6 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
    * tap can only ever advance one step.
    */
   private armedTapPointerId?: number;
-  /** Dev-only visual layout editor; never created outside `import.meta.env.DEV`. */
-  private editor?: SceneEditor;
-  private editorKey?: Phaser.Input.Keyboard.Key;
   /** True while the SceneEditor is open; freezes dialogue progression, not the editor itself. */
   private dialoguePaused = false;
   /** this.time.now at the moment the editor opened, so resuming can shift phaseStartedAt by exactly how long it was open. */
@@ -203,26 +202,6 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
       else this.startLine(0);
     });
 
-    void this.createDevelopmentTools();
-  }
-
-  /**
-   * Dev-only: lets `?scene=dialogue` (or any dialogue launch) open the same
-   * generic scene editor Berlin uses its own bespoke one for, registered
-   * against the station scene's five objects. Guarded so production bundles
-   * never include it, matching BerlinScene's `createDevelopmentTools`.
-   */
-  private async createDevelopmentTools(): Promise<void> {
-    if (!import.meta.env.DEV) return;
-    const { SceneEditor } = await import('../systems/SceneEditor');
-    const editor = new SceneEditor(this, {
-      onSave: (snapshot) => this.saveStationLayout(snapshot),
-      onEnable: () => this.pauseDialogue(),
-      onDisable: () => this.resumeDialogue(),
-    });
-    for (const object of this.sceneStage?.getEditableObjects() ?? []) editor.register(object);
-    this.editor = editor;
-    this.editorKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
   }
 
   /**
@@ -267,18 +246,53 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
     this.skipFill.width = 0;
   }
 
-  private saveStationLayout(
-    snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
-  ): void {
-    if (!this.stationScene) return;
-    const layout = this.stationScene.buildLayoutFromSnapshot(snapshot);
-    void fetch('/__dialogue-editor/save-station', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(layout),
-    }).catch((error: unknown) => {
-      console.error('[DialogueScene] failed to save station layout', error);
-    });
+  // ------------------------------------------------------- EditableScene
+
+  /**
+   * The scene's own objects, plus the speaker portrait — which edits the
+   * *global* dialogue head size rather than anything local to this dialogue.
+   */
+  getEditableObjects(): EditableObject[] {
+    const objects: EditableObject[] = [...(this.sceneStage?.getEditableObjects() ?? [])];
+    const portrait = this.portrait;
+    if (portrait) {
+      objects.push({
+        id: 'dialogue-head-size',
+        label: 'DIALOGUE HEAD SIZE (global)',
+        target: portrait.getEditableTarget(),
+        resizable: true,
+        getNativeSize: () => portrait.getSourceSize(),
+        // Resizing writes back through the shared fit, so the value that
+        // changes is the global ratio every character in every dialogue reads,
+        // and this character's own calibration is divided back out first.
+        onChange: (transform) => portrait.commitGlobalScale(transform.scaleY),
+      });
+    }
+    return objects;
+  }
+
+  buildEditorSave(snapshot: EditableSnapshot[]): EditorSavePayload[] {
+    const payloads: EditorSavePayload[] = [
+      {
+        route: '/__dialogue-editor/save-presentation',
+        body: getDialoguePresentation(),
+      },
+    ];
+    if (this.stationScene) {
+      payloads.push({
+        route: '/__dialogue-editor/save-station',
+        body: this.stationScene.buildLayoutFromSnapshot(snapshot),
+      });
+    }
+    return payloads;
+  }
+
+  onEditorEnable(): void {
+    this.pauseDialogue();
+  }
+
+  onEditorDisable(): void {
+    this.resumeDialogue();
   }
 
   private buildScenePanel(): void {
@@ -539,8 +553,6 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
   update(): void {
     const now = this.time.now;
     this.sceneStage?.update?.(now);
-    if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
-    this.editor?.update();
     if (this.dialoguePaused) return;
 
     if (this.portrait instanceof TalkingPortrait) {
@@ -707,8 +719,6 @@ export class DialogueScene extends Phaser.Scene implements PausableScene {
     this.time.paused = false;
     this.tweens.killAll();
     this.time.removeAllEvents();
-    this.editor?.destroy();
-    this.editor = undefined;
     this.sceneStage?.destroy();
     this.portrait?.destroy();
     this.sceneStage = undefined;

@@ -21,7 +21,10 @@ import {
 import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
 import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
-import type { SceneEditor } from '../systems/SceneEditor';
+import type { EditableObject } from '../systems/SceneEditor';
+import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
+import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import { OrientationController } from '../responsive/OrientationController';
@@ -67,7 +70,7 @@ const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
  * never-played element (see `prefetchNeighbour`), which fills the HTTP cache
  * without giving the browser a second video to decode.
  */
-export class ClubScene extends Phaser.Scene {
+export class ClubScene extends Phaser.Scene implements EditableScene {
   private score = 0;
   private roomIndex = 0;
   private video?: Phaser.GameObjects.Video;
@@ -98,9 +101,6 @@ export class ClubScene extends Phaser.Scene {
   private finished = false;
   /** Ambient crowd for the current room; scenery only, never consulted by gameplay. */
   private npcs?: ClubNpcLayer;
-  /** Dev-only layout editor for the crowd; never created outside `import.meta.env.DEV`. */
-  private editor?: SceneEditor;
-  private editorKey?: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super('ClubScene');
@@ -163,48 +163,6 @@ export class ClubScene extends Phaser.Scene {
     });
     this.applyResponsiveLayout();
 
-    void this.createDevelopmentTools();
-  }
-
-  /**
-   * Dev-only: registers the ambient crowd with the same generic SceneEditor
-   * the dialogue station uses, so their positions are dragged and saved back
-   * to `clubNpcPlacement.json` rather than tuned by editing numbers blind.
-   * Guarded so production bundles never include it, matching Berlin and
-   * DialogueScene.
-   */
-  private async createDevelopmentTools(): Promise<void> {
-    if (!import.meta.env.DEV) return;
-    const { SceneEditor } = await import('../systems/SceneEditor');
-    this.editor = new SceneEditor(this, {
-      onSave: (snapshot) => this.saveNpcPlacement(snapshot),
-    });
-    this.registerNpcsWithEditor();
-    this.editorKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-  }
-
-  /** Re-registers the current room's crowd; the editor is keyed by object id. */
-  private registerNpcsWithEditor(): void {
-    const editor = this.editor;
-    if (!editor || !this.npcs) return;
-    for (const object of this.npcs.getEditableObjects()) editor.register(object);
-  }
-
-  private saveNpcPlacement(
-    snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
-  ): void {
-    const npcs = this.npcs;
-    if (!npcs) return;
-    void fetch('/__club-editor/save-npcs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roomId: npcs.getRoomId(),
-        placements: npcs.buildLayoutFromSnapshot(snapshot),
-      }),
-    }).catch((error: unknown) => {
-      console.error('[ClubScene] failed to save NPC placement', error);
-    });
   }
 
   // ---------------------------------------------------------------- input
@@ -239,8 +197,6 @@ export class ClubScene extends Phaser.Scene {
   // ----------------------------------------------------------------- loop
 
   update(_time: number, delta: number): void {
-    if (this.editorKey && Phaser.Input.Keyboard.JustDown(this.editorKey)) this.editor?.toggle();
-    this.editor?.update();
     // Ambient only: the crowd keeps looping regardless of what the player is
     // doing, and drives nothing else in the scene.
     this.npcs?.update(this.time.now);
@@ -260,17 +216,67 @@ export class ClubScene extends Phaser.Scene {
     // looping the run cycle as it used to.
     const motion: LocomotionMotion = walking ? 'walk' : 'idle';
     const frame: CharacterAssetRef = resolveLocomotionFrame(this.character, motion, this.time.now);
-    const scale = resolveGameplayScale(this.character, resolveLocomotionPose(this.character, motion));
+    const baseScale = resolveGameplayScale(
+      this.character,
+      resolveLocomotionPose(this.character, motion),
+    );
     if (frame.key !== this.currentFrameKey) {
       this.playerSprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;
     }
     // Right is the artwork's natural facing; left mirrors it.
     this.playerSprite.setFlipX(this.facing === -1);
+    const anchor = this.playerAnchor(frame.footGap, baseScale);
+    // Visual only: the saved offset moves the drawn sprite, never `walkX`, so
+    // room edges and transitions trigger at exactly the same places.
+    const camera = this.cameras.main;
+    const visual = getPlayerVisualOffset(this.scene.key, camera.width, camera.height);
+    this.playerSprite.setScale(baseScale * visual.scale);
     this.playerSprite.setPosition(
-      Math.round(this.walkX),
-      Math.round(this.floorY() + footOffset(frame.footGap, scale) + FOOT_NUDGE),
+      Math.round(anchor.x + visual.offsetX),
+      Math.round(anchor.y + visual.offsetY),
     );
+  }
+
+  /** Where gameplay wants the player drawn, before any editor offset. */
+  private playerAnchor(footGap: number, scale: number): { x: number; y: number } {
+    return { x: this.walkX, y: this.floorY() + footOffset(footGap, scale) + FOOT_NUDGE };
+  }
+
+  // ------------------------------------------------------- EditableScene
+
+  getEditableObjects(): EditableObject[] {
+    const motion: LocomotionMotion = 'idle';
+    const frame = resolveLocomotionFrame(this.character, motion, this.time.now);
+    const baseScale = (): number =>
+      resolveGameplayScale(this.character, resolveLocomotionPose(this.character, motion));
+    return [
+      // The ambient crowd exposes its own objects, so a room with a different
+      // set of groups is editable without this scene knowing what is in it.
+      ...(this.npcs?.getEditableObjects() ?? []),
+      createPlayerEditable(this, {
+        sprite: this.playerSprite,
+        getAnchor: () => this.playerAnchor(frame.footGap, baseScale()),
+        getBaseScale: baseScale,
+        refresh: () => this.applyWalkFrame(false),
+      }),
+    ];
+  }
+
+  buildEditorSave(
+    snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
+  ): EditorSavePayload[] {
+    const payloads: EditorSavePayload[] = [
+      { route: '/__scene-editor/save-layout', body: buildSceneLayoutPayload(this.scene.key) },
+    ];
+    const npcs = this.npcs;
+    if (npcs) {
+      payloads.push({
+        route: '/__club-editor/save-npcs',
+        body: { roomId: npcs.getRoomId(), placements: npcs.buildLayoutFromSnapshot(snapshot) },
+      });
+    }
+    return payloads;
   }
 
   private checkEdges(direction: -1 | 1): void {
@@ -374,7 +380,6 @@ export class ClubScene extends Phaser.Scene {
       (frame) => !this.textures.exists(frame.key),
     );
     if (missing.length === 0) {
-      this.registerNpcsWithEditor();
       return;
     }
 
@@ -384,7 +389,6 @@ export class ClubScene extends Phaser.Scene {
       // was in flight; rebuilding then would populate the wrong room.
       if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
       npcs.setRoom(roomId);
-      this.registerNpcsWithEditor();
     });
     this.load.start();
   }
@@ -533,8 +537,6 @@ export class ClubScene extends Phaser.Scene {
     this.releaseVideo();
     this.npcs?.destroy();
     this.npcs = undefined;
-    this.editor?.destroy();
-    this.editor = undefined;
     // Leaving Level 2: every room file is done with, and a retry re-warms
     // from the HTTP cache rather than the network.
     for (const room of CLUB_ROOMS) releasePrefetchedVideo(room.videoUrl);

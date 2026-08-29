@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DialogueLayout } from './dialogueConstants';
 import { buildPortraitClipPoints, computePortraitFitScale } from './dialogueLayoutMetrics';
+import { getDialoguePresentation, setPortraitFillRatio } from './dialoguePresentation';
 import { isTalkFrameActive } from './dialogueTalkAnimation';
 
 
@@ -117,14 +118,60 @@ export class TalkingPortrait {
    */
   private fitPortrait(): void {
     const source = this.scene.textures.get(this.image.texture.key).getSourceImage();
+    // The fill ratio is the *global* dialogue head size, shared by every
+    // dialogue and every character; `scaleMultiplier` is only this character's
+    // calibration relative to that reference.
     const scale = computePortraitFitScale(
       this.panelWidth,
       this.panelHeight,
       source.width,
       source.height,
-      DialogueLayout.portraitFillRatio,
+      getDialoguePresentation().portraitFillRatio,
     ) * (this.speaker.scaleMultiplier ?? 1);
     this.image.setPosition(this.panelWidth / 2, this.panelHeight / 2).setScale(scale);
+  }
+
+  // ------------------------------------------------- editor-facing surface
+
+  /** The object SceneEditor selects, drags and resizes. */
+  getEditableTarget(): Phaser.GameObjects.Image {
+    return this.image;
+  }
+
+  /** Native size of the portrait canvas currently drawn. */
+  getSourceSize(): { width: number; height: number } {
+    const source = this.scene.textures.get(this.image.texture.key).getSourceImage();
+    return { width: source.width, height: source.height };
+  }
+
+  /** This character's calibration, so the editor can divide it back out. */
+  getScaleMultiplier(): number {
+    return this.speaker.scaleMultiplier ?? 1;
+  }
+
+  /**
+   * Turns a scale the editor just dragged the portrait to into the *global*
+   * head size, then refits so the change is applied through the shared path
+   * rather than left as a one-off transform on this one image.
+   */
+  commitGlobalScale(scale: number): void {
+    const source = this.getSourceSize();
+    const unitFit = computePortraitFitScale(
+      this.panelWidth,
+      this.panelHeight,
+      source.width,
+      source.height,
+      1,
+    );
+    const calibration = this.getScaleMultiplier();
+    if (unitFit <= 0 || calibration <= 0) return;
+    setPortraitFillRatio(scale / (unitFit * calibration));
+    this.fitPortrait();
+  }
+
+  /** Re-applies the shared fit, e.g. after the global head size changed. */
+  refit(): void {
+    this.fitPortrait();
   }
 
   /** Single point where the drawn frame changes, so the fit can never be skipped. */

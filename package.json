@@ -18,8 +18,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "generate:level4-toilet": "node scripts/generate-level4-toilet-asset.mjs",
-    "normalize:portraits": "node scripts/normalize-portrait-framing.mjs"
+    "generate:level4-toilet": "node scripts/generate-level4-toilet-asset.mjs"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",
