@@ -74,6 +74,52 @@ export interface ResolvedSceneCast {
   arriving: CharacterDefinition;
 }
 
+/** A drawing capability one of the two cast slots can be required to have. */
+type DialogueActorCapability = 'metroPose' | 'appearAnimation' | 'standingPose';
+
+const ACTOR_CAPABILITIES: Readonly<
+  Record<DialogueActorCapability, { has: (character: CharacterDefinition) => boolean; what: string }>
+> = {
+  metroPose: {
+    has: (character) => character.capabilities.metroActor,
+    what: 'dialogue/poses/metro_sit.png',
+  },
+  appearAnimation: {
+    has: (character) => character.capabilities.appearAnimation,
+    what: 'dialogue/appear/*.png',
+  },
+  // The entrance leaves the actor standing there for the rest of the scene, so
+  // it needs a pose to settle on. An appear frame is not a substitute: those
+  // are mid-materialisation poses and only the last happens to look settled
+  // for the character that exists today.
+  standingPose: {
+    has: (character) => Boolean(character.gameplay.idle),
+    what: 'gameplay/idle.png to stand in the scene',
+  },
+};
+
+/**
+ * What each dialogue scene's renderer actually draws of its cast, and
+ * therefore what casting has to guarantee for it.
+ *
+ * Per scene rather than global because the two views stage their actors
+ * differently: `StationSceneView` seats one on the platform and materialises
+ * the other, so it needs the metro pose and the appear frames, while
+ * `ToiletSceneView` simply stands both on the floor from their gameplay idle
+ * and plays no entrance at all. Asserting the station's needs everywhere
+ * rejected every playable character from the toilet scene — none of them have
+ * an appear animation — for capabilities that scene never draws.
+ */
+export const DIALOGUE_SCENE_ACTOR_CAPABILITIES: Readonly<
+  Record<
+    DialogueSceneId,
+    { seated: readonly DialogueActorCapability[]; arriving: readonly DialogueActorCapability[] }
+  >
+> = {
+  metroStation: { seated: ['metroPose'], arriving: ['appearAnimation', 'standingPose'] },
+  toilet: { seated: ['standingPose'], arriving: ['standingPose'] },
+};
+
 /** The reference a line speaks through: its own, else the script's default. */
 export function getSpeakerRef(line: DialogueLine, script: DialogueScript): CharacterRef {
   const ref = line.speaker ?? script.defaultSpeaker;
@@ -175,29 +221,22 @@ export function assertDialogueCastCapabilities(
 
   const cast = resolveSceneCast(script, override);
   const sceneRefs = override ?? DIALOGUE_SCENE_CASTS[script.sceneId];
-  require(
-    cast.seated,
-    cast.seated.capabilities.metroActor,
-    'dialogue/poses/metro_sit.png',
-    `seated actor ${describeRef(sceneRefs.seatedActor)}`,
-  );
-  const arrivingWhere = `arriving actor ${describeRef(sceneRefs.arrivingActor)}`;
-  require(
-    cast.arriving,
-    cast.arriving.capabilities.appearAnimation,
-    'dialogue/appear/*.png',
-    arrivingWhere,
-  );
-  // The entrance leaves the actor standing there for the rest of the scene,
-  // so it needs a pose to settle on. An appear frame is not a substitute:
-  // those are mid-materialisation poses and only the last happens to look
-  // settled for the character that exists today.
-  require(
-    cast.arriving,
-    Boolean(cast.arriving.gameplay.idle),
-    'gameplay/idle.png to settle on after its entrance',
-    arrivingWhere,
-  );
+  const needed = DIALOGUE_SCENE_ACTOR_CAPABILITIES[script.sceneId];
+  const slots = [
+    { label: 'seated actor', character: cast.seated, ref: sceneRefs.seatedActor, needs: needed.seated },
+    {
+      label: 'arriving actor',
+      character: cast.arriving,
+      ref: sceneRefs.arrivingActor,
+      needs: needed.arriving,
+    },
+  ] as const;
+  for (const slot of slots) {
+    for (const capability of slot.needs) {
+      const { has, what } = ACTOR_CAPABILITIES[capability];
+      require(slot.character, has(slot.character), what, `${slot.label} ${describeRef(slot.ref)}`);
+    }
+  }
 
   if (problems.length > 0) {
     throw new DialogueCastError(

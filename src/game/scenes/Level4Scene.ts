@@ -4,7 +4,6 @@ import {
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
   GROUND_Y,
-  RUN_SPEED,
 } from '../constants';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { footOffset, loopedFrameIndex, RUN_CYCLE_MS, staticRunFrameIndex } from '../characters/characterAnimation';
@@ -24,6 +23,7 @@ import {
   type Level4ResumePayload,
 } from '../level/level4/level4Flow';
 import { getLevel4AssetUrls, LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
+import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 
 // Native pixel dimensions of assets/level_4/toilet-full.png. The artwork is
 // authored as a short wide strip (floor-to-ceiling height, full room width)
@@ -35,28 +35,47 @@ const TOILET_STRIP_HEIGHT = 175;
 // Native pixel height of assets/level_4/holyworld-background.png.
 const HOLYWORLD_BG_HEIGHT = 940;
 
-// Scale that makes the toilet strip fill the full playable height (floor at
-// GROUND_Y, ceiling at the top of the viewport) instead of the native 175px
-// sliver — this is what makes the toilet read as the dominant environment.
-const TOILET_SCALE = GROUND_Y / TOILET_STRIP_HEIGHT;
+// Scale that makes the toilet strip fill the whole logical viewport height
+// instead of the native 175px sliver — this is what makes the toilet read as
+// the dominant environment. The logical height is pinned at DESIGN_HEIGHT and
+// only the width expands, so this is viewport-independent. It also lands the
+// artwork's own stall floor (native y 147) on GROUND_Y, so the characters walk
+// on the floor the stalls stand on and the walkway fills the frame beneath them.
+const TOILET_SCALE = DESIGN_HEIGHT / TOILET_STRIP_HEIGHT;
 
 // Native-pixel x where the artwork starts crumbling away to transparency
 // (measured against toilet-full.png), scaled into world space.
 const DISSOLVE_START_X_NATIVE = 1150;
 const DISSOLVE_START_X = DISSOLVE_START_X_NATIVE * TOILET_SCALE;
 
-// Native-pixel x of the one stall in the artwork that is drawn without a
-// door (open frame, visible toilet bowl) — the stall used for the portal
-// cutscene — and the walkway positions around it, scaled into world space.
-const DIALOGUE_TRIGGER_X = 620 * TOILET_SCALE;
-const NPC_WAIT_X = 655 * TOILET_SCALE;
-const PLAYER_ENTER_X = 692 * TOILET_SCALE;
-const NPC_ENTER_X = 708 * TOILET_SCALE;
-const NPC_EXIT_X = 605 * TOILET_SCALE;
-const DOOR_HINGE_X = 716 * TOILET_SCALE;
-// Native opening width of that stall frame, used to size the door overlay
-// so it plausibly fits the gap instead of swallowing neighbouring stalls.
-const STALL_OPENING_WIDTH_NATIVE = 40;
+// The one stall in the artwork drawn without a door — an open frame with a
+// visible toilet bowl — is the portal stall. Its opening was measured off
+// toilet-full.png in native pixels; everything the cutscene positions is
+// derived from that rect so the door and the actors cannot drift apart.
+const STALL_OPENING_LEFT = 665 * TOILET_SCALE;
+const STALL_OPENING_RIGHT = 700 * TOILET_SCALE;
+const STALL_OPENING_TOP = 50 * TOILET_SCALE;
+const STALL_OPENING_BOTTOM = 147 * TOILET_SCALE;
+const STALL_OPENING_WIDTH = STALL_OPENING_RIGHT - STALL_OPENING_LEFT;
+const STALL_OPENING_HEIGHT = STALL_OPENING_BOTTOM - STALL_OPENING_TOP;
+
+/**
+ * How wide the door is drawn while open, as a fraction of its closed width.
+ * The door is hinged on the opening's right edge and only ever narrows toward
+ * that hinge — it never rotates and never moves — so an open door reads as a
+ * leaf turned edge-on inside the frame rather than one lying on the floor.
+ */
+const DOOR_OPEN_SCALE = 0.12;
+
+// Walkway positions, in the same native pixel space as the stall rect.
+const PLAYER_START_X = 160 * TOILET_SCALE;
+const PLAYER_MIN_X = 40 * TOILET_SCALE;
+const NPC_WAIT_X = 645 * TOILET_SCALE;
+const PLAYER_ENTER_X = 672 * TOILET_SCALE;
+const NPC_ENTER_X = 690 * TOILET_SCALE;
+const NPC_EXIT_X = 555 * TOILET_SCALE;
+/** How close to the waiting NPC the player must walk for them to speak up. */
+const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 
 const LEVEL4_WORLD_WIDTH = TOILET_STRIP_WIDTH * TOILET_SCALE + DESIGN_WIDTH;
 const NPC_WAIT_FACING: 1 | -1 = -1;
@@ -82,7 +101,7 @@ export interface Level4SceneData {
 export class Level4Scene extends Phaser.Scene {
   private rhythmResult: RhythmResult = createEmptyRhythmResult();
   private introComplete = false;
-  private playerX = 160 * TOILET_SCALE;
+  private playerX = PLAYER_START_X;
   private cameraX = 0;
   private npcId?: string;
   private playerCharacter!: CharacterDefinition;
@@ -92,8 +111,11 @@ export class Level4Scene extends Phaser.Scene {
   private holyworldBackground!: Phaser.GameObjects.TileSprite;
   private toiletStrip!: Phaser.GameObjects.Image;
   private stallDoor!: Phaser.GameObjects.Image;
-  private running = false;
-  private cutscenePlaying = false;
+  private walk!: WalkInput;
+  /** The door's scaleX when shut, derived from the measured stall opening. */
+  private doorClosedScaleX = 1;
+  /** True only while the dialogue hand-off and the stall cutscene are running. */
+  private controlsLocked = false;
   private dialogueTriggered = false;
   private finished = false;
 
@@ -104,12 +126,14 @@ export class Level4Scene extends Phaser.Scene {
   init(data: Partial<Level4SceneData>): void {
     this.rhythmResult = data.rhythmResult ?? createEmptyRhythmResult();
     this.introComplete = data.introComplete === true;
-    this.playerX = data.playerX ?? 160 * TOILET_SCALE;
+    this.playerX = data.playerX ?? PLAYER_START_X;
     this.cameraX = data.cameraX ?? 0;
     this.npcId = data.npcId;
-    this.running = false;
-    this.cutscenePlaying = false;
-    this.dialogueTriggered = false;
+    this.controlsLocked = false;
+    // Coming back from DialogueScene the conversation has already happened.
+    // Without this the resumed scene would re-arm the proximity trigger and
+    // walk straight back into DialogueScene, looping forever at the stall.
+    this.dialogueTriggered = this.introComplete;
     this.finished = false;
   }
 
@@ -131,6 +155,11 @@ export class Level4Scene extends Phaser.Scene {
     this.buildActors();
     this.buildDoor();
 
+    // Same manual walk control as the Level 2 walk: arrows/A-D on desktop,
+    // hold either half of the screen on touch. Below Depth.UI so the pause,
+    // sound and fullscreen controls still win the pointer.
+    this.walk = new WalkInput(this, { zoneDepth: Depth.UI - 5 });
+
     this.cameras.main.setBounds(0, 0, LEVEL4_WORLD_WIDTH, DESIGN_HEIGHT);
     this.cameras.main.startFollow(this.player.sprite, true, 0.08, 0.08, -220, 0);
     this.cameras.main.setScroll(this.cameraX, 0);
@@ -146,8 +175,6 @@ export class Level4Scene extends Phaser.Scene {
       this.syncActor(this.player, this.time.now);
       this.syncActor(this.npc, this.time.now);
       this.startPostDialogueCutscene();
-    } else {
-      this.running = true;
     }
   }
 
@@ -175,21 +202,22 @@ export class Level4Scene extends Phaser.Scene {
   }
 
   private buildActors(): void {
-    this.player = this.createActor(this.playerCharacter, this.playerX, GROUND_Y, 1, 'walk');
+    this.player = this.createActor(this.playerCharacter, this.playerX, GROUND_Y, 1, 'idle');
     this.npc = this.createActor(this.npcCharacter, NPC_WAIT_X, GROUND_Y, NPC_WAIT_FACING, 'idle');
   }
 
   private buildDoor(): void {
-    // Hinged to the open stall's actual frame (its right edge, matching the
-    // artwork), scaled to the opening's own width so it doesn't swallow
-    // neighbouring stalls. Starts open, swung out of the walkway.
-    const doorScale = (STALL_OPENING_WIDTH_NATIVE * TOILET_SCALE) / 78;
+    // Sized and placed to fill the measured stall opening exactly, hinged on
+    // the opening's bottom-right corner. It stays upright for the whole level
+    // and is never repositioned — only its width changes — so it can never
+    // rotate onto the floor or travel with a character.
     this.stallDoor = this.add
-      .image(DOOR_HINGE_X, GROUND_Y, LEVEL4_ASSET_KEYS.stallDoor)
+      .image(STALL_OPENING_RIGHT, STALL_OPENING_BOTTOM, LEVEL4_ASSET_KEYS.stallDoor)
       .setOrigin(1, 1)
-      .setScale(doorScale)
-      .setDepth(Depth.FOREGROUND + 10)
-      .setAngle(-40);
+      .setDepth(Depth.FOREGROUND + 10);
+    this.stallDoor.setDisplaySize(STALL_OPENING_WIDTH, STALL_OPENING_HEIGHT);
+    this.doorClosedScaleX = this.stallDoor.scaleX;
+    this.stallDoor.scaleX = this.doorClosedScaleX * DOOR_OPEN_SCALE;
   }
 
   private createActor(
@@ -241,6 +269,7 @@ export class Level4Scene extends Phaser.Scene {
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
     const camera = this.cameras.main;
     this.cameraX = Phaser.Math.Clamp(this.cameraX, 0, Math.max(0, LEVEL4_WORLD_WIDTH - camera.width));
+    this.walk.layout(camera.width, camera.height);
     this.syncActor(this.player, this.time.now);
     this.syncActor(this.npc, this.time.now);
     this.cameras.main.setScroll(this.cameraX, 0);
@@ -255,10 +284,19 @@ export class Level4Scene extends Phaser.Scene {
     if (this.finished) return;
     const now = this.time.now;
 
-    if (this.running && !this.cutscenePlaying) {
-      this.player.x += (RUN_SPEED * delta) / 1000;
-      this.player.facing = 1;
-      if (!this.dialogueTriggered && this.player.x >= DIALOGUE_TRIGGER_X) {
+    if (!this.controlsLocked) {
+      const direction = this.walk.direction;
+      if (direction !== 0) {
+        this.player.facing = direction;
+        this.player.x = Phaser.Math.Clamp(
+          this.player.x + (direction * WALK_SPEED * delta) / 1000,
+          PLAYER_MIN_X,
+          this.finishThreshold(),
+        );
+      }
+      this.player.motion = direction === 0 ? 'idle' : 'walk';
+
+      if (!this.dialogueTriggered && this.player.x >= NPC_WAIT_X - DIALOGUE_PROXIMITY) {
         this.startDialogue();
         return;
       }
@@ -276,7 +314,7 @@ export class Level4Scene extends Phaser.Scene {
   private startDialogue(): void {
     if (this.dialogueTriggered || this.finished) return;
     this.dialogueTriggered = true;
-    this.running = false;
+    this.controlsLocked = true;
     this.player.motion = 'idle';
     this.npc.motion = 'idle';
     const bundle = buildLevel4DialogueBundle(this.playerCharacter, this.npcCharacter);
@@ -295,8 +333,7 @@ export class Level4Scene extends Phaser.Scene {
   }
 
   private startPostDialogueCutscene(): void {
-    this.cutscenePlaying = true;
-    this.running = false;
+    this.controlsLocked = true;
     this.player.motion = 'walk';
     this.npc.motion = 'walk';
     this.npc.facing = 1;
@@ -306,7 +343,7 @@ export class Level4Scene extends Phaser.Scene {
     const onArrived = (): void => {
       arrivals += 1;
       if (arrivals < 2) return;
-      this.closeDoorThenWait();
+      this.stepIntoStall();
     };
 
     this.tweens.add({
@@ -325,13 +362,30 @@ export class Level4Scene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Both are standing in the opening: fade them into the unlit stall so the
+   * door shuts on an empty frame rather than across two visible characters.
+   */
+  private stepIntoStall(): void {
+    this.player.motion = 'idle';
+    this.npc.motion = 'idle';
+    this.tweens.add({
+      targets: [this.player.sprite, this.npc.sprite],
+      alpha: 0,
+      duration: 220,
+      ease: 'Quad.easeIn',
+      onComplete: () => this.closeDoorThenWait(),
+    });
+  }
+
   private closeDoorThenWait(): void {
-    // The door only ever rotates around its fixed hinge (DOOR_HINGE_X) — it
-    // must never translate toward the actors, or it reads as being carried.
+    // Only the door's width animates. Its position and its upright pose are
+    // fixed to the stall opening, so it cannot swing onto the floor or drift
+    // toward whoever is standing next to it.
     this.tweens.add({
       targets: this.stallDoor,
-      angle: 0,
-      duration: 240,
+      scaleX: this.doorClosedScaleX,
+      duration: 260,
       ease: 'Quad.easeOut',
       onComplete: () => {
         this.time.delayedCall(4000, () => this.openDoorAndExit());
@@ -340,13 +394,21 @@ export class Level4Scene extends Phaser.Scene {
   }
 
   private openDoorAndExit(): void {
-    this.npc.facing = -1;
     this.tweens.add({
       targets: this.stallDoor,
-      angle: -40,
-      duration: 240,
+      scaleX: this.doorClosedScaleX * DOOR_OPEN_SCALE,
+      duration: 260,
       ease: 'Quad.easeOut',
+      onComplete: () => this.walkNpcOut(),
     });
+  }
+
+  private walkNpcOut(): void {
+    // Both step back out of the stall; only the NPC leaves.
+    this.player.sprite.setAlpha(1);
+    this.npc.sprite.setAlpha(1);
+    this.npc.facing = -1;
+    this.npc.motion = 'walk';
     this.tweens.add({
       targets: this.npc,
       x: NPC_EXIT_X,
@@ -360,18 +422,17 @@ export class Level4Scene extends Phaser.Scene {
     });
   }
 
+  /** Hands control back: from here the player walks on under their own input. */
   private resumePlay(): void {
     if (this.finished) return;
-    this.cutscenePlaying = false;
-    this.running = true;
-    this.player.motion = 'walk';
+    this.player.motion = 'idle';
+    this.controlsLocked = false;
   }
 
   private finishLevel(): void {
     if (this.finished) return;
     this.finished = true;
-    this.running = false;
-    this.cutscenePlaying = false;
+    this.controlsLocked = true;
     this.scene.start('LevelCompleteScene', {
       score: 0,
       maxScore: 0,
@@ -390,6 +451,7 @@ export class Level4Scene extends Phaser.Scene {
   private cleanup(): void {
     this.tweens.killAll();
     this.time.removeAllEvents();
+    this.walk?.destroy();
     this.holyworldBackground?.destroy();
     this.toiletStrip?.destroy();
     this.stallDoor?.destroy();

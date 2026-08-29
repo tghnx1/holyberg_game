@@ -21,6 +21,7 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
+import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
 
 export interface ClubSceneData {
@@ -28,11 +29,6 @@ export interface ClubSceneData {
   score?: number;
 }
 
-/**
- * Walking pace in logical pixels per second. This is the knob for how fast
- * the player crosses a room: higher is faster.
- */
- const WALK_SPEED = 420;
 /**
  * How far inside the edge the player is placed on entering a room, and how
  * close to the edge counts as leaving. Comfortably wider than one step at
@@ -81,14 +77,7 @@ export class ClubScene extends Phaser.Scene {
   private playerSprite!: Phaser.GameObjects.Sprite;
   private roomLabel!: Phaser.GameObjects.Text;
   private hint?: Phaser.GameObjects.Text;
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
-  private keyA?: Phaser.Input.Keyboard.Key;
-  private keyD?: Phaser.Input.Keyboard.Key;
-  private leftZone?: Phaser.GameObjects.Zone;
-  private rightZone?: Phaser.GameObjects.Zone;
-  /** Pointer ids currently held on each walk zone, so multi-touch releases cleanly. */
-  private readonly leftPointers = new Set<number>();
-  private readonly rightPointers = new Set<number>();
+  private walk!: WalkInput;
   /**
    * The player's x as a float. The sprite itself is only ever placed on whole
    * pixels so the selected character's art stays crisp when it scales to fit
@@ -127,8 +116,6 @@ export class ClubScene extends Phaser.Scene {
     this.currentFrameKey = undefined;
     this.transitioning = false;
     this.finished = false;
-    this.leftPointers.clear();
-    this.rightPointers.clear();
   }
 
   create(): void {
@@ -218,39 +205,13 @@ export class ClubScene extends Phaser.Scene {
   // ---------------------------------------------------------------- input
 
   private buildControls(): void {
-    const keyboard = this.input.keyboard;
-    this.cursors = keyboard?.createCursorKeys();
-    this.keyA = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.keyD = keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    // Below Depth.UI so the fullscreen exit control still wins the pointer.
+    this.walk = new WalkInput(this, {
+      zoneDepth: Depth.UI - 5,
+      onHold: () => this.fadeHint(),
+    });
 
     if (!this.game.device.input.touch) return;
-
-    // Below Depth.UI so the fullscreen exit control still wins the pointer.
-    const zoneDepth = Depth.UI - 5;
-    this.leftZone = this.add.zone(0, 0, 1, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(zoneDepth);
-    this.rightZone = this.add.zone(0, 0, 1, 1).setOrigin(0, 0).setScrollFactor(0).setDepth(zoneDepth);
-    this.leftZone.setInteractive();
-    this.rightZone.setInteractive();
-
-    const hold = (set: Set<number>) => (pointer: Phaser.Input.Pointer) => {
-      pointer.event?.preventDefault();
-      set.add(pointer.id);
-      this.fadeHint();
-    };
-    this.leftZone.on('pointerdown', hold(this.leftPointers));
-    this.rightZone.on('pointerdown', hold(this.rightPointers));
-
-    // Released anywhere, including off the zone or off the canvas entirely.
-    const release = (pointer: Phaser.Input.Pointer): void => {
-      this.leftPointers.delete(pointer.id);
-      this.rightPointers.delete(pointer.id);
-    };
-    this.input.on(Phaser.Input.Events.POINTER_UP, release);
-    this.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, release);
-    this.input.on(Phaser.Input.Events.GAME_OUT, () => {
-      this.leftPointers.clear();
-      this.rightPointers.clear();
-    });
 
     this.hint = this.add
       .text(0, 0, 'HOLD LEFT / RIGHT TO WALK', {
@@ -270,20 +231,6 @@ export class ClubScene extends Phaser.Scene {
     this.tweens.add({ targets: hint, alpha: 0, duration: 400 });
   }
 
-  /** -1 walking left, 1 walking right, 0 standing still. */
-  private readDirection(): -1 | 0 | 1 {
-    const left =
-      this.cursors?.left.isDown === true ||
-      this.keyA?.isDown === true ||
-      this.leftPointers.size > 0;
-    const right =
-      this.cursors?.right.isDown === true ||
-      this.keyD?.isDown === true ||
-      this.rightPointers.size > 0;
-    if (left === right) return 0;
-    return left ? -1 : 1;
-  }
-
   // ----------------------------------------------------------------- loop
 
   update(_time: number, delta: number): void {
@@ -293,7 +240,7 @@ export class ClubScene extends Phaser.Scene {
     // doing, and drives nothing else in the scene.
     this.npcs?.update(this.time.now);
     if (this.finished) return;
-    const direction = this.transitioning ? 0 : this.readDirection();
+    const direction = this.transitioning ? 0 : this.walk.direction;
     if (direction !== 0) {
       this.facing = direction;
       this.walkX += direction * WALK_SPEED * (delta / 1000);
@@ -568,12 +515,7 @@ export class ClubScene extends Phaser.Scene {
     this.roomLabel.setPosition(margin, margin).setScale(viewport?.hudScale ?? 1);
     this.hint?.setPosition(camera.width / 2, camera.height - margin).setScale(viewport?.hudScale ?? 1);
 
-    if (this.leftZone && this.rightZone) {
-      // Zone.setSize resizes the input hit area with it by default.
-      const half = camera.width / 2;
-      this.leftZone.setPosition(0, 0).setSize(half, camera.height);
-      this.rightZone.setPosition(half, 0).setSize(half, camera.height);
-    }
+    this.walk.layout(camera.width, camera.height);
 
     // Ratio-based, so the crowd re-seats itself on the new viewport.
     this.npcs?.layout();
@@ -593,7 +535,6 @@ export class ClubScene extends Phaser.Scene {
     // from the HTTP cache rather than the network.
     for (const room of CLUB_ROOMS) releasePrefetchedVideo(room.videoUrl);
     this.tweens.killAll();
-    this.leftPointers.clear();
-    this.rightPointers.clear();
+    this.walk.destroy();
   }
 }

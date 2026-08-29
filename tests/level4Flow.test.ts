@@ -14,7 +14,12 @@ beforeEach(() => {
 describe('Level 4 casting', () => {
   it('picks the other playable character for the NPC', () => {
     selectCharacter('atmos');
-    expect(chooseLevel4NpcCharacter().id).toBe('klaus');
+    // The manifest is sorted by id, so the first playable that is not the
+    // player is Doctor Doms. This moved from Klaus when Doctor Doms became
+    // playable; what matters is that it is deterministic and never the player.
+    const npc = chooseLevel4NpcCharacter();
+    expect(npc.id).toBe('doctor-doms');
+    expect(npc.capabilities.playable).toBe(true);
   });
 
   it('swaps to Atmos when Klaus is the player', () => {

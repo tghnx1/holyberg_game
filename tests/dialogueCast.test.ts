@@ -16,6 +16,10 @@ import {
   resolveSceneCast,
 } from '../src/game/dialogue/dialogueCast';
 import { METRO_MAGICIAN_DIALOGUE } from '../src/game/dialogue/dialogueScripts';
+import {
+  buildLevel4DialogueBundle,
+  chooseLevel4NpcCharacter,
+} from '../src/game/level/level4/level4Flow';
 import type { DialogueScript } from '../src/game/dialogue/types';
 
 const script = (overrides: Partial<DialogueScript>): DialogueScript => ({
@@ -269,6 +273,53 @@ describe('the arriving actor needs a pose to settle on', () => {
     } finally {
       (DIALOGUE_SCENE_CASTS.metroStation as { arrivingActor: unknown }).arrivingActor = original;
     }
+  });
+});
+
+describe('required capabilities follow what each scene actually draws', () => {
+  // Regression: the toilet scene is drawn by ToiletSceneView, which stands
+  // both actors from their gameplay idle pose and plays no entrance at all.
+  // Asserting the metro station's appear animation there rejected every
+  // playable character — none of them have one — so DialogueScene threw in
+  // preload *after* Level4Scene had already shut itself down, leaving Level 4
+  // frozen at the NPC with no scene running.
+  it('stages the shipped Level 4 cast, whose NPC has no appear animation', () => {
+    const player = getCharacter('atmos');
+    const npc = chooseLevel4NpcCharacter(player);
+    expect(npc.id).not.toBe(player.id);
+    expect(npc.capabilities.playable).toBe(true);
+    expect(npc.capabilities.appearAnimation).toBe(false);
+
+    const bundle = buildLevel4DialogueBundle(player, npc);
+    expect(bundle.script.sceneId).toBe('toilet');
+    expect(() =>
+      assertDialogueCastCapabilities(bundle.script, bundle.sceneCast),
+    ).not.toThrow();
+  });
+
+  it('still rejects a toilet actor with no pose to stand in', () => {
+    const s = script({
+      id: 'toilet-no-pose',
+      sceneId: 'toilet',
+      lines: [{ text: 'HI', speaker: playerRef() }],
+      nextScene: 'Level4Scene',
+    });
+    expect(() =>
+      assertDialogueCastCapabilities(s, {
+        seatedActor: playerRef(),
+        arrivingActor: characterRef('drifter'),
+      }),
+    ).toThrow(/gameplay\/idle\.png/);
+  });
+
+  it('still requires the metro station arrival to be able to materialise', () => {
+    const s = script({ id: 'metro-playable-arrival', lines: [{ text: 'HI', speaker: playerRef() }] });
+    expect(() =>
+      assertDialogueCastCapabilities(s, {
+        seatedActor: playerRef(),
+        arrivingActor: characterRef('doctor-doms'),
+      }),
+    ).toThrow(/dialogue\/appear/);
   });
 });
 
