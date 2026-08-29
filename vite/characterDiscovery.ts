@@ -7,6 +7,7 @@ import {
   describePlayableGaps,
   type CharacterDefinition,
   type CharacterOverrides,
+  type CharacterGameplayPose,
   type ScannedCharacter,
 } from '../src/game/characters/characterManifest';
 
@@ -57,12 +58,12 @@ async function readOverrides(directory: string): Promise<CharacterOverrides | un
     const record = parsed as Record<string, unknown>;
     // Rejected loudly rather than ignored: a stat or a name in here means
     // someone believed it would take effect.
-    const allowed = new Set(['footGaps']);
+    const allowed = new Set(['footGaps', 'presentation']);
     for (const key of Object.keys(record)) {
       if (!allowed.has(key)) {
         throw new CharacterManifestError(
           `${directory}/${OVERRIDE_FILENAME} has unsupported field "${key}"; only ` +
-            `footGaps may be overridden (names, frame counts, paths and capabilities ` +
+            `footGaps and presentation may be overridden (names, frame counts, paths and capabilities ` +
             `come from the directory, and gameplay stats are never per-character)`,
         );
       }
@@ -77,6 +78,72 @@ async function readOverrides(directory: string): Promise<CharacterOverrides | un
           throw new CharacterManifestError(
             `${directory}/${OVERRIDE_FILENAME} footGaps["${path}"] must be a finite number`,
           );
+        }
+      }
+    }
+    const presentation = record.presentation;
+    if (presentation !== undefined) {
+      if (typeof presentation !== 'object' || presentation === null || Array.isArray(presentation)) {
+        throw new CharacterManifestError(`${directory}/${OVERRIDE_FILENAME} presentation must be an object`);
+      }
+      const presentationRecord = presentation as Record<string, unknown>;
+      const allowedPresentation = new Set(['gameplayScale', 'gameplayPoseScales', 'dialogueScale']);
+      for (const key of Object.keys(presentationRecord)) {
+        if (!allowedPresentation.has(key)) {
+          throw new CharacterManifestError(
+            `${directory}/${OVERRIDE_FILENAME} presentation has unsupported field "${key}"; only gameplayScale, gameplayPoseScales and dialogueScale may be overridden`,
+          );
+        }
+      }
+      if (
+        presentationRecord.gameplayScale !== undefined &&
+        (typeof presentationRecord.gameplayScale !== 'number' ||
+          !Number.isFinite(presentationRecord.gameplayScale))
+      ) {
+        throw new CharacterManifestError(
+          `${directory}/${OVERRIDE_FILENAME} presentation.gameplayScale must be a finite number`,
+        );
+      }
+      if (
+        presentationRecord.dialogueScale !== undefined &&
+        (typeof presentationRecord.dialogueScale !== 'number' ||
+          !Number.isFinite(presentationRecord.dialogueScale))
+      ) {
+        throw new CharacterManifestError(
+          `${directory}/${OVERRIDE_FILENAME} presentation.dialogueScale must be a finite number`,
+        );
+      }
+      if (presentationRecord.gameplayPoseScales !== undefined) {
+        if (
+          typeof presentationRecord.gameplayPoseScales !== 'object' ||
+          presentationRecord.gameplayPoseScales === null ||
+          Array.isArray(presentationRecord.gameplayPoseScales)
+        ) {
+          throw new CharacterManifestError(
+            `${directory}/${OVERRIDE_FILENAME} presentation.gameplayPoseScales must be an object`,
+          );
+        }
+        const allowedPoses = new Set<CharacterGameplayPose>([
+          'idle',
+          'run',
+          'jump',
+          'crouch',
+          'damage',
+          'walk',
+        ]);
+        for (const [pose, value] of Object.entries(
+          presentationRecord.gameplayPoseScales as Record<string, unknown>,
+        )) {
+          if (!allowedPoses.has(pose as CharacterGameplayPose)) {
+            throw new CharacterManifestError(
+              `${directory}/${OVERRIDE_FILENAME} presentation.gameplayPoseScales["${pose}"] is unsupported; only idle, run, jump, crouch, damage and walk may be overridden`,
+            );
+          }
+          if (typeof value !== 'number' || !Number.isFinite(value)) {
+            throw new CharacterManifestError(
+              `${directory}/${OVERRIDE_FILENAME} presentation.gameplayPoseScales["${pose}"] must be a finite number`,
+            );
+          }
         }
       }
     }

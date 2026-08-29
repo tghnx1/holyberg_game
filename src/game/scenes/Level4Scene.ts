@@ -8,6 +8,7 @@ import {
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { footOffset, loopedFrameIndex, RUN_CYCLE_MS, staticRunFrameIndex } from '../characters/characterAnimation';
 import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
+import { resolveGameplayScale } from '../characters/characterManifest';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { getCharacter } from '../characters/characterRegistry';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
@@ -31,7 +32,6 @@ const DIALOGUE_TRIGGER_X = 1020;
 const NPC_STALL_X = 1124;
 const PLAYER_STALL_X = 1078;
 const NPC_EXIT_X = 940;
-const CHARACTER_SCALE = 0.8;
 const NPC_WAIT_FACING: 1 | -1 = -1;
 
 interface Level4Actor {
@@ -198,14 +198,15 @@ export class Level4Scene extends Phaser.Scene {
 
   private syncActor(actor: Level4Actor, now: number): void {
     const frame = this.resolveActorFrame(actor, now);
+    const scale = resolveGameplayScale(actor.character, actor.motion === 'walk' ? 'walk' : 'idle');
     if (frame.key !== actor.currentKey) {
       actor.sprite.setTexture(frame.key);
       actor.currentKey = frame.key;
     }
     actor.sprite
       .setFlipX(actor.facing < 0)
-      .setScale(CHARACTER_SCALE)
-      .setPosition(actor.x, actor.y + footOffset(frame.footGap, CHARACTER_SCALE) + 10);
+      .setScale(scale)
+      .setPosition(actor.x, actor.y + footOffset(frame.footGap, scale) + 10);
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {

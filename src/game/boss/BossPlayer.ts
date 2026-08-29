@@ -6,7 +6,7 @@ import {
   staticRunFrameIndex,
 } from '../characters/characterAnimation';
 import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
-import { PLAYER_VISUAL_SCALE } from '../entities/Player';
+import { resolveGameplayScale } from '../characters/characterManifest';
 import { BOSS_ARENA, BOSS_PLAYER } from './bossConfig';
 
 /**
@@ -50,7 +50,7 @@ export class BossPlayer {
     this.sprite = scene.add
       .sprite(startX, BOSS_ARENA.floorY, run[staticRunFrameIndex(run.length)].key)
       .setOrigin(0.5, 1)
-      .setScale(PLAYER_VISUAL_SCALE)
+      .setScale(resolveGameplayScale(character, 'run'))
       .setDepth(BossDepth.PLAYER);
   }
 
@@ -82,11 +82,17 @@ export class BossPlayer {
       this.currentFrameKey = frame.key;
     }
     this.sprite.x = this.motion.x;
-    this.sprite.y = BOSS_ARENA.floorY + footOffset(frame.footGap, PLAYER_VISUAL_SCALE);
+    const scale = this.resolveScale(nowMs);
+    this.sprite.y = BOSS_ARENA.floorY + footOffset(frame.footGap, scale);
     // Face the way the player is travelling; the run art is drawn facing right.
     if (this.motion.velocityX !== 0) {
       this.sprite.setFlipX(this.motion.velocityX < 0);
     }
+  }
+
+  private resolveScale(nowMs: number): number {
+    if (nowMs < this.damageFrameUntilMs) return resolveGameplayScale(this.character, 'damage');
+    return resolveGameplayScale(this.character, 'run');
   }
 
   private resolveFrame(nowMs: number, direction: MoveDirection): CharacterAssetRef {

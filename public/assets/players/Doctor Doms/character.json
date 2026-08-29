@@ -1,0 +1,12 @@
+{
+  "presentation": {
+    "gameplayScale": 0.757,
+    "gameplayPoseScales": {
+      "run": 0.787,
+      "jump": 0.849,
+      "crouch": 0.684,
+      "damage": 0.785,
+      "walk": 0.696
+    }
+  }
+}

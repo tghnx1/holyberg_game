@@ -29,6 +29,7 @@ import { StationSceneView } from '../dialogue/StationSceneView';
 import { ToiletSceneView } from '../dialogue/ToiletSceneView';
 import { TalkingPortrait, type PortraitFrames } from '../dialogue/TalkingPortrait';
 import type { CharacterDefinition } from '../characters/characterManifest';
+import { resolveDialogueScale } from '../characters/characterManifest';
 import type { DialogueScript } from '../dialogue/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import type { SceneEditor } from '../systems/SceneEditor';
@@ -65,7 +66,11 @@ type DialoguePhase = 'slidingIn' | 'typing' | 'holding' | 'glitching' | 'sliding
 function portraitFramesFor(character: CharacterDefinition): PortraitFrames {
   const { portraitIdle, portraitTalk } = character.dialogue;
   // assertDialogueCastCapabilities has already rejected a cast without these.
-  return { idleFrameKey: portraitIdle!.key, talkFrameKey: portraitTalk!.key };
+  return {
+    idleFrameKey: portraitIdle!.key,
+    talkFrameKey: portraitTalk!.key,
+    scaleMultiplier: resolveDialogueScale(character),
+  };
 }
 
 /**

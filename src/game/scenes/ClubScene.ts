@@ -1,14 +1,12 @@
 import Phaser from 'phaser';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
+import { queueCharacterGameplay } from '../characters/characterAssets';
+import { footOffset, loopedFrameIndex, RUN_CYCLE_MS } from '../characters/characterAnimation';
 import {
-  queueCharacterGameplay,
-} from '../characters/characterAssets';
-import {
-  footOffset,
-  loopedFrameIndex,
-  RUN_CYCLE_MS,
-} from '../characters/characterAnimation';
-import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
+  resolveGameplayScale,
+  type CharacterAssetRef,
+  type CharacterDefinition,
+} from '../characters/characterManifest';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import {
   CLUB_ROOMS,
@@ -33,10 +31,6 @@ export interface ClubSceneData {
 /**
  * Walking pace in logical pixels per second. This is the knob for how fast
  * the player crosses a room: higher is faster.
- *
- * Kept roughly proportional to CLUB_PLAYER_SCALE — a bigger character covering
- * the same ground per second reads as trudging — so if that changes a lot,
- * this usually wants to move with it.
  */
  const WALK_SPEED = 420;
 /**
@@ -49,18 +43,6 @@ const ENTRY_INSET = 96;
 /** Matches Player.syncVisual, so the player stands exactly as in Berlin. */
 const FOOT_NUDGE = 10;
 /**
- * Level 2 only, and applies to whichever character is selected. The club
- * rooms are shot much closer than Berlin's street, so the player is drawn
- * larger here than PLAYER_VISUAL_SCALE's 0.8 to sit in them convincingly.
- * Local on purpose: the shared constant also drives Berlin and the boss
- * fight, where the size is paired with the collision box.
- *
- * Anything reading a per-frame foot gap must be given this same scale — the
- * gaps are in source pixels, so scaling the sprite without scaling them lets
- * the feet drift, and by a different amount per run frame.
- */
-const CLUB_PLAYER_SCALE = 1.8;
-/**
  * How far below Berlin's ground line the club floor sits, in logical pixels
  * at the 720-high design size. The room videos are framed lower than the
  * street, so the player stands further down the frame here. This is the knob to
@@ -71,7 +53,7 @@ const FLOOR_DROP = 100;
 const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
 
 /**
- * Level 2: three club interiors the player walks through, each an looping
+ * Level 2: three club interiors the player walks through, each a looping
  * MP4 behind the selected character.
  *
  * There is no jumping, ducking, obstacle or scoring here — it is a
@@ -109,10 +91,9 @@ export class ClubScene extends Phaser.Scene {
   private readonly rightPointers = new Set<number>();
   /**
    * The player's x as a float. The sprite itself is only ever placed on whole
-   * pixels: at CLUB_PLAYER_SCALE the art is magnified, and drawing magnified
-   * art on a subpixel boundary makes the GPU resample it every frame, which
-   * reads as a soft, shimmering edge. Keeping the motion here and rounding at
-   * draw time removes that without making the walk step-y.
+   * pixels so the selected character's art stays crisp when it scales to fit
+   * the room. Keeping the motion here and rounding at draw time removes
+   * subpixel shimmer without making the walk step-y.
    */
   private walkX = 0;
   /** Last direction walked; kept when stopping so the player does not snap around. */
@@ -169,7 +150,7 @@ export class ClubScene extends Phaser.Scene {
     this.playerSprite = this.add
       .sprite(0, 0, this.character.gameplay.idle!.key)
       .setOrigin(0.5, 1)
-      .setScale(CLUB_PLAYER_SCALE)
+      .setScale(resolveGameplayScale(this.character, 'idle'))
       .setDepth(Depth.PLAYER);
 
     this.roomLabel = this.add
@@ -328,6 +309,7 @@ export class ClubScene extends Phaser.Scene {
     const frame: CharacterAssetRef = walking
       ? run[loopedFrameIndex(this.time.now, run.length, RUN_CYCLE_MS)]
       : idle!;
+    const scale = resolveGameplayScale(this.character, walking ? 'run' : 'idle');
     if (frame.key !== this.currentFrameKey) {
       this.playerSprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;
@@ -336,7 +318,7 @@ export class ClubScene extends Phaser.Scene {
     this.playerSprite.setFlipX(this.facing === -1);
     this.playerSprite.setPosition(
       Math.round(this.walkX),
-      Math.round(this.floorY() + footOffset(frame.footGap, CLUB_PLAYER_SCALE) + FOOT_NUDGE),
+      Math.round(this.floorY() + footOffset(frame.footGap, scale) + FOOT_NUDGE),
     );
   }
 

@@ -23,6 +23,8 @@ import { isTalkFrameActive } from './dialogueTalkAnimation';
 export interface PortraitFrames {
   idleFrameKey: string;
   talkFrameKey: string;
+  /** Visual-only multiplier applied on top of the shared portrait fit. */
+  scaleMultiplier?: number;
 }
 
 export class TalkingPortrait {
@@ -67,7 +69,12 @@ export class TalkingPortrait {
     // Compared by key, not identity: callers build a fresh frames object from
     // the resolved character each line, so identity would never match and the
     // talk animation would restart on every line.
-    if (this.speaker.idleFrameKey === config.idleFrameKey) return;
+    if (
+      this.speaker.idleFrameKey === config.idleFrameKey &&
+      this.speaker.scaleMultiplier === config.scaleMultiplier
+    ) {
+      return;
+    }
     this.speaker = config;
     this.talking = false;
     this.talkStartedAt = -Infinity;
@@ -116,7 +123,7 @@ export class TalkingPortrait {
       source.width,
       source.height,
       DialogueLayout.portraitFillRatio,
-    );
+    ) * (this.speaker.scaleMultiplier ?? 1);
     this.image.setPosition(this.panelWidth / 2, this.panelHeight / 2).setScale(scale);
   }
 

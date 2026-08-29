@@ -141,8 +141,11 @@ describe('character data carries no gameplay values', () => {
       'gameplay',
       'id',
       'name',
+      'presentation',
       'rootUrl',
     ]);
+    expect(atmos.presentation.gameplayScale).toBe(0.8);
+    expect(atmos.presentation.dialogueScale).toBeCloseTo(1.857, 3);
     for (const frame of atmos.gameplay.run) {
       expect(Object.keys(frame).sort()).toEqual(['footGap', 'key', 'url']);
     }

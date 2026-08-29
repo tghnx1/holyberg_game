@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { footOffset, loopedFrameIndex, RUN_CYCLE_MS, staticRunFrameIndex } from '../characters/characterAnimation';
-import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
+import { resolveGameplayScale, type CharacterAssetRef, type CharacterDefinition } from '../characters/characterManifest';
 import type { EditableObject } from '../systems/SceneEditor';
 import { computeContainFit } from './dialogueLayoutMetrics';
 import { LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
@@ -8,7 +8,6 @@ import type { ResolvedSceneCast } from './dialogueCast';
 
 const TOILET_CANONICAL_WIDTH = 1532;
 const TOILET_CANONICAL_HEIGHT = 175;
-const CHARACTER_SCALE = 0.8;
 const FLOOR_Y = 148;
 const PLAYER_X = 210;
 const NPC_X = 1125;
@@ -57,7 +56,8 @@ export class ToiletSceneView {
     facing: 1 | -1,
   ): ToiletActor {
     const frame = character.gameplay.idle ?? character.gameplay.run[staticRunFrameIndex(character.gameplay.run.length)];
-    const sprite = this.scene.add.sprite(x, 0, frame.key).setOrigin(0.5, 1).setScale(CHARACTER_SCALE);
+    const scale = resolveGameplayScale(character, 'idle');
+    const sprite = this.scene.add.sprite(x, 0, frame.key).setOrigin(0.5, 1).setScale(scale);
     const actor: ToiletActor = {
       sprite,
       character,
@@ -82,14 +82,15 @@ export class ToiletSceneView {
 
   private syncActor(actor: ToiletActor, now: number): void {
     const frame = this.resolveFrame(actor, now);
+    const scale = resolveGameplayScale(actor.character, actor.motion === 'walk' ? 'walk' : 'idle');
     if (frame.key !== actor.currentKey) {
       actor.sprite.setTexture(frame.key);
       actor.currentKey = frame.key;
     }
     actor.sprite
       .setFlipX(actor.facing < 0)
-      .setScale(CHARACTER_SCALE)
-      .setPosition(actor.x, actor.y + footOffset(frame.footGap, CHARACTER_SCALE) + 10);
+      .setScale(scale)
+      .setPosition(actor.x, actor.y + footOffset(frame.footGap, scale) + 10);
   }
 
   resize(width: number, height: number): void {

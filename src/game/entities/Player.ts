@@ -27,9 +27,12 @@ import {
   RUN_CYCLE_MS,
   staticRunFrameIndex,
 } from '../characters/characterAnimation';
-import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
-/** Shared presentation scale for the platforming scenes; not character data. */
-export const PLAYER_VISUAL_SCALE = 0.8;
+import {
+  resolveGameplayScale,
+  type CharacterAssetRef,
+  type CharacterDefinition,
+  type CharacterGameplayPose,
+} from '../characters/characterManifest';
 
 // Re-exported so existing importers (BootScene) keep one import site while the
 // frame data itself lives in a Phaser-free module shared with the boss arena.
@@ -81,8 +84,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.currentVisualFrameKey = idle.key;
     this.visual = scene.add.sprite(x, GROUND_Y, idle.key);
     this.visual.setOrigin(0.5, 1);
-    this.visual.setScale(PLAYER_VISUAL_SCALE);
-    this.visual.y = GROUND_Y + footOffset(idle.footGap, PLAYER_VISUAL_SCALE) + 10;
+    const idleScale = this.resolveVisualScale('idle');
+    this.visual.setScale(idleScale);
+    this.visual.y = GROUND_Y + footOffset(idle.footGap, idleScale) + 10;
     this.visual.setDepth(Depth.PLAYER);
   }
 
@@ -147,15 +151,38 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // which reads stale for one frame right after a crouch/stand toggle
     // (the body only resyncs on Phaser's next automatic preUpdate).
     const frame = this.resolveVisualFrame(now);
+    const scale = this.resolveVisualScale(this.resolveVisualPose(now));
     this.visual.x = this.x;
-    this.visual.y = this.y + footOffset(frame.footGap, PLAYER_VISUAL_SCALE) + 10;
+    this.visual.y = this.y + footOffset(frame.footGap, scale) + 10;
     if (frame.key !== this.currentVisualFrameKey) {
       this.visual.setTexture(frame.key);
       this.currentVisualFrameKey = frame.key;
     }
-    this.visual.setScale(PLAYER_VISUAL_SCALE);
+    this.visual.setScale(scale);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);
+  }
+
+  private resolveVisualPose(now: number): CharacterGameplayPose {
+    if (now < this.hitAnimUntil && this.character.gameplay.damage.length > 0) return 'damage';
+    switch (this.animationState) {
+      case 'run':
+        if (this.frozen && this.character.gameplay.idle) return 'idle';
+        if (now < this.landingAnimUntil && this.character.gameplay.jump.length > 0) return 'jump';
+        return 'run';
+      case 'jump':
+      case 'doubleJump':
+      case 'fall':
+        return 'jump';
+      case 'crouch':
+        return 'crouch';
+      default:
+        return 'run';
+    }
+  }
+
+  private resolveVisualScale(pose: CharacterGameplayPose): number {
+    return resolveGameplayScale(this.character, pose);
   }
 
   /**

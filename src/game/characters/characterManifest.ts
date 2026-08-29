@@ -53,6 +53,23 @@ export interface CharacterCapabilities {
   walkAnimation: boolean;
 }
 
+export type CharacterGameplayPose = 'idle' | 'run' | 'jump' | 'crouch' | 'damage' | 'walk';
+
+export interface CharacterPresentation {
+  /**
+   * Default gameplay scale for poses that do not need a finer override.
+   * This is visual-only and multiplies the scene's canonical gameplay scale.
+   */
+  gameplayScale: number;
+  /** Optional per-pose gameplay scale overrides, still visual-only. */
+  gameplayPoseScales: Partial<Record<CharacterGameplayPose, number>>;
+  /**
+   * Multiplier applied to the dialogue portrait fit. `1` keeps the shared
+   * portrait fit, higher values zoom the portrait in, lower values zoom it out.
+   */
+  dialogueScale: number;
+}
+
 export interface CharacterGameplayAssets {
   idle?: CharacterAssetRef;
   run: CharacterAssetRef[];
@@ -79,6 +96,7 @@ export interface CharacterDefinition {
   name: string;
   rootUrl: string;
   capabilities: CharacterCapabilities;
+  presentation: CharacterPresentation;
   gameplay: CharacterGameplayAssets;
   dialogue: CharacterDialogueAssets;
 }
@@ -96,6 +114,12 @@ export interface CharacterDefinition {
 export interface CharacterOverrides {
   /** Keyed by path relative to the character folder, e.g. `gameplay/run/01.png`. */
   footGaps?: Record<string, number>;
+  /** Optional visual presentation overrides, still never gameplay stats. */
+  presentation?: {
+    gameplayScale?: number;
+    gameplayPoseScales?: Partial<Record<CharacterGameplayPose, number>>;
+    dialogueScale?: number;
+  };
 }
 
 /** One character directory as found on disk. */
@@ -113,6 +137,32 @@ export class CharacterManifestError extends Error {
     super(`Invalid character assets: ${message}`);
     this.name = 'CharacterManifestError';
   }
+}
+
+function validateGameplayPoseScales(
+  value: unknown,
+  context: string,
+): Partial<Record<CharacterGameplayPose, number>> {
+  if (value === undefined) return {};
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new CharacterManifestError(`${context} gameplayPoseScales must be an object`);
+  }
+  const allowed = new Set<CharacterGameplayPose>(['idle', 'run', 'jump', 'crouch', 'damage', 'walk']);
+  const out: Partial<Record<CharacterGameplayPose, number>> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!allowed.has(key as CharacterGameplayPose)) {
+      throw new CharacterManifestError(
+        `${context} gameplayPoseScales["${key}"] is unsupported; only idle, run, jump, crouch, damage and walk may be overridden`,
+      );
+    }
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      throw new CharacterManifestError(
+        `${context} gameplayPoseScales["${key}"] must be a finite number`,
+      );
+    }
+    out[key as CharacterGameplayPose] = raw;
+  }
+  return out;
 }
 
 /**
@@ -208,6 +258,7 @@ export function buildCharacterDefinition(scanned: ScannedCharacter): CharacterDe
     frames.length >= minimum;
 
   const dialoguePortrait = Boolean(dialogue.portraitIdle && dialogue.portraitTalk);
+  const presentationOverride = scanned.overrides?.presentation ?? {};
   const capabilities: CharacterCapabilities = {
     // Everything the current campaign needs of a player, and nothing more —
     // an incomplete character stays in the registry as an NPC rather than
@@ -226,7 +277,33 @@ export function buildCharacterDefinition(scanned: ScannedCharacter): CharacterDe
     walkAnimation: has(gameplay.walk, MIN_ANIMATION_FRAMES.walk),
   };
 
-  return { id, name: scanned.folderName, rootUrl, capabilities, gameplay, dialogue };
+  return {
+    id,
+    name: scanned.folderName,
+    rootUrl,
+    capabilities,
+    presentation: {
+      gameplayScale: presentationOverride.gameplayScale ?? 0.8,
+      gameplayPoseScales: validateGameplayPoseScales(
+        presentationOverride.gameplayPoseScales,
+        `"${scanned.folderName}"`,
+      ),
+      dialogueScale: presentationOverride.dialogueScale ?? 1,
+    },
+    gameplay,
+    dialogue,
+  };
+}
+
+export function resolveGameplayScale(
+  character: CharacterDefinition,
+  pose: CharacterGameplayPose,
+): number {
+  return character.presentation.gameplayPoseScales[pose] ?? character.presentation.gameplayScale;
+}
+
+export function resolveDialogueScale(character: CharacterDefinition): number {
+  return character.presentation.dialogueScale;
 }
 
 /**

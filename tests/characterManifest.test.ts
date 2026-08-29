@@ -180,6 +180,26 @@ describe('foot gaps', () => {
   });
 });
 
+describe('presentation overrides', () => {
+  it('keeps visual scales in presentation, not gameplay data', () => {
+    const definition = buildCharacterDefinition(
+      scan('Doctor Doms', playableFiles(), {
+        overrides: {
+          presentation: {
+            gameplayScale: 0.757,
+            gameplayPoseScales: { crouch: 0.684, damage: 0.785 },
+            dialogueScale: 1.857,
+          },
+        },
+      }),
+    );
+    expect(definition.presentation.gameplayScale).toBe(0.757);
+    expect(definition.presentation.gameplayPoseScales.crouch).toBe(0.684);
+    expect(definition.presentation.gameplayPoseScales.damage).toBe(0.785);
+    expect(definition.presentation.dialogueScale).toBe(1.857);
+  });
+});
+
 describe('manifest assembly', () => {
   it('sorts by id so the generated module is stable', () => {
     const manifest = buildCharacterManifest([
