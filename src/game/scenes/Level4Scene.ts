@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   Depth,
   DESIGN_HEIGHT,
+  DESIGN_WIDTH,
   GROUND_Y,
   RUN_SPEED,
 } from '../constants';
@@ -23,15 +24,41 @@ import {
   type Level4ResumePayload,
 } from '../level/level4/level4Flow';
 import { getLevel4AssetUrls, LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
-import { computeCoverFit } from '../dialogue/dialogueLayoutMetrics';
 
-const LEVEL4_WORLD_WIDTH = 2600;
-const TOILET_STRIP_HEIGHT = 175;
+// Native pixel dimensions of assets/level_4/toilet-full.png. The artwork is
+// authored as a short wide strip (floor-to-ceiling height, full room width)
+// with a crumbling/transparent right edge that is meant to reveal Holyworld
+// behind it as the player walks through it.
 const TOILET_STRIP_WIDTH = 1532;
-const DIALOGUE_TRIGGER_X = 1020;
-const NPC_STALL_X = 1124;
-const PLAYER_STALL_X = 1078;
-const NPC_EXIT_X = 940;
+const TOILET_STRIP_HEIGHT = 175;
+
+// Native pixel height of assets/level_4/holyworld-background.png.
+const HOLYWORLD_BG_HEIGHT = 940;
+
+// Scale that makes the toilet strip fill the full playable height (floor at
+// GROUND_Y, ceiling at the top of the viewport) instead of the native 175px
+// sliver — this is what makes the toilet read as the dominant environment.
+const TOILET_SCALE = GROUND_Y / TOILET_STRIP_HEIGHT;
+
+// Native-pixel x where the artwork starts crumbling away to transparency
+// (measured against toilet-full.png), scaled into world space.
+const DISSOLVE_START_X_NATIVE = 1150;
+const DISSOLVE_START_X = DISSOLVE_START_X_NATIVE * TOILET_SCALE;
+
+// Native-pixel x of the one stall in the artwork that is drawn without a
+// door (open frame, visible toilet bowl) — the stall used for the portal
+// cutscene — and the walkway positions around it, scaled into world space.
+const DIALOGUE_TRIGGER_X = 620 * TOILET_SCALE;
+const NPC_WAIT_X = 655 * TOILET_SCALE;
+const PLAYER_ENTER_X = 692 * TOILET_SCALE;
+const NPC_ENTER_X = 708 * TOILET_SCALE;
+const NPC_EXIT_X = 605 * TOILET_SCALE;
+const DOOR_HINGE_X = 716 * TOILET_SCALE;
+// Native opening width of that stall frame, used to size the door overlay
+// so it plausibly fits the gap instead of swallowing neighbouring stalls.
+const STALL_OPENING_WIDTH_NATIVE = 40;
+
+const LEVEL4_WORLD_WIDTH = TOILET_STRIP_WIDTH * TOILET_SCALE + DESIGN_WIDTH;
 const NPC_WAIT_FACING: 1 | -1 = -1;
 
 interface Level4Actor {
@@ -55,14 +82,14 @@ export interface Level4SceneData {
 export class Level4Scene extends Phaser.Scene {
   private rhythmResult: RhythmResult = createEmptyRhythmResult();
   private introComplete = false;
-  private playerX = 160;
+  private playerX = 160 * TOILET_SCALE;
   private cameraX = 0;
   private npcId?: string;
   private playerCharacter!: CharacterDefinition;
   private npcCharacter!: CharacterDefinition;
   private player!: Level4Actor;
   private npc!: Level4Actor;
-  private holyworldBackground!: Phaser.GameObjects.Image;
+  private holyworldBackground!: Phaser.GameObjects.TileSprite;
   private toiletStrip!: Phaser.GameObjects.Image;
   private stallDoor!: Phaser.GameObjects.Image;
   private running = false;
@@ -77,7 +104,7 @@ export class Level4Scene extends Phaser.Scene {
   init(data: Partial<Level4SceneData>): void {
     this.rhythmResult = data.rhythmResult ?? createEmptyRhythmResult();
     this.introComplete = data.introComplete === true;
-    this.playerX = data.playerX ?? 160;
+    this.playerX = data.playerX ?? 160 * TOILET_SCALE;
     this.cameraX = data.cameraX ?? 0;
     this.npcId = data.npcId;
     this.running = false;
@@ -125,42 +152,44 @@ export class Level4Scene extends Phaser.Scene {
   }
 
   private buildBackground(): void {
+    // Holyworld lives in world space (not scroll-locked) starting where the
+    // toilet artwork's right edge begins crumbling away, so it only becomes
+    // visible through that transparent/broken edge rather than dominating
+    // the screen from the start. It is drawn at the toilet strip's own
+    // native pixel scale so it tiles seamlessly to the end of the level.
+    const tileScale = DESIGN_HEIGHT / HOLYWORLD_BG_HEIGHT;
+    const width = LEVEL4_WORLD_WIDTH - DISSOLVE_START_X;
     this.holyworldBackground = this.add
-      .image(0, 0, LEVEL4_ASSET_KEYS.holyworldBackground)
+      .tileSprite(DISSOLVE_START_X, 0, width, DESIGN_HEIGHT, LEVEL4_ASSET_KEYS.holyworldBackground)
       .setOrigin(0, 0)
-      .setScrollFactor(0)
+      .setTileScale(tileScale, tileScale)
       .setDepth(Depth.SKY);
-    this.resizeBackground();
-  }
-
-  private resizeBackground(): void {
-    const fit = computeCoverFit(
-      1672,
-      940,
-      this.cameras.main.width,
-      this.cameras.main.height,
-    );
-    this.holyworldBackground.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
   }
 
   private buildToiletStrip(): void {
     this.toiletStrip = this.add
-      .image(0, GROUND_Y - TOILET_STRIP_HEIGHT, LEVEL4_ASSET_KEYS.toiletStrip)
+      .image(0, 0, LEVEL4_ASSET_KEYS.toiletStrip)
       .setOrigin(0, 0)
+      .setScale(TOILET_SCALE)
       .setDepth(Depth.ENVIRONMENT + 5);
   }
 
   private buildActors(): void {
     this.player = this.createActor(this.playerCharacter, this.playerX, GROUND_Y, 1, 'walk');
-    this.npc = this.createActor(this.npcCharacter, NPC_STALL_X, GROUND_Y, NPC_WAIT_FACING, 'idle');
+    this.npc = this.createActor(this.npcCharacter, NPC_WAIT_X, GROUND_Y, NPC_WAIT_FACING, 'idle');
   }
 
   private buildDoor(): void {
+    // Hinged to the open stall's actual frame (its right edge, matching the
+    // artwork), scaled to the opening's own width so it doesn't swallow
+    // neighbouring stalls. Starts open, swung out of the walkway.
+    const doorScale = (STALL_OPENING_WIDTH_NATIVE * TOILET_SCALE) / 78;
     this.stallDoor = this.add
-      .image(NPC_STALL_X + 16, GROUND_Y, LEVEL4_ASSET_KEYS.stallDoor)
-      .setOrigin(0.5, 1)
+      .image(DOOR_HINGE_X, GROUND_Y, LEVEL4_ASSET_KEYS.stallDoor)
+      .setOrigin(1, 1)
+      .setScale(doorScale)
       .setDepth(Depth.FOREGROUND + 10)
-      .setAngle(-10);
+      .setAngle(-40);
   }
 
   private createActor(
@@ -211,10 +240,7 @@ export class Level4Scene extends Phaser.Scene {
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
     const camera = this.cameras.main;
-    this.resizeBackground();
     this.cameraX = Phaser.Math.Clamp(this.cameraX, 0, Math.max(0, LEVEL4_WORLD_WIDTH - camera.width));
-    this.toiletStrip.setPosition(0, GROUND_Y - TOILET_STRIP_HEIGHT);
-    this.stallDoor.setPosition(NPC_STALL_X + 16, GROUND_Y);
     this.syncActor(this.player, this.time.now);
     this.syncActor(this.npc, this.time.now);
     this.cameras.main.setScroll(this.cameraX, 0);
@@ -285,14 +311,14 @@ export class Level4Scene extends Phaser.Scene {
 
     this.tweens.add({
       targets: this.player,
-      x: PLAYER_STALL_X,
+      x: PLAYER_ENTER_X,
       duration: 420,
       ease: 'Quad.easeOut',
       onComplete: onArrived,
     });
     this.tweens.add({
       targets: this.npc,
-      x: NPC_STALL_X,
+      x: NPC_ENTER_X,
       duration: 420,
       ease: 'Quad.easeOut',
       onComplete: onArrived,
@@ -300,10 +326,11 @@ export class Level4Scene extends Phaser.Scene {
   }
 
   private closeDoorThenWait(): void {
+    // The door only ever rotates around its fixed hinge (DOOR_HINGE_X) — it
+    // must never translate toward the actors, or it reads as being carried.
     this.tweens.add({
       targets: this.stallDoor,
       angle: 0,
-      x: NPC_STALL_X + 8,
       duration: 240,
       ease: 'Quad.easeOut',
       onComplete: () => {
@@ -316,8 +343,7 @@ export class Level4Scene extends Phaser.Scene {
     this.npc.facing = -1;
     this.tweens.add({
       targets: this.stallDoor,
-      angle: -10,
-      x: NPC_STALL_X + 16,
+      angle: -40,
       duration: 240,
       ease: 'Quad.easeOut',
     });
@@ -358,7 +384,7 @@ export class Level4Scene extends Phaser.Scene {
   }
 
   private finishThreshold(): number {
-    return TOILET_STRIP_WIDTH + this.cameras.main.width / 2 + 16;
+    return TOILET_STRIP_WIDTH * TOILET_SCALE + this.cameras.main.width / 2 + 16;
   }
 
   private cleanup(): void {
