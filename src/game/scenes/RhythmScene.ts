@@ -105,6 +105,12 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   private resetForNewRun(): void {
+    // Cleared here as well as in build(): Phaser reuses one scene instance
+    // across restarts, so a run whose build never completed (a failed track
+    // load, a fatal error overlay) would otherwise leave the previous run's
+    // score — and, before it was bounded, its bad-tap penalty — in place for
+    // the next attempt. build() sets the real note count immediately after.
+    this.scoreState = initialScoreState(this.chart?.notes.length);
     const reset = resetRhythmRunState(this.inputGuard, this.antiMash);
     this.playing = reset.playing;
     this.starting = reset.starting;

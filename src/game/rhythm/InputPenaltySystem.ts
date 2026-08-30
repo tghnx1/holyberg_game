@@ -2,14 +2,29 @@ import { BAD_TAP_SCORE_PENALTY, LANE_INPUT_COOLDOWN_MS, MASH_LOCK_MS, MASH_THRES
 import { normalizeRhythmScore } from './ScoreSystem';
 import type { Lane, ScoreState } from './types';
 
+/**
+ * An empty press: costs points and drops the combo, but can never put the
+ * player into a debt they cannot climb out of.
+ *
+ * `scorePenalty` is a running total of points actually deducted, and the
+ * deduction is clamped to what has been earned so far — so it can never
+ * exceed the earned score, and the moment the player hits another note their
+ * score starts rising again. Before this clamp the penalty was unbounded:
+ * enough bad taps (188 of them, against the 7500 score cap) pushed it past
+ * anything the rest of the track could ever pay back, so `score` sat pinned
+ * at 0 for the remainder of the run — a full perfect clear of every
+ * remaining note still finished on 0. That is how the other two levels have
+ * always behaved: Berlin takes `Math.min(penalty, score)` and the boss fight
+ * takes `Math.max(0, score - penalty)`, both deducting from the current
+ * score rather than accumulating a separate unbounded debt.
+ */
 export function applyBadTap(state: ScoreState): ScoreState {
-  const scorePenalty = state.scorePenalty + BAD_TAP_SCORE_PENALTY;
+  const earned = normalizeRhythmScore(state.rawScore, state.maximumRawScore);
+  const deductible = Math.max(0, earned - state.scorePenalty);
+  const scorePenalty = state.scorePenalty + Math.min(BAD_TAP_SCORE_PENALTY, deductible);
   return {
     ...state,
-    score: Math.max(
-      0,
-      normalizeRhythmScore(state.rawScore, state.maximumRawScore) - scorePenalty,
-    ),
+    score: Math.max(0, earned - scorePenalty),
     scorePenalty,
     combo: 0,
     badTap: state.badTap + 1,
