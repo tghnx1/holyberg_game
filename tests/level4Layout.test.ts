@@ -8,7 +8,12 @@ import {
 import { resetSceneLayout } from '../src/game/systems/sceneLayout';
 import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
 
-const SCENE = 'Level4Scene';
+/**
+ * A scene key that never appears in the checked-in layout, so these assert the
+ * resolver's own behaviour rather than whatever staging happens to be authored
+ * for the real Level 4 at the time.
+ */
+const SCENE = 'Level4LayoutTestScene';
 const viewport = { width: 1280, height: 720 };
 const composed = { x: 0, y: 0, scaleX: 0.4, scaleY: 0.24 };
 

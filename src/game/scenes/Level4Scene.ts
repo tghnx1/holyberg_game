@@ -115,14 +115,21 @@ const STALL_OPENING_HEIGHT = STALL_OPENING_BOTTOM - STALL_OPENING_TOP;
  * leaf turned edge-on inside the frame rather than one lying on the floor.
  */
 const DOOR_OPEN_SCALE = 0.12;
+/**
+ * Native rows of clearance under the stall door, as a real stall has. It is
+ * what leaves the characters' lower legs and feet visible while the door
+ * covers their bodies, so a closed door reads as two people standing behind
+ * it rather than as an empty frame.
+ */
+const DOOR_FLOOR_GAP_NATIVE = 7;
 
 // Walkway positions, in the same native pixel space as the stall rect.
 const PLAYER_START_X = 160 * TOILET_SCALE;
 const PLAYER_MIN_X = 40 * TOILET_SCALE;
 const NPC_WAIT_X = 645 * TOILET_SCALE;
-const PLAYER_ENTER_X = 672 * TOILET_SCALE;
-const NPC_ENTER_X = 690 * TOILET_SCALE;
 const NPC_EXIT_X = 555 * TOILET_SCALE;
+/** How far past the camera's left edge the NPC walks before being hidden. */
+const NPC_EXIT_OFFSCREEN_MARGIN = 160;
 /** How close to the waiting NPC the player must walk for them to speak up. */
 const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 
@@ -326,7 +333,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       LEVEL4_EDITABLE_IDS.stallDoor,
       {
         x: STALL_OPENING_RIGHT,
-        y: STALL_OPENING_BOTTOM,
+        y: STALL_OPENING_BOTTOM - DOOR_FLOOR_GAP_NATIVE * TOILET_SCALE_Y,
         scaleX: this.stallDoor.scaleX,
         scaleY: this.stallDoor.scaleY,
       },
@@ -625,6 +632,18 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     });
   }
 
+  /**
+   * The stall opening, derived from the door as it is actually authored — the
+   * door hangs on the opening's right edge at its closed width — so moving or
+   * resizing the door in the editor moves where the characters walk to with
+   * it, instead of leaving the staging at unrelated hardcoded coordinates.
+   */
+  private stallOpening(): { left: number; right: number } {
+    const right = this.stallDoor.x;
+    const width = this.doorClosedScaleX * this.stallDoor.frame.realWidth;
+    return { left: right - width, right };
+  }
+
   private startPostDialogueCutscene(): void {
     this.controlsLocked = true;
     this.player.motion = 'walk';
@@ -639,36 +658,41 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       this.stepIntoStall();
     };
 
+    // Both walk the whole way *into* the opening rather than stopping just
+    // short of it: the targets are the opening's own centre, spread just far
+    // enough apart to read as two people rather than one.
+    const opening = this.stallOpening();
+    const centre = (opening.left + opening.right) / 2;
+    const spread = (opening.right - opening.left) * 0.22;
     this.tweens.add({
       targets: this.player,
-      x: PLAYER_ENTER_X,
-      duration: 420,
+      x: centre - spread,
+      duration: 620,
       ease: 'Quad.easeOut',
       onComplete: onArrived,
     });
     this.tweens.add({
       targets: this.npc,
-      x: NPC_ENTER_X,
-      duration: 420,
+      x: centre + spread,
+      duration: 620,
       ease: 'Quad.easeOut',
       onComplete: onArrived,
     });
   }
 
   /**
-   * Both are standing in the opening: fade them into the unlit stall so the
-   * door shuts on an empty frame rather than across two visible characters.
+   * Both are standing in the opening and stay there, visible.
+   *
+   * They are not faded out: the door is drawn at `Depth.FOREGROUND + 10` and
+   * the actors at `Depth.PLAYER`, so ordinary depth composition puts the
+   * closed door in front of their bodies, and the door's floor gap leaves
+   * their lower legs showing underneath it. Making them vanish instead was
+   * what turned a stall with two people in it into an empty frame.
    */
   private stepIntoStall(): void {
     this.player.motion = 'idle';
     this.npc.motion = 'idle';
-    this.tweens.add({
-      targets: [this.player.sprite, this.npc.sprite],
-      alpha: 0,
-      duration: 220,
-      ease: 'Quad.easeIn',
-      onComplete: () => this.closeDoorThenWait(),
-    });
+    this.time.delayedCall(180, () => this.closeDoorThenWait());
   }
 
   private closeDoorThenWait(): void {
@@ -700,19 +724,30 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     });
   }
 
+  /**
+   * The NPC leaves on foot and stays visible for the whole walk.
+   *
+   * The exit target is off the left edge of what the camera is showing rather
+   * than a fixed world x, so the NPC is only hidden once they have actually
+   * carried themselves out of the visible staging area — previously they were
+   * switched off mid-frame, in plain view.
+   */
   private walkNpcOut(): void {
-    // Both step back out of the stall; only the NPC leaves.
-    this.player.sprite.setAlpha(1);
-    this.npc.sprite.setAlpha(1);
     this.npc.facing = -1;
     this.npc.motion = 'walk';
+    const exitX = Math.min(
+      NPC_EXIT_X,
+      this.cameras.main.scrollX - NPC_EXIT_OFFSCREEN_MARGIN,
+    );
     this.tweens.add({
       targets: this.npc,
-      x: NPC_EXIT_X,
-      duration: 720,
-      ease: 'Quad.easeIn',
+      x: exitX,
+      duration: 1100,
+      ease: 'Sine.easeIn',
       onComplete: () => {
         this.npc.motion = 'idle';
+        // Hidden only now, once the walk has taken them out of frame; control
+        // returns at the same moment, exactly as the sequence already did.
         this.npc.sprite.setVisible(false);
         this.resumePlay();
       },

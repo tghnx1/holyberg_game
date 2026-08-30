@@ -27,6 +27,7 @@ import {
 import { queueCharacterAssets } from '../characters/characterAssets';
 import { StationSceneView } from '../dialogue/StationSceneView';
 import { ToiletSceneView } from '../dialogue/ToiletSceneView';
+import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 import { TalkingPortrait, type PortraitFrames } from '../dialogue/TalkingPortrait';
 import type { CharacterDefinition } from '../characters/characterManifest';
 import { resolveDialogueScale } from '../characters/characterManifest';
@@ -94,6 +95,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
   private panels!: DialoguePanels;
   private sceneStage?: DialogueSceneStage;
   private stationScene?: StationSceneView;
+  private toiletScene?: ToiletSceneView;
   private portrait?: TalkingPortrait;
   /** Resolved once per run, so casting cannot change mid-dialogue. */
   private sceneCast!: ResolvedSceneCast;
@@ -284,6 +286,16 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
         body: this.stationScene.buildLayoutFromSnapshot(snapshot),
       });
     }
+    if (this.toiletScene) {
+      // The toilet dialogue's staging lives in the shared scene-layout store,
+      // saved through the same validated route every other scene uses; its
+      // ids are written as the editor moves things, so this only has to hand
+      // over this scene's slice.
+      payloads.push({
+        route: '/__scene-editor/save-layout',
+        body: buildSceneLayoutPayload(this.scene.key),
+      });
+    }
     return payloads;
   }
 
@@ -312,6 +324,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
             DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
           );
     if (sceneStage instanceof StationSceneView) this.stationScene = sceneStage;
+    if (sceneStage instanceof ToiletSceneView) this.toiletScene = sceneStage;
     this.sceneStage = sceneStage;
     sceneStage.root.setDepth(DialogueDepth.SCENE);
     this.panels.add('scene', sceneStage.root, {
