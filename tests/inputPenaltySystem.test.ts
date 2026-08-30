@@ -10,8 +10,10 @@ describe('bad taps and anti-mash', () => {
     guard.endPointer(1);
     expect(guard.beginPointer(1, 0, 150)).toBe(false);
     guard.endPointer(1);
-    expect(guard.beginPointer(1, 0, 181)).toBe(true);
-    expect(guard.beginPointer(2, 1, 181)).toBe(true);
+    expect(guard.beginPointer(1, 0, 299)).toBe(false);
+    guard.endPointer(1);
+    expect(guard.beginPointer(1, 0, 300)).toBe(true);
+    expect(guard.beginPointer(2, 1, 300)).toBe(true);
   });
   it('penalizes an empty press without creating a miss', () => {
     const state = applyBadTap({ ...initialScoreState(), score: 30, combo: 12 });

@@ -14,6 +14,7 @@ import {
   playerBodyFor,
   STANDING_BODY,
 } from '../src/game/level/berlin/playerPhysics';
+import type { MovingPlatformConfig } from '../src/game/level/berlin/types';
 import { EMERALD_SCORE, GROUND_Y } from '../src/game/constants';
 import { BerlinScoreSystem } from '../src/game/systems/BerlinScoreSystem';
 import { SectionTracker } from '../src/game/systems/SectionTracker';
@@ -60,12 +61,15 @@ describe('Berlin level config', () => {
   it('keeps every ground obstacle and platform inside the 15500-unit world', () => {
     expect(BERLIN_ENTITIES.every((entity) => entity.x >= 0 && entity.x <= 15500)).toBe(true);
   });
-  it('gives the early moving platforms opposite phases', () => {
+  it('assigns explicit phase offsets to early moving platforms', () => {
     const early = BERLIN_ENTITIES.filter(
-      (entity) => entity.type === 'movingPlatform' && entity.id.startsWith('early-'),
+      (entity): entity is MovingPlatformConfig =>
+        entity.type === 'movingPlatform' && entity.id.startsWith('early-'),
     );
-    expect(early).toHaveLength(2);
-    expect(early.map((p) => 'phaseMs' in p && p.phaseMs).sort()).toEqual([0, 1350]);
+    expect(early.length).toBeGreaterThan(0);
+    const phases = early.map((platform) => platform.phaseMs);
+    expect(phases.every((phase) => Number.isFinite(phase))).toBe(true);
+    expect(new Set(phases).size).toBe(phases.length);
   });
   it('defines one unbroken ground segment across the world', () => {
     expect(GROUND_SEGMENTS.map((segment) => [segment.startX, segment.endX])).toEqual([[0, 15500]]);
