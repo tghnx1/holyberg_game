@@ -37,6 +37,12 @@ import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import {
+  LEVEL4_EDITABLE_IDS,
+  resolveLevel4Placement,
+  storeLevel4Placement,
+  type Level4Placement,
+} from '../level/level4/level4Layout';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 
 // Native pixel dimensions of assets/level_4/toilet-full.png. The artwork is
@@ -157,6 +163,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private walk!: WalkInput;
   /** The door's scaleX when shut, derived from the measured stall opening. */
   private doorClosedScaleX = 1;
+  /** Authored visual scale multiplier for the story NPC, on top of its base. */
+  private npcScale = 1;
+  /** Whether the stall door is currently drawn edge-on; see `onEditorEnable`. */
+  private doorOpen = true;
   /** True only while the dialogue hand-off and the stall cutscene are running. */
   private controlsLocked = false;
   /** Restored when the editor closes, so it cannot free a cutscene's controls. */
@@ -238,23 +248,65 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       .setDepth(Depth.SKY);
   }
 
+  /**
+   * The composed default, used until someone authors the room in the editor.
+   * Deliberately non-uniform: X keeps the room's proportion against the
+   * character, Y stretches it to fill the frame. Both divided by the
+   * texture's own upscale so the scales stay expressed in authored pixels.
+   */
+  private defaultToiletPlacement(): Level4Placement {
+    return {
+      x: 0,
+      y: TOILET_TOP_Y,
+      scaleX: TOILET_SCALE / TOILET_TEXTURE_UPSCALE,
+      scaleY: TOILET_SCALE_Y / TOILET_TEXTURE_UPSCALE,
+    };
+  }
+
   private buildToiletStrip(): void {
+    const placement = resolveLevel4Placement(
+      this.scene.key,
+      LEVEL4_EDITABLE_IDS.toilet,
+      this.defaultToiletPlacement(),
+      this.editorViewport(),
+    );
     this.toiletStrip = this.add
-      .image(0, TOILET_TOP_Y, LEVEL4_ASSET_KEYS.toiletStrip)
+      .image(placement.x, placement.y, LEVEL4_ASSET_KEYS.toiletStrip)
       .setOrigin(0, 0)
-      // Deliberately non-uniform: X keeps the room's proportion against the
-      // character, Y stretches it to fill the frame. Both divided by the
-      // texture's own upscale so the scales stay expressed in authored pixels.
-      .setScale(
-        TOILET_SCALE / TOILET_TEXTURE_UPSCALE,
-        TOILET_SCALE_Y / TOILET_TEXTURE_UPSCALE,
-      )
+      .setScale(placement.scaleX, placement.scaleY)
       .setDepth(Depth.ENVIRONMENT + 5);
   }
 
   private buildActors(): void {
     this.player = this.createActor(this.playerCharacter, this.playerX, GROUND_Y, 1, 'idle');
-    this.npc = this.createActor(this.npcCharacter, NPC_WAIT_X, GROUND_Y, NPC_WAIT_FACING, 'idle');
+    // The NPC's wait position is authored, not fixed: `syncActor` renders from
+    // `actor.x/y`, so writing the editor's result here is what makes a drag
+    // survive both the next frame and the next scene entry.
+    const npcPlacement = resolveLevel4Placement(
+      this.scene.key,
+      LEVEL4_EDITABLE_IDS.npc,
+      { x: NPC_WAIT_X, y: GROUND_Y, scaleX: 1, scaleY: 1 },
+      this.editorViewport(),
+    );
+    this.npcScale = npcPlacement.scaleY;
+    this.npc = this.createActor(
+      this.npcCharacter,
+      npcPlacement.x,
+      npcPlacement.y,
+      NPC_WAIT_FACING,
+      'idle',
+    );
+  }
+
+  /** The viewport the authored ratios are expressed against. */
+  private editorViewport(): { width: number; height: number } {
+    const camera = this.cameras.main;
+    return { width: camera.width, height: camera.height };
+  }
+
+  /** Where the story NPC is actually standing, which the trigger follows. */
+  private npcWaitX(): number {
+    return this.npc?.x ?? NPC_WAIT_X;
   }
 
   private buildDoor(): void {
@@ -266,9 +318,26 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       .image(STALL_OPENING_RIGHT, STALL_OPENING_BOTTOM, LEVEL4_ASSET_KEYS.stallDoor)
       .setOrigin(1, 1)
       .setDepth(Depth.FOREGROUND + 10);
+    // Measured default first, so the authored entry only has to carry what
+    // was actually changed.
     this.stallDoor.setDisplaySize(STALL_OPENING_WIDTH, STALL_OPENING_HEIGHT);
+    const placement = resolveLevel4Placement(
+      this.scene.key,
+      LEVEL4_EDITABLE_IDS.stallDoor,
+      {
+        x: STALL_OPENING_RIGHT,
+        y: STALL_OPENING_BOTTOM,
+        scaleX: this.stallDoor.scaleX,
+        scaleY: this.stallDoor.scaleY,
+      },
+      this.editorViewport(),
+    );
+    this.stallDoor.setPosition(placement.x, placement.y).setScale(placement.scaleX, placement.scaleY);
+    // The authored width is the *closed* one; the open pose is derived from it
+    // every time, so editing the door never desynchronises the swing.
     this.doorClosedScaleX = this.stallDoor.scaleX;
     this.stallDoor.scaleX = this.doorClosedScaleX * DOOR_OPEN_SCALE;
+    this.doorOpen = true;
   }
 
   private createActor(
@@ -329,9 +398,43 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     offsetY: number;
     scale: number;
   } {
-    if (actor !== this.player) return { offsetX: 0, offsetY: 0, scale: 1 };
+    // The NPC carries no drawing offset — its authored position lives in
+    // `actor.x/y` itself — but it does carry an authored scale multiplier.
+    if (actor !== this.player) return { offsetX: 0, offsetY: 0, scale: this.npcScale };
     const camera = this.cameras.main;
     return getPlayerVisualOffset(this.scene.key, camera.width, camera.height);
+  }
+
+  /**
+   * Turns an editor transform on the NPC sprite back into the authored state
+   * `syncActor` renders from: the sprite's origin is (0.5, 1), so its y is the
+   * drawn feet, and `actorAnchor` adds the scaled foot gap on top of the
+   * actor's floor line — both of which have to come back out here or every
+   * edit would drift by one foot gap.
+   */
+  private applyNpcEdit(transform: {
+    x: number;
+    y: number;
+    scaleX: number;
+    scaleY: number;
+  }): void {
+    const baseScale = resolveGameplayScale(
+      this.npc.character,
+      resolveLocomotionPose(this.npc.character, this.npc.motion),
+    );
+    if (baseScale > 0) this.npcScale = transform.scaleY / baseScale;
+    const frame = this.resolveActorFrame(this.npc, this.time.now);
+    this.npc.x = transform.x;
+    // `actorAnchor` seats the sprite using the *base* scale, not the authored
+    // multiplier, so the inverse has to use the same one or every edit would
+    // drift by one foot gap's worth of the scale change.
+    this.npc.y = transform.y - footOffset(frame.footGap, baseScale) - 10;
+    storeLevel4Placement(
+      this.scene.key,
+      LEVEL4_EDITABLE_IDS.npc,
+      { x: this.npc.x, y: this.npc.y, scaleX: this.npcScale, scaleY: this.npcScale },
+      this.editorViewport(),
+    );
   }
 
   // ------------------------------------------------------- EditableScene
@@ -340,14 +443,29 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     const frame = this.resolveActorFrame(this.player, this.time.now);
     return [
       {
-        id: 'toilet',
+        id: LEVEL4_EDITABLE_IDS.toilet,
         label: 'TOILET ROOM',
         target: this.toiletStrip,
         getNativeSize: () => ({ width: TOILET_STRIP_WIDTH, height: TOILET_STRIP_HEIGHT }),
         allowNonUniformScale: true,
+        // Written straight into the authored layout the scene rebuilds from,
+        // so P saves the value that was actually edited and the next entry
+        // reproduces it instead of the composed default.
+        onChange: (transform) =>
+          storeLevel4Placement(
+            this.scene.key,
+            LEVEL4_EDITABLE_IDS.toilet,
+            {
+              x: transform.x,
+              y: transform.y,
+              scaleX: transform.scaleX,
+              scaleY: transform.scaleY,
+            },
+            this.editorViewport(),
+          ),
       },
       {
-        id: 'stall-door',
+        id: LEVEL4_EDITABLE_IDS.stallDoor,
         label: 'STALL DOOR',
         target: this.stallDoor,
         getNativeSize: () => ({
@@ -355,15 +473,37 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
           height: this.stallDoor.frame.realHeight,
         }),
         allowNonUniformScale: true,
+        onChange: (transform) => {
+          // The door is drawn open while the level plays, so the edited width
+          // becomes the new *closed* baseline the swing is derived from.
+          this.doorClosedScaleX = transform.scaleX;
+          storeLevel4Placement(
+            this.scene.key,
+            LEVEL4_EDITABLE_IDS.stallDoor,
+            {
+              x: transform.x,
+              y: transform.y,
+              scaleX: transform.scaleX,
+              scaleY: transform.scaleY,
+            },
+            this.editorViewport(),
+          );
+        },
       },
       {
-        id: 'npc',
+        id: LEVEL4_EDITABLE_IDS.npc,
         label: `STORY NPC (${this.npcCharacter.name})`,
         target: this.npc.sprite,
         getNativeSize: () => ({
           width: this.npc.sprite.frame.realWidth,
           height: this.npc.sprite.frame.realHeight,
         }),
+        // `syncActor` re-derives this sprite's transform from `actor.x/y` and
+        // the authored scale every frame, so writing only the sprite was
+        // overwritten on the very next update. Writing the authored state
+        // instead makes the edit what the runtime renders from — no snap-back,
+        // and the dialogue trigger follows because it reads the same value.
+        onChange: (transform) => this.applyNpcEdit(transform),
       },
       createPlayerEditable(this, {
         sprite: this.player.sprite,
@@ -401,10 +541,19 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   onEditorEnable(): void {
     this.controlsLockedBeforeEditor = this.controlsLocked;
     this.controlsLocked = true;
+    // The door spends the level drawn edge-on at 12% width, which is both
+    // impossible to grab and the wrong number to author: what is stored is the
+    // *closed* width the swing is derived from. Showing it closed while
+    // editing makes the handle usable and makes the edited value already be
+    // the one that gets saved.
+    this.stallDoor.scaleX = this.doorClosedScaleX;
   }
 
   onEditorDisable(): void {
     this.controlsLocked = this.controlsLockedBeforeEditor;
+    this.stallDoor.scaleX = this.doorOpen
+      ? this.doorClosedScaleX * DOOR_OPEN_SCALE
+      : this.doorClosedScaleX;
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
@@ -437,7 +586,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       }
       this.player.motion = direction === 0 ? 'idle' : 'walk';
 
-      if (!this.dialogueTriggered && this.player.x >= NPC_WAIT_X - DIALOGUE_PROXIMITY) {
+      // Reads the NPC's authored position, not the constant, so moving them
+      // in the editor moves the conversation trigger with them instead of
+      // leaving an invisible trigger behind at the composed default.
+      if (!this.dialogueTriggered && this.player.x >= this.npcWaitX() - DIALOGUE_PROXIMITY) {
         this.startDialogue();
         return;
       }
@@ -529,6 +681,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       duration: 260,
       ease: 'Quad.easeOut',
       onComplete: () => {
+        this.doorOpen = false;
         this.time.delayedCall(4000, () => this.openDoorAndExit());
       },
     });
@@ -540,7 +693,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       scaleX: this.doorClosedScaleX * DOOR_OPEN_SCALE,
       duration: 260,
       ease: 'Quad.easeOut',
-      onComplete: () => this.walkNpcOut(),
+      onComplete: () => {
+        this.doorOpen = true;
+        this.walkNpcOut();
+      },
     });
   }
 

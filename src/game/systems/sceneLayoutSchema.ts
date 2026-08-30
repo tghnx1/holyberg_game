@@ -28,12 +28,13 @@ function validateObjectLayout(value: unknown, where: string): SceneObjectLayout 
     }
     layout[key] = record[key];
   }
-  if (record.scale !== undefined) {
-    if (!isFiniteNumber(record.scale)) throw new Error(`${where}.scale must be a finite number`);
-    if (record.scale < MIN_SCALE || record.scale > MAX_SCALE) {
-      throw new Error(`${where}.scale must be between ${MIN_SCALE} and ${MAX_SCALE}`);
+  for (const key of ['scale', 'scaleX', 'scaleY'] as const) {
+    if (record[key] === undefined) continue;
+    if (!isFiniteNumber(record[key])) throw new Error(`${where}.${key} must be a finite number`);
+    if (record[key] < MIN_SCALE || record[key] > MAX_SCALE) {
+      throw new Error(`${where}.${key} must be between ${MIN_SCALE} and ${MAX_SCALE}`);
     }
-    layout.scale = record.scale;
+    layout[key] = record[key];
   }
   return layout;
 }

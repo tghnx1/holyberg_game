@@ -20,6 +20,15 @@ export interface SceneObjectLayout {
   yRatio?: number;
   /** Visual scale multiplier applied on top of the object's own natural scale. */
   scale?: number;
+  /**
+   * Independent axis scales, for artwork that is deliberately stretched on
+   * one axis only — Level 4's toilet strip keeps its horizontal proportion
+   * against the character while its height fills the frame, so a single
+   * uniform `scale` cannot express what the editor is allowed to author for
+   * it. An object that scales uniformly keeps using `scale` alone.
+   */
+  scaleX?: number;
+  scaleY?: number;
 }
 
 export type SceneLayoutConfig = Record<string, Record<string, SceneObjectLayout>>;

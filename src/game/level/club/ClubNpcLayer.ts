@@ -168,7 +168,22 @@ export class ClubNpcLayer {
         const created = this.duplicate(instance);
         return created ? this.toEditableObject(created) : undefined;
       },
+      // Deleting an ambient group is as meaningful as duplicating one: a room
+      // is tuned by adding and removing crowd, and `buildLayoutFromSnapshot`
+      // maps over `instances`, so dropping it here is also what omits it from
+      // the next save and keeps it gone after a reload. Only these NPCs
+      // declare it — the player, the room video and every other singleton
+      // have no `remove`, so the editor cannot delete them.
+      remove: () => this.removeInstance(instance),
     };
+  }
+
+  /** Destroys one crowd group and stops tracking it. */
+  private removeInstance(instance: NpcInstance): void {
+    const index = this.instances.indexOf(instance);
+    if (index < 0) return;
+    this.instances.splice(index, 1);
+    instance.sprite.destroy();
   }
 
   /**

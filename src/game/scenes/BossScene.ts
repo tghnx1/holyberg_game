@@ -13,6 +13,13 @@ import type { ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { RhythmResult } from '../rhythm/types';
+import type { EditorSavePayload } from '../systems/editableSceneContract';
+import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import type { EditableObject } from '../systems/SceneEditor';
+import { buildSceneLayoutPayload, getSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
+
+/** Editable id for the boss's own presentation. */
+const BOSS_EDITABLE_ID = 'boss';
 
 /** Upper bound on a single simulated frame, in milliseconds. */
 const MAX_FRAME_DELTA_MS = 50;
@@ -48,6 +55,8 @@ export class BossScene extends Phaser.Scene {
   private running = false;
   private finished = false;
   private introText?: Phaser.GameObjects.Text;
+  /** Restored when the dev editor closes, so the fight resumes as it was. */
+  private runningBeforeEditor = false;
 
   constructor() {
     super('BossScene');
@@ -104,8 +113,97 @@ export class BossScene extends Phaser.Scene {
     this.controls = new BossInput(this, this.game.device.input.touch);
     this.hud = new BossHud(this);
 
+    this.applyAuthoredPresentation();
+
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.showIntro();
+  }
+
+  // ------------------------------------------------------- EditableScene
+
+  /**
+   * Pushes the saved visual placement into the two renderers, which re-apply
+   * it every frame. Both rewrite their own transform on each update — the boss
+   * hovers, the player tracks its motion — so an editor that only moved the
+   * display object would be overwritten immediately and lost on the next entry.
+   */
+  private applyAuthoredPresentation(): void {
+    const camera = this.cameras.main;
+    const boss = getSceneObjectLayout(this.scene.key, BOSS_EDITABLE_ID);
+    this.boss.setPresentation({
+      offsetX: (boss?.xRatio ?? 0) * camera.width,
+      offsetY: (boss?.yRatio ?? 0) * camera.height,
+      scale: boss?.scale ?? 1,
+    });
+    this.player.setPresentation(getPlayerVisualOffset(this.scene.key, camera.width, camera.height));
+  }
+
+  /**
+   * The two objects worth authoring: the boss and the playable character.
+   *
+   * Deliberately nothing else. Attacks and lasers are transient — the director
+   * creates and destroys them per telegraph — so they are not authored
+   * objects, and the arena is drawn from `bounds`, which the fight plan itself
+   * was built from, so moving it would be a gameplay change rather than a
+   * presentation one. Both entries here are presentation only: neither touches
+   * `motion`, the arena bounds, collision or scoring.
+   */
+  getEditableObjects(): EditableObject[] {
+    // Read live rather than captured: the boss hovers and the player's foot
+    // gap changes with its frame, so a stale timestamp would bake a few
+    // pixels of drift into every authored offset.
+    return [
+      {
+        id: BOSS_EDITABLE_ID,
+        label: 'BOSS',
+        target: this.boss.displayObject,
+        getNativeSize: () => {
+          const bounds = this.boss.displayObject.getBounds();
+          const scale = this.boss.displayObject.scaleX || 1;
+          return { width: bounds.width / scale, height: bounds.height / scale };
+        },
+        onChange: (transform) => {
+          const camera = this.cameras.main;
+          const anchor = this.boss.anchorAt(this.time.now, this.bossX);
+          setSceneObjectLayout(this.scene.key, BOSS_EDITABLE_ID, {
+            xRatio: camera.width > 0 ? (transform.x - anchor.x) / camera.width : 0,
+            yRatio: camera.height > 0 ? (transform.y - anchor.y) / camera.height : 0,
+            scale: transform.scaleY,
+          });
+          this.applyAuthoredPresentation();
+        },
+      },
+      createPlayerEditable(this, {
+        sprite: this.player.displayObject,
+        getAnchor: () =>
+          this.player.anchorAt(this.time.now, this.player.currentFootGap(this.time.now)),
+        getBaseScale: () => this.player.baseScaleAt(this.time.now),
+        refresh: () => this.applyAuthoredPresentation(),
+      }),
+    ];
+  }
+
+  buildEditorSave(): EditorSavePayload {
+    return {
+      route: '/__scene-editor/save-layout',
+      body: buildSceneLayoutPayload(this.scene.key),
+    };
+  }
+
+  /**
+   * Freezes the fight while the editor is open: the director stops advancing,
+   * so the timer, the telegraphs and the live attacks all hold where they are
+   * rather than killing a player who is standing still to be positioned.
+   */
+  onEditorEnable(): void {
+    this.runningBeforeEditor = this.running;
+    this.running = false;
+    this.tweens.pauseAll();
+  }
+
+  onEditorDisable(): void {
+    this.tweens.resumeAll();
+    this.running = this.runningBeforeEditor;
   }
 
   private showIntro(): void {

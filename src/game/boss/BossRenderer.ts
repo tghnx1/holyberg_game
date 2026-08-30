@@ -11,6 +11,7 @@ import { BossDepth } from './bossConstants';
  */
 export class BossRenderer {
   private readonly root: Phaser.GameObjects.Container;
+  private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
   private readonly core: Phaser.GameObjects.Arc;
   private readonly ring: Phaser.GameObjects.Arc;
   private readonly eye: Phaser.GameObjects.Arc;
@@ -32,10 +33,31 @@ export class BossRenderer {
       .setDepth(BossDepth.BOSS);
   }
 
+  /** Where the fight wants the boss drawn, before any authored offset. */
+  anchorAt(nowMs: number, centerX: number): { x: number; y: number } {
+    return { x: centerX, y: BOSS_ARENA.bossCenterY + Math.sin(nowMs / 520) * 9 };
+  }
+
+  /** The object the dev editor selects. Presentation only. */
+  get displayObject(): Phaser.GameObjects.Container {
+    return this.root;
+  }
+
+  /**
+   * Authored visual offset and scale, re-applied on every update because the
+   * hover rewrites the container's position each frame — editing the container
+   * alone would be overwritten immediately.
+   */
+  setPresentation(presentation: { offsetX: number; offsetY: number; scale: number }): void {
+    this.presentation = presentation;
+  }
+
   /** Idle hover plus a pupil that tracks the player, so aim reads as intent. */
   update(nowMs: number, centerX: number, playerX: number): void {
-    this.root.x = centerX;
-    this.root.y = BOSS_ARENA.bossCenterY + Math.sin(nowMs / 520) * 9;
+    const anchor = this.anchorAt(nowMs, centerX);
+    this.root.x = anchor.x + this.presentation.offsetX;
+    this.root.y = anchor.y + this.presentation.offsetY;
+    this.root.setScale(this.presentation.scale);
     this.ring.setScale(1 + Math.sin(nowMs / 340) * 0.04);
     const offset = Phaser.Math.Clamp((playerX - centerX) / 14, -22, 22);
     this.eye.x = offset;

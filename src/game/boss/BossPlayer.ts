@@ -38,6 +38,7 @@ export class BossPlayer {
   private motion: BossPlayerMotion;
   private readonly sprite: Phaser.GameObjects.Sprite;
   private currentFrameKey?: string;
+  private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
   private damageFrameUntilMs = -Infinity;
 
   constructor(
@@ -81,13 +82,44 @@ export class BossPlayer {
       this.sprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;
     }
-    this.sprite.x = this.motion.x;
     const scale = this.resolveScale(nowMs);
-    this.sprite.y = BOSS_ARENA.floorY + footOffset(frame.footGap, scale);
+    // The authored presentation offset rides on top of wherever the fight put
+    // the character; `motion` itself is never touched, so dodging, collision
+    // and the arena bounds are exactly as before.
+    const anchor = this.anchorAt(nowMs, frame.footGap);
+    this.sprite.x = anchor.x + this.presentation.offsetX;
+    this.sprite.y = anchor.y + this.presentation.offsetY;
+    this.sprite.setScale(scale * this.presentation.scale);
     // Face the way the player is travelling; the run art is drawn facing right.
     if (this.motion.velocityX !== 0) {
       this.sprite.setFlipX(this.motion.velocityX < 0);
     }
+  }
+
+  /** Where the fight wants the character drawn, before any authored offset. */
+  anchorAt(nowMs: number, footGap: number): { x: number; y: number } {
+    return {
+      x: this.motion.x,
+      y: BOSS_ARENA.floorY + footOffset(footGap, this.resolveScale(nowMs)),
+    };
+  }
+
+  /** The sprite the dev editor selects. Presentation only; never physics. */
+  get displayObject(): Phaser.GameObjects.Sprite {
+    return this.sprite;
+  }
+
+  baseScaleAt(nowMs: number): number {
+    return this.resolveScale(nowMs);
+  }
+
+  currentFootGap(nowMs: number, direction: MoveDirection = 0): number {
+    return this.resolveFrame(nowMs, direction).footGap;
+  }
+
+  /** Applies the authored visual offset/scale; re-read on every update. */
+  setPresentation(presentation: { offsetX: number; offsetY: number; scale: number }): void {
+    this.presentation = presentation;
   }
 
   private resolveScale(nowMs: number): number {
