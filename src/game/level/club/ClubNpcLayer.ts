@@ -41,6 +41,8 @@ interface NpcInstance {
 export class ClubNpcLayer {
   private instances: NpcInstance[] = [];
   private roomId = '';
+  /** Suffix counter, so a duplicated group never collides with an existing id. */
+  private cloneCount = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -142,7 +144,19 @@ export class ClubNpcLayer {
    * instead of being tuned by editing numbers blind.
    */
   getEditableObjects(): EditableObject[] {
-    return this.instances.map((instance) => ({
+    return this.instances.map((instance) => this.toEditableObject(instance));
+  }
+
+  /**
+   * A crowd group is one of the things duplicating genuinely makes sense for:
+   * a room is populated by placing the same handful of groups repeatedly, so
+   * copy/paste beats hand-writing another placement entry. Declaring `clone`
+   * is the whole opt-in — the shared editor core offers copy/paste for
+   * exactly the objects that have it, and nothing else in the game's scenes
+   * (the single Level 4 backdrop, the main player) does.
+   */
+  private toEditableObject(instance: NpcInstance): EditableObject {
+    return {
       id: instance.id,
       target: instance.sprite,
       label: instance.placement.group,
@@ -150,7 +164,36 @@ export class ClubNpcLayer {
         width: instance.sprite.width,
         height: instance.sprite.height,
       }),
-    }));
+      clone: () => {
+        const created = this.duplicate(instance);
+        return created ? this.toEditableObject(created) : undefined;
+      },
+    };
+  }
+
+  /**
+   * Builds a live copy of one group's sprite and starts tracking it, so the
+   * duplicate animates, lays out and is saved exactly like an authored one.
+   */
+  private duplicate(instance: NpcInstance): NpcInstance | undefined {
+    const first = instance.art.frames[0];
+    if (!first || !this.scene.textures.exists(first.key)) return undefined;
+    this.cloneCount += 1;
+    const sprite = this.scene.add
+      .sprite(instance.sprite.x, instance.sprite.y, instance.currentKey ?? first.key)
+      .setOrigin(0.5, 1)
+      .setDepth(this.depth)
+      .setScale(instance.sprite.scaleX, instance.sprite.scaleY)
+      .setFlipX(instance.sprite.flipX);
+    const copy: NpcInstance = {
+      id: `${instance.id}:copy:${this.cloneCount}`,
+      placement: { ...instance.placement },
+      art: instance.art,
+      sprite,
+      currentKey: instance.currentKey,
+    };
+    this.instances.push(copy);
+    return copy;
   }
 
   /**

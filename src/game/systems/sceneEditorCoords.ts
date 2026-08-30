@@ -112,3 +112,24 @@ export function worldRectToParentLocal(
   const bottomRight = worldPointToParentLocal(bounds.right, bounds.bottom, ancestors);
   return { left: topLeft.x, top: topLeft.y, right: bottomRight.x, bottom: bottomRight.y };
 }
+
+/**
+ * Inverse of `worldRectToParentLocal`: re-expresses a parent-local AABB back
+ * in world space. The editor core outlines and hit-tests everything in world
+ * space, so an adapter whose object lives inside moved/scaled containers
+ * converts out with this and back in with `worldRectToParentLocal`.
+ */
+export function parentLocalRectToWorld(
+  bounds: LocalRect,
+  ancestors: readonly AncestorTransform[],
+): WorldRect {
+  let { left, top, right, bottom } = bounds;
+  // Mirror of the reverse walk in `worldPointToParentLocal`: innermost first.
+  for (const ancestor of ancestors) {
+    left = left * ancestor.scaleX + ancestor.x;
+    right = right * ancestor.scaleX + ancestor.x;
+    top = top * ancestor.scaleY + ancestor.y;
+    bottom = bottom * ancestor.scaleY + ancestor.y;
+  }
+  return { left, top, right, bottom };
+}

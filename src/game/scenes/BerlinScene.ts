@@ -442,9 +442,10 @@ export class BerlinScene extends Phaser.Scene {
       restoreCamera: () => this.followPlayer(),
     });
     this.editor = layoutEditor;
-    this.input.keyboard?.on('keydown-P', () => {
-      layoutEditor.saveConfig();
-    });
+    // P is the shared editor core's save key now, bound only while edit mode
+    // is on — so it no longer fires a save on every P press during play, and
+    // PauseControl still gets P as the pause shortcut whenever the editor is
+    // closed. `saveConfig()` remains callable from the console.
     this.editorKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.debugKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);
     this.debugGraphics = this.add
