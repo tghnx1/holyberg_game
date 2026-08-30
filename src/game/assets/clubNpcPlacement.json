@@ -2,23 +2,23 @@
   "lounge": [
     {
       "group": "seated_pair",
-      "xRatio": 0.17,
-      "heightRatio": 0.33,
-      "baselineRatio": 0.9,
+      "xRatio": 0.38684612074540475,
+      "heightRatio": 0.3018219324326809,
+      "baselineRatio": 0.8329757489441055,
       "phaseMs": 0
     },
     {
       "group": "three_people_smoke",
-      "xRatio": 0.53,
-      "heightRatio": 0.31,
-      "baselineRatio": 0.88,
+      "xRatio": 0.5233528200857959,
+      "heightRatio": 0.3610710468490579,
+      "baselineRatio": 0.8894209658936111,
       "phaseMs": 400
     },
     {
       "group": "green_drinker",
-      "xRatio": 0.84,
-      "heightRatio": 0.34,
-      "baselineRatio": 0.92,
+      "xRatio": 0.9167865758356499,
+      "heightRatio": 0.3896239277654716,
+      "baselineRatio": 0.9439269099633164,
       "flipX": true,
       "phaseMs": 850
     }
@@ -26,16 +26,16 @@
   "corridor": [
     {
       "group": "two_people_talk",
-      "xRatio": 0.24,
+      "xRatio": 0.19428004535147392,
       "heightRatio": 0.35,
-      "baselineRatio": 0.93,
+      "baselineRatio": 0.9418128654970761,
       "phaseMs": 0
     },
     {
       "group": "violet_pair",
-      "xRatio": 0.74,
-      "heightRatio": 0.33,
-      "baselineRatio": 0.9,
+      "xRatio": 0.7296745086923658,
+      "heightRatio": 0.3810360832840966,
+      "baselineRatio": 0.9735245043693391,
       "flipX": true,
       "phaseMs": 600
     }
@@ -60,9 +60,9 @@
   "dancefloor": [
     {
       "group": "dancefloor_crowd",
-      "xRatio": 0.454434051398337,
-      "heightRatio": 0.52,
-      "baselineRatio": 0.8628946744737209,
+      "xRatio": 0.45956010404585923,
+      "heightRatio": 0.5588051248160244,
+      "baselineRatio": 0.8566880426812591,
       "phaseMs": 0
     }
   ]
