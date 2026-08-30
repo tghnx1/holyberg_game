@@ -1,3 +1,4 @@
+import type Phaser from 'phaser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSceneEditorStateForTests, setSceneEditorActive } from '../src/game/systems/sceneEditorState';
 
@@ -38,9 +39,9 @@ function createText() {
 }
 
 function createScene() {
-  const keyboardListeners = new Map<string, (...args: any[]) => void>();
+  const keyboardListeners = new Map<string, (...args: unknown[]) => void>();
   const button = createText();
-  const scene: any = {
+  const scene = {
     scale: {
       parentSize: { width: 1280, height: 720 },
       game: { device: { input: { touch: false } } },
@@ -53,7 +54,7 @@ function createScene() {
     },
     input: {
       keyboard: {
-        on: (event: string, callback: (...args: any[]) => void) => {
+        on: (event: string, callback: (...args: unknown[]) => void) => {
           keyboardListeners.set(event, callback);
         },
         off: (event: string) => {
@@ -76,7 +77,7 @@ describe('pause control keyboard shortcuts', () => {
 
   it('pauses on P when the editor is closed', () => {
     const { scene, keyboardListeners } = createScene();
-    attachPauseControl(scene);
+    attachPauseControl(scene as unknown as Phaser.Scene);
 
     keyboardListeners.get('keydown-P')?.({ key: 'P' });
 
@@ -86,8 +87,8 @@ describe('pause control keyboard shortcuts', () => {
 
   it('keeps P inside the editor while ESC still pauses', () => {
     const { scene, keyboardListeners } = createScene();
-    attachPauseControl(scene);
-    setSceneEditorActive(scene, true);
+    attachPauseControl(scene as unknown as Phaser.Scene);
+    setSceneEditorActive(scene as unknown as Phaser.Scene, true);
 
     keyboardListeners.get('keydown-P')?.({ key: 'P' });
     expect(requestPause).not.toHaveBeenCalled();
