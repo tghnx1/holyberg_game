@@ -67,26 +67,43 @@ function attachSceneEditor(scene: Phaser.Scene & EditableScene): void {
  * so a level added tomorrow is covered the moment it implements the interface.
  * Dev-only — production never calls this, so the editor's keys and pointer
  * handlers cannot reach a shipped build.
+ *
+ * Deferred to the game's READY event rather than run inline, mirroring
+ * `installPauseLifecycle`. `new Phaser.Game(config)` does not instantiate the
+ * configured scenes: the SceneManager constructor parks them in its private
+ * `_pending` list and only its own READY-registered `bootQueue` moves them
+ * into `game.scene.scenes`. `main.ts` calls this immediately after
+ * constructing the game, long before that queue runs, so iterating `scenes`
+ * inline walked an empty array and silently attached the editor to nothing —
+ * on every scene, every platform. The SceneManager registers its READY
+ * listener in its own constructor, before this module's, and emitters fire
+ * in registration order, so by the time `watch` runs here `scenes` is fully
+ * populated.
  */
 export function installSceneEditors(game: Phaser.Game): void {
   if (!import.meta.env.DEV) return;
-  for (const scene of game.scene.scenes) {
-    if (!isEditableScene(scene)) continue;
-    const editable = scene as Phaser.Scene & EditableScene;
-    let attached = false;
-    // Wired from the scene's first update rather than its CREATE event: a
-    // scene started from another scene has already emitted CREATE by the time
-    // anything outside it can listen, whereas UPDATE is guaranteed to arrive
-    // for every run — including after a restart, which is what the flag and
-    // the SHUTDOWN reset below are for.
-    const wire = (): void => {
-      if (attached) return;
-      attached = true;
-      attachSceneEditor(editable);
-    };
-    scene.events.on(Phaser.Scenes.Events.UPDATE, wire);
-    scene.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
-      attached = false;
-    });
-  }
+  const watch = (): void => {
+    for (const scene of game.scene.scenes) {
+      if (!isEditableScene(scene)) continue;
+      const editable = scene as Phaser.Scene & EditableScene;
+      let attached = false;
+      // Wired from the scene's first update rather than its CREATE event: a
+      // scene started from another scene has already emitted CREATE by the
+      // time anything outside it can listen, whereas UPDATE is guaranteed to
+      // arrive for every run — including after a restart, which is what the
+      // flag and the SHUTDOWN reset below are for.
+      const wire = (): void => {
+        if (attached) return;
+        attached = true;
+        attachSceneEditor(editable);
+      };
+      scene.events.on(Phaser.Scenes.Events.UPDATE, wire);
+      scene.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+        attached = false;
+      });
+    }
+  };
+
+  if (game.scene.isBooted) watch();
+  else game.events.once(Phaser.Core.Events.READY, watch);
 }
