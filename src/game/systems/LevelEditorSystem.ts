@@ -74,12 +74,10 @@ const ART_VISUAL_FRACTIONS: Record<
   string,
   { xRatio: number; yRatio: number; widthRatio: number; heightRatio: number }
 > = {
-  'obstacle.homeless': {
-  xRatio: 0,
-  yRatio: 0.45,
-  widthRatio: 0.9897,
-  heightRatio: 0.4685
-},
+  // Measured as the union of the alpha-content bounds across all four
+  // `luk *.png` animation frames (374x609 canvas each), so the outline
+  // never clips whichever frame is currently showing.
+  'obstacle.homeless': { xRatio: 0.0481, yRatio: 0.11, widthRatio: 0.9171, heightRatio: 0.8112 },
   'obstacle.stinkyCloud': { xRatio: 0.0723, yRatio: 0.374, widthRatio: 0.8691, heightRatio: 0.2227 },
 };
 
