@@ -18,18 +18,29 @@ describe('what each group loads', () => {
     expect(keys(['idle'])).toEqual(['character:atmos:gameplay:idle']);
   });
 
-  it('gameplay covers idle, run, jump, crouch and damage', () => {
+  it('gameplay covers idle, run, jump, crouch, damage and walk', () => {
     const loaded = keys(['gameplay']);
-    // 1 idle + 6 run + 5 jump + 3 crouch + 4 damage
-    expect(loaded).toHaveLength(19);
-    for (const group of ['run', 'jump', 'crouch', 'damage']) {
+    // 1 idle + 6 run + 5 jump + 3 crouch + 4 damage + 5 walk
+    expect(loaded).toHaveLength(24);
+    for (const group of ['run', 'jump', 'crouch', 'damage', 'walk']) {
       expect(loaded.some((key) => key.includes(`:gameplay:${group}:`))).toBe(true);
     }
   });
 
-  it('gameplay does not pull the walk frames, which nothing draws yet', () => {
+  it('gameplay loads the walk frames Level 2 and Level 4 draw', () => {
     expect(atmos.capabilities.walkAnimation).toBe(true);
-    expect(keys(['gameplay']).some((key) => key.includes(':walk:'))).toBe(false);
+    const walkKeys = keys(['gameplay']).filter((key) => key.includes(':walk:'));
+    expect(walkKeys).toHaveLength(5);
+    expect(walkKeys).toEqual(atmos.gameplay.walk.map((ref) => ref.key));
+  });
+
+  it('a character with no walk set still loads full gameplay via the run fallback', () => {
+    // Klaus has no walk frames; characterLocomotion falls back to run for it.
+    expect(klaus.gameplay.walk).toEqual([]);
+    const loaded = keys(['gameplay'], klaus);
+    expect(loaded.some((key) => key.includes(':walk:'))).toBe(false);
+    // 1 idle + 4 run + 2 jump + 1 crouch + 1 damage, unaffected by the fix.
+    expect(loaded).toHaveLength(9);
   });
 
   it('portrait is exactly the two dialogue frames', () => {
@@ -61,6 +72,13 @@ describe('what each group loads', () => {
 });
 
 describe('combining groups', () => {
+  it('requesting gameplay twice does not duplicate the walk frames', () => {
+    const refs = collectCharacterAssets(atmos, ['gameplay', 'gameplay']);
+    const walkKeys = refs.map((ref) => ref.key).filter((key) => key.includes(':walk:'));
+    expect(new Set(walkKeys).size).toBe(walkKeys.length);
+    expect(walkKeys).toHaveLength(5);
+  });
+
   it('never queues an overlapping asset twice', () => {
     const combined = keys(['idle', 'gameplay']);
     expect(new Set(combined).size).toBe(combined.length);

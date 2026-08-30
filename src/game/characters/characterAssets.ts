@@ -23,7 +23,13 @@ export type CharacterAssetGroup =
    * also the pose a dialogue actor settles on after its entrance.
    */
   | 'idle'
-  /** Everything the platforming scenes draw: idle, run, jump, crouch, damage. */
+  /**
+   * Everything a scene might draw for this character on foot: idle, run,
+   * jump, crouch, damage, and walk. Run/jump/crouch/damage are the Berlin
+   * runner's; walk is what Level 2 and Level 4 draw instead, through
+   * `characterLocomotion.ts` — a character with no walk set there falls back
+   * to its run frames, which this group already loaded.
+   */
   | 'gameplay'
   /** The two dialogue portrait frames. */
   | 'portrait'
@@ -32,11 +38,6 @@ export type CharacterAssetGroup =
   /** Optional NPC entrance animation. */
   | 'appear';
 
-/**
- * `walk` is deliberately excluded from `gameplay`: the frames are discovered
- * and reported as a capability, but no scene draws them today (Club uses the
- * run cycle), so loading them would be pure waste.
- */
 export function collectCharacterAssets(
   character: CharacterDefinition,
   groups: readonly CharacterAssetGroup[],
@@ -58,6 +59,7 @@ export function collectCharacterAssets(
           ...character.gameplay.jump,
           ...character.gameplay.crouch,
           ...character.gameplay.damage,
+          ...character.gameplay.walk,
         );
         break;
       case 'portrait':
