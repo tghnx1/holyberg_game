@@ -10,6 +10,8 @@ import {
   loopedFrameIndex,
   RUN_CYCLE_MS,
   staticRunFrameIndex,
+  WALK_CYCLE_MS,
+  walkFrameIndex,
 } from '../src/game/characters/characterAnimation';
 import { getCharacter } from '../src/game/characters/characterRegistry';
 
@@ -67,6 +69,72 @@ describe('looping frame resolution', () => {
   it('is safe with no frames or a zero cycle', () => {
     expect(loopedFrameIndex(100, 0, RUN_CYCLE_MS)).toBe(0);
     expect(loopedFrameIndex(100, 6, 0)).toBe(0);
+  });
+});
+
+describe('walk frame hold', () => {
+  // 5 frames, weights [1, 1, 1, 1.5, 1.5]: total weight 6, so a plain frame
+  // holds for WALK_CYCLE_MS/6 and frames 4-5 (index 3-4) hold for 1.5x that.
+  const plainMs = WALK_CYCLE_MS / 6;
+
+  it('holds the 4th and 5th frame 1.5x longer than the others, by position', () => {
+    // Frame 0: [0, plainMs)
+    expect(walkFrameIndex(0, 5, WALK_CYCLE_MS)).toBe(0);
+    expect(walkFrameIndex(plainMs - 1, 5, WALK_CYCLE_MS)).toBe(0);
+    // Frame 3 (the 4th) spans 1.5x a plain frame, starting at 3*plainMs.
+    expect(walkFrameIndex(3 * plainMs, 5, WALK_CYCLE_MS)).toBe(3);
+    expect(walkFrameIndex(3 * plainMs + 1.5 * plainMs - 1, 5, WALK_CYCLE_MS)).toBe(3);
+    // Frame 4 (the 5th) follows immediately, also 1.5x, and holds to the wrap.
+    expect(walkFrameIndex(3 * plainMs + 1.5 * plainMs, 5, WALK_CYCLE_MS)).toBe(4);
+    expect(walkFrameIndex(WALK_CYCLE_MS - 1, 5, WALK_CYCLE_MS)).toBe(4);
+  });
+
+  it('still visits every frame exactly once per cycle', () => {
+    for (const count of [1, 2, 3, 4, 5, 8]) {
+      const seen = new Set<number>();
+      for (let t = 0; t < WALK_CYCLE_MS; t += 1) {
+        seen.add(walkFrameIndex(t, count, WALK_CYCLE_MS));
+      }
+      expect([...seen].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: count }, (_, i) => i),
+      );
+    }
+  });
+
+  it('still completes the walk cycle in WALK_CYCLE_MS whatever the frame count', () => {
+    for (const count of [1, 3, 5, 8]) {
+      for (const t of [0, 137, 411]) {
+        expect(walkFrameIndex(t, count, WALK_CYCLE_MS)).toBe(
+          walkFrameIndex(t + WALK_CYCLE_MS, count, WALK_CYCLE_MS),
+        );
+      }
+    }
+  });
+
+  it('is unaffected for a walk set with no 4th or 5th frame', () => {
+    // 3 frames: none at index 3 or 4, so it matches the plain looped index.
+    for (let t = 0; t < WALK_CYCLE_MS; t += 7) {
+      expect(walkFrameIndex(t, 3, WALK_CYCLE_MS)).toBe(loopedFrameIndex(t, 3, WALK_CYCLE_MS));
+    }
+  });
+
+  it('applies the hold by position for a longer walk set too', () => {
+    // 8 frames: index 3 and 4 still get the extra hold, 5-7 do not.
+    const weights = [1, 1, 1, 1.5, 1.5, 1, 1, 1];
+    const total = weights.reduce((a, b) => a + b, 0);
+    let elapsed = 0;
+    const boundaries = weights.map((w) => (elapsed += w) - w);
+    for (let i = 0; i < weights.length; i += 1) {
+      // +0.01ms clear of the boundary so float rounding in the division
+      // cannot land this just under it and report the previous frame.
+      const startMs = (boundaries[i] / total) * WALK_CYCLE_MS + 0.01;
+      expect(walkFrameIndex(startMs, 8, WALK_CYCLE_MS)).toBe(i);
+    }
+  });
+
+  it('is safe with no frames or a zero cycle', () => {
+    expect(walkFrameIndex(100, 0, WALK_CYCLE_MS)).toBe(0);
+    expect(walkFrameIndex(100, 5, 0)).toBe(0);
   });
 });
 

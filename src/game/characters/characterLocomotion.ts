@@ -3,6 +3,7 @@ import {
   RUN_CYCLE_MS,
   staticRunFrameIndex,
   WALK_CYCLE_MS,
+  walkFrameIndex,
 } from './characterAnimation';
 import type {
   CharacterAssetRef,
@@ -56,7 +57,7 @@ export function resolveLocomotionFrame(
   const { idle, run, walk } = character.gameplay;
   if (motion === 'walk') {
     if (hasWalkFrames(character)) {
-      return walk[loopedFrameIndex(now, walk.length, WALK_CYCLE_MS)];
+      return walk[walkFrameIndex(now, walk.length, WALK_CYCLE_MS)];
     }
     return run[loopedFrameIndex(now, run.length, RUN_CYCLE_MS)];
   }

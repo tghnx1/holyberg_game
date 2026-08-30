@@ -42,6 +42,37 @@ export function loopedFrameIndex(now: number, frameCount: number, cycleMs: numbe
 }
 
 /**
+ * Extra hold, as a multiple of a plain frame's share of the cycle, for the
+ * 4th and 5th walk frames (index 3 and 4): the foot-contact poses in a walk
+ * cycle read better held a little longer than the mid-swing frames around
+ * them. By position, not by character or art set, so any walk sequence long
+ * enough to have a 4th/5th frame gets the same hitch, and a shorter one is
+ * unaffected — this is not a per-character override.
+ */
+const WALK_FRAME_HOLD_WEIGHT: Partial<Record<number, number>> = { 3: 1.5, 4: 1.5 };
+
+/**
+ * Like `loopedFrameIndex`, but frames 4 and 5 of the sequence (if present)
+ * hold for `WALK_FRAME_HOLD_WEIGHT` times as long as the others. The cycle
+ * still completes in exactly `cycleMs`, so WALK_CYCLE_MS is unchanged —
+ * only the internal split between frames shifts.
+ */
+export function walkFrameIndex(now: number, frameCount: number, cycleMs: number): number {
+  if (frameCount <= 0) return 0;
+  if (cycleMs <= 0 || !Number.isFinite(now)) return 0;
+  let totalWeight = 0;
+  for (let i = 0; i < frameCount; i += 1) totalWeight += WALK_FRAME_HOLD_WEIGHT[i] ?? 1;
+  const phase = ((now % cycleMs) + cycleMs) % cycleMs;
+  const target = (phase / cycleMs) * totalWeight;
+  let elapsed = 0;
+  for (let i = 0; i < frameCount; i += 1) {
+    elapsed += WALK_FRAME_HOLD_WEIGHT[i] ?? 1;
+    if (target < elapsed) return i;
+  }
+  return frameCount - 1;
+}
+
+/**
  * How many of a character's jump frames are the airborne sequence.
  *
  * The manifest convention is that the last frame is the landing pose, so it
