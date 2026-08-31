@@ -106,6 +106,19 @@ export class ToiletSceneView {
     width: number,
     height: number,
     cast: ResolvedSceneCast,
+    /**
+     * Extra width this view renders past the panel's own logical width, so the
+     * room keeps covering the ground underneath the diagonal divider (which
+     * drifts right toward the bottom) instead of leaving a black wedge between
+     * the panel's vertical edge and the divider's left edge.
+     *
+     * The same contract `StationSceneView` takes, for the same reason and with
+     * the same rule: only the *mask* is widened. The composition itself is
+     * never stretched, duplicated or otherwise coerced to reach it — whatever
+     * of the real art naturally extends past the panel edge shows through, and
+     * the divider drawn on top covers its own band regardless.
+     */
+    private readonly renderOverlap: number = 0,
   ) {
     // The room is shorter than the canonical box once its aspect is respected,
     // so its own ceiling tone carries the last few pixels rather than black.
@@ -230,14 +243,25 @@ export class ToiletSceneView {
   }
 
   /**
-   * The mask is only ever the boundary between this panel and the portrait /
-   * dialogue UI beside it — never a framing device. Framing itself comes from
+   * The mask is only ever the boundary against the portrait / dialogue UI
+   * beside this panel — never a framing device. Framing itself comes from
    * `applyComposition`.
+   *
+   * Widened by `renderOverlap` exactly as the station is, so the artwork
+   * continues underneath the diagonal divider and the divider paints over it,
+   * rather than being cut on a vertical line short of the seam and leaving a
+   * black wedge between the two. The composition's own fit is computed against
+   * the real panel size, never the widened one, so extending that coverage
+   * neither rescales nor repositions the room — and an editor-authored
+   * transform is likewise untouched by it.
    */
   resize(width: number, height: number): void {
     this.panelWidth = width;
     this.panelHeight = height;
-    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width, height);
+    this.mask
+      .clear()
+      .fillStyle(0xffffff)
+      .fillRect(0, 0, width + this.renderOverlap, height);
     this.applyComposition();
   }
 

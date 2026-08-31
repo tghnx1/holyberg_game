@@ -8,7 +8,12 @@ import {
 } from '../src/game/systems/sceneLayout';
 import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
 
-const SCENE = 'DialogueScene';
+/**
+ * A scene key that never appears in the checked-in layout, so these assert the
+ * store's behaviour rather than whatever staging happens to be authored for
+ * the real dialogue at the time.
+ */
+const SCENE = 'DialogueLayoutTestScene';
 
 beforeEach(() => {
   resetSceneLayout();
@@ -73,7 +78,7 @@ describe('toilet dialogue staging persistence', () => {
 
   it('only ever sends this scene, so saving one dialogue cannot wipe another', () => {
     setSceneObjectLayout(SCENE, TOILET_VIEW_IDS.player, { xRatio: 0.2, yRatio: 0, scale: 1 });
-    setSceneObjectLayout('Level4Scene', 'toilet', { xRatio: 0, yRatio: 0, scaleX: 1, scaleY: 1 });
+    setSceneObjectLayout('OtherTestScene', 'toilet', { xRatio: 0, yRatio: 0, scaleX: 1, scaleY: 1 });
     expect(Object.keys(buildSceneLayoutPayload(SCENE))).toEqual([SCENE]);
   });
 

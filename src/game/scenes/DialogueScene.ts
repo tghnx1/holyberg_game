@@ -309,19 +309,21 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
 
   private buildScenePanel(): void {
     const { x, y, width, height } = this.layout.scenePanel;
+    // The seam leans right as it descends, so a scene panel has to keep
+    // rendering past its own vertical edge to stay behind the divider all the
+    // way down. Both dialogue stages take the identical overlap; the panel's
+    // logical `width` is unchanged for either.
+    const renderOverlap = DialogueLayout.dividerSkew + DialogueLayout.dividerThickness;
     const sceneStage =
       this.script.sceneId === 'toilet'
-        ? new ToiletSceneView(this, width, height, this.sceneCast)
+        ? new ToiletSceneView(this, width, height, this.sceneCast, renderOverlap)
         : new StationSceneView(
             this,
             width,
             height,
             this.sceneCast,
             undefined,
-            // The seam leans right as it descends, so the station has to keep
-            // rendering past its own vertical edge to stay behind the divider all
-            // the way down. The panel's logical `width` is unchanged.
-            DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
+            renderOverlap,
           );
     if (sceneStage instanceof StationSceneView) this.stationScene = sceneStage;
     if (sceneStage instanceof ToiletSceneView) this.toiletScene = sceneStage;
