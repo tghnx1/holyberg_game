@@ -40,7 +40,7 @@ import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPr
 import {
   LEVEL4_EDITABLE_IDS,
   resolveLevel4Placement,
-  resolveStallEntryTargets,
+  resolveStallEntryLogicalTargets,
   storeLevel4Placement,
   type Level4Placement,
 } from '../level/level4/level4Layout';
@@ -440,10 +440,33 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.layoutTargetMarkers();
   }
 
-  /** Where each character walks to, inside the authored zone. */
+  /**
+   * Where each character walks to, inside the authored zone — for the
+   * *marker itself*: what the editor shows and what a designer positioned.
+   * Used to draw the markers, where the raw visual position is exactly
+   * right; the walk-in uses `stallEntryLogicalTargets` instead, which is the
+   * same thing corrected for the player's rendering offset.
+   */
   private stallEntryTargets(): { playerX: number; npcX: number } {
     const rect = this.stallEntryTargetRect;
-    return resolveStallEntryTargets({ x: rect.x, y: rect.y, width: rect.scaleX });
+    return resolveStallEntryLogicalTargets({ x: rect.x, y: rect.y, width: rect.scaleX }, 0);
+  }
+
+  /**
+   * Where the walk-in actually has to drive each actor's *logical* `x` to, so
+   * the *rendered* sprite — `actor.x` plus whatever presentation offset the
+   * player carries — ends up exactly on the marker. The NPC has no
+   * presentation offset in this scene, so its target is unchanged; only the
+   * player's is corrected, and by however much is actually authored for
+   * whichever character is currently selected, never a fixed number.
+   */
+  private stallEntryLogicalTargets(): { playerX: number; npcX: number } {
+    const rect = this.stallEntryTargetRect;
+    const playerOffsetX = this.playerVisualOffset(this.player).offsetX;
+    return resolveStallEntryLogicalTargets(
+      { x: rect.x, y: rect.y, width: rect.scaleX },
+      playerOffsetX,
+    );
   }
 
   /** Repositions the two labelled target markers onto the zone's current bounds. */
@@ -793,7 +816,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.player.motion = 'walk';
     this.npc.motion = 'walk';
 
-    const targets = this.stallEntryTargets();
+    const targets = this.stallEntryLogicalTargets();
     this.stallEntry = {
       playerTargetX: targets.playerX,
       npcTargetX: targets.npcX,

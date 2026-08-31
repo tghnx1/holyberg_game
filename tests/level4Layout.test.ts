@@ -3,6 +3,7 @@ import {
   hasAuthoredLevel4Placement,
   LEVEL4_EDITABLE_IDS,
   resolveLevel4Placement,
+  resolveStallEntryLogicalTargets,
   resolveStallEntryTargets,
   STALL_ENTRY_NPC_FRACTION,
   STALL_ENTRY_PLAYER_FRACTION,
@@ -155,5 +156,58 @@ describe('stall entry targets', () => {
     const targets = resolveStallEntryTargets({ x: 500, y: 0, width: 0 });
     expect(targets.playerX).toBeCloseTo(500);
     expect(targets.npcX).toBeCloseTo(500);
+  });
+});
+
+/**
+ * The player is drawn at `actor.x + playerOffsetX`, an editor-authored
+ * presentation offset — never zero once PLAYER has been nudged in the visual
+ * editor — while the story NPC's rendered position is its logical `x`
+ * unchanged. Walking `actor.x` straight to the marker therefore leaves the
+ * rendered player sitting `playerOffsetX` away from where it visibly needed
+ * to stop; this is what the walk-in has to drive `actor.x` to instead, so
+ * that `actor.x + playerOffsetX` lands exactly on the marker.
+ */
+describe('stall entry logical targets (corrected for the player render offset)', () => {
+  const zone = { x: 1000, y: 0, width: 400 };
+
+  it('is identical to the visual targets when nothing has been authored (offset 0)', () => {
+    const visual = resolveStallEntryTargets(zone);
+    const logical = resolveStallEntryLogicalTargets(zone, 0);
+    expect(logical.playerX).toBeCloseTo(visual.playerX);
+    expect(logical.npcX).toBeCloseTo(visual.npcX);
+  });
+
+  it('subtracts the offset from the player target only, leaving the NPC target untouched', () => {
+    const visual = resolveStallEntryTargets(zone);
+    const logical = resolveStallEntryLogicalTargets(zone, 45);
+    expect(logical.playerX).toBeCloseTo(visual.playerX - 45);
+    expect(logical.npcX).toBeCloseTo(visual.npcX);
+  });
+
+  it('walking the logical target to actor.x reproduces the marker once rendered', () => {
+    // This is the actual guarantee: actor.x + playerOffsetX === the marker,
+    // for any offset, in either direction.
+    for (const playerOffsetX of [-120, -1, 0, 1, 63, 250]) {
+      const logical = resolveStallEntryLogicalTargets(zone, playerOffsetX);
+      const renderedX = logical.playerX + playerOffsetX;
+      expect(renderedX).toBeCloseTo(resolveStallEntryTargets(zone).playerX);
+    }
+  });
+
+  it('still moves the pair together with the zone, offset or not', () => {
+    const before = resolveStallEntryLogicalTargets(zone, 30);
+    const moved = { ...zone, x: zone.x + 300 };
+    const after = resolveStallEntryLogicalTargets(moved, 30);
+    expect(after.playerX - before.playerX).toBeCloseTo(300);
+    expect(after.npcX - before.npcX).toBeCloseTo(300);
+  });
+
+  it('works for any offset magnitude, not one hardcoded to a specific character', () => {
+    // Nothing here is Atmos-specific: the function only ever sees a number.
+    for (const offset of [-500, -37.5, 0, 12.25, 800]) {
+      const logical = resolveStallEntryLogicalTargets(zone, offset);
+      expect(logical.playerX + offset).toBeCloseTo(resolveStallEntryTargets(zone).playerX);
+    }
   });
 });

@@ -120,6 +120,38 @@ export function resolveStallEntryTargets(zone: StallEntryZone): StallEntryTarget
   };
 }
 
+/**
+ * `resolveStallEntryTargets`'s result is where the *rendered* character
+ * should end up — that is what the editor marker shows and what a designer
+ * dragging it means. The story NPC's logical `actor.x` and its rendered
+ * position are the same number (it carries no presentation offset in this
+ * scene), but the main player is drawn at `actor.x + playerOffsetX`, an
+ * editor-authored presentation offset that is never zero once a designer has
+ * nudged PLAYER in the visual editor. Walking `actor.x` to the raw marker
+ * position then leaves the rendered sprite sitting `playerOffsetX` away from
+ * where it visibly needed to stop — correct arithmetic reaching the wrong
+ * screen position.
+ *
+ * This converts the visual target into the *logical* one the walk-in actually
+ * has to drive `actor.x` to, so that `actor.x + playerOffsetX` — the same sum
+ * `syncActor` renders with — lands exactly on the marker. The caller passes 0
+ * for `playerOffsetX` when moving anyone but the currently selected player
+ * (Level4Scene's own `playerVisualOffset` already returns 0 for the NPC), so
+ * this works unchanged for whichever character is selected and whatever
+ * offset — or none — has been authored for them; nothing here names a
+ * character.
+ */
+export function resolveStallEntryLogicalTargets(
+  zone: StallEntryZone,
+  playerOffsetX: number,
+): StallEntryTargets {
+  const visual = resolveStallEntryTargets(zone);
+  return {
+    playerX: visual.playerX - playerOffsetX,
+    npcX: visual.npcX,
+  };
+}
+
 export const LEVEL4_EDITABLE_IDS = {
   toilet: 'toilet',
   stallDoor: 'stall-door',
