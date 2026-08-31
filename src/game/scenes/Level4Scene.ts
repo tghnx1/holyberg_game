@@ -215,6 +215,14 @@ const FALL_HORIZONTAL_RETENTION = 0.4;
  */
 const FALL_COMPLETE_DISTANCE_PX = 320;
 
+/**
+ * How much of `sprite.getBounds()` actually counts as the player for fall-zone
+ * intersection — see `playerHitbox`. A character frame is mostly transparent
+ * margin around the drawn body, so testing the full frame reached the zone
+ * well before any visible part of the character did.
+ */
+const PLAYER_HITBOX_FRAC = { width: 0.4, height: 0.85 };
+
 type Level4SequenceState = 'normal' | 'autoWalk' | 'falling' | 'complete';
 
 interface Level4Actor {
@@ -1234,10 +1242,11 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   }
 
   /**
-   * The player's actual rendered bounding box against the authored zone —
-   * not just `actor.x`/the sprite origin — so differently sized characters
-   * all trigger the fall at the same physical overlap rather than whichever
-   * one's origin happens to sit further from its own edges.
+   * The player's actual rendered hitbox (see `playerHitbox`) against the
+   * authored zone — not just `actor.x`/the sprite origin — so differently
+   * sized characters all trigger the fall at the same physical overlap
+   * rather than whichever one's origin happens to sit further from its own
+   * edges.
    */
   private playerIntersectsFallZone(): boolean {
     const zone = this.cutsceneConfig.autoFallZone;
@@ -1247,7 +1256,33 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       zone.width,
       zone.height,
     );
-    return Phaser.Geom.Intersects.RectangleToRectangle(this.player.sprite.getBounds(), zoneRect);
+    return Phaser.Geom.Intersects.RectangleToRectangle(this.playerHitbox(), zoneRect);
+  }
+
+  /**
+   * The player's actual bounding box (`sprite.getBounds()`), shrunk toward
+   * its own centre by `PLAYER_HITBOX_FRAC`.
+   *
+   * Every character's artwork is a full frame with a lot of transparent
+   * margin around the drawn body (Atmos's idle frame is 195px wide but only
+   * ~70px of that is opaque, roughly centred) — `getBounds()` reports the
+   * whole frame, so using it directly made the leading edge of that margin
+   * reach the fall zone well before any visible part of the character did,
+   * i.e. she started falling before she looked like she had reached it. This
+   * is a fixed *fraction* of whatever `getBounds()` reports, never a pixel
+   * measurement of one character's artwork, so it holds for every playable
+   * character's own frame size without naming one.
+   */
+  private playerHitbox(): Phaser.Geom.Rectangle {
+    const bounds = this.player.sprite.getBounds();
+    const width = bounds.width * PLAYER_HITBOX_FRAC.width;
+    const height = bounds.height * PLAYER_HITBOX_FRAC.height;
+    return new Phaser.Geom.Rectangle(
+      bounds.centerX - width / 2,
+      bounds.centerY - height / 2,
+      width,
+      height,
+    );
   }
 
   /**

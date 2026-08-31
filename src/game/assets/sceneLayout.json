@@ -37,19 +37,19 @@
       "scaleY": 402.51700680269994
     },
     "gap-cutscene-auto-fall-zone": {
-      "xRatio": 2.5706634920634914,
-      "yRatio": 0.7199742088387008,
-      "scaleX": 220,
-      "scaleY": 220
+      "xRatio": 2.698343367346981,
+      "yRatio": 0.6706398996235885,
+      "scaleX": 157.32401505634743,
+      "scaleY": 167.12672521957336
     },
     "gap-cutscene-camera-stop": {
-      "xRatio": 2.268558427815571,
+      "xRatio": 1.7420278155706734,
       "yRatio": 0,
       "scaleX": 1,
       "scaleY": 1
     },
     "gap-cutscene-auto-walk-trigger": {
-      "xRatio": 2.2020882842025697,
+      "xRatio": 2.240863794406651,
       "yRatio": 0,
       "scaleX": 1,
       "scaleY": 1
