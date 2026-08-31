@@ -93,7 +93,11 @@ describe('club NPC placement', () => {
     for (const room of CLUB_ROOMS) {
       const placements = getRoomNpcPlacements(room.id);
       if (room.id === 'dancefloor') {
-        expect(placements).toHaveLength(1);
+        // The dancefloor's crowd art is one wide group rather than a few
+        // small knots, so it takes fewer of them to fill; how many is an
+        // authoring decision made in the editor, not a fixed number.
+        expect(placements.length).toBeGreaterThanOrEqual(1);
+        expect(placements.length).toBeLessThanOrEqual(2);
       } else {
         expect(placements.length).toBeGreaterThanOrEqual(2);
         expect(placements.length).toBeLessThanOrEqual(3);

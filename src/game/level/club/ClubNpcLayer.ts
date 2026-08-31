@@ -200,9 +200,18 @@ export class ClubNpcLayer {
       .setDepth(this.depth)
       .setScale(instance.sprite.scaleX, instance.sprite.scaleY)
       .setFlipX(instance.sprite.flipX);
+    // Offset the animation phase rather than copying it: two groups of the
+    // same art sharing a phase animate frame-for-frame in lockstep, which
+    // reads as one mirrored sprite instead of two separate knots of people.
+    // The editor has no way to set a phase by hand — it only drags and
+    // resizes — so the duplicate has to arrive with one of its own.
+    const cycleMs = instance.placement.cycleMs ?? NPC_IDLE_CYCLE_MS;
     const copy: NpcInstance = {
       id: `${instance.id}:copy:${this.cloneCount}`,
-      placement: { ...instance.placement },
+      placement: {
+        ...instance.placement,
+        phaseMs: Math.round(((instance.placement.phaseMs ?? 0) + cycleMs / 3) % cycleMs),
+      },
       art: instance.art,
       sprite,
       currentKey: instance.currentKey,

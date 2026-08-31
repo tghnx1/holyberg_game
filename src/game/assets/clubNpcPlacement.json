@@ -2,23 +2,23 @@
   "lounge": [
     {
       "group": "seated_pair",
-      "xRatio": 0.38684612074540475,
+      "xRatio": 0.3870540438397581,
       "heightRatio": 0.3018219324326809,
-      "baselineRatio": 0.8329757489441055,
+      "baselineRatio": 0.833258057601571,
       "phaseMs": 0
     },
     {
       "group": "three_people_smoke",
-      "xRatio": 0.5233528200857959,
+      "xRatio": 0.5233512849584279,
       "heightRatio": 0.3610710468490579,
-      "baselineRatio": 0.8894209658936111,
+      "baselineRatio": 0.8895952304969847,
       "phaseMs": 400
     },
     {
       "group": "green_drinker",
-      "xRatio": 0.9167865758356499,
+      "xRatio": 0.9164295162509448,
       "heightRatio": 0.3896239277654716,
-      "baselineRatio": 0.9439269099633164,
+      "baselineRatio": 0.9439199393791815,
       "flipX": true,
       "phaseMs": 850
     }
@@ -33,9 +33,9 @@
     },
     {
       "group": "violet_pair",
-      "xRatio": 0.7296745086923658,
+      "xRatio": 0.6963463718820863,
       "heightRatio": 0.3810360832840966,
-      "baselineRatio": 0.9735245043693391,
+      "baselineRatio": 0.9810126543763098,
       "flipX": true,
       "phaseMs": 600
     }
@@ -43,16 +43,16 @@
   "backstage": [
     {
       "group": "three_people_talk",
-      "xRatio": 0.25788872348025976,
+      "xRatio": 0.2575340136054422,
       "heightRatio": 0.39280260449053134,
       "baselineRatio": 0.8954733432323004,
       "phaseMs": 0
     },
     {
       "group": "pink_drinker",
-      "xRatio": 0.7668011815837447,
-      "heightRatio": 0.37369940517682043,
-      "baselineRatio": 0.8734013020608588,
+      "xRatio": 0.7601152683295542,
+      "heightRatio": 0.39818939077094656,
+      "baselineRatio": 0.8659239675237166,
       "flipX": true,
       "phaseMs": 700
     }
@@ -60,10 +60,17 @@
   "dancefloor": [
     {
       "group": "dancefloor_crowd",
-      "xRatio": 0.45956010404585923,
-      "heightRatio": 0.5588051248160244,
-      "baselineRatio": 0.8566880426812591,
+      "xRatio": 0.35641628873771725,
+      "heightRatio": 0.5588051248160243,
+      "baselineRatio": 0.838900854614899,
       "phaseMs": 0
+    },
+    {
+      "group": "dancefloor_crowd",
+      "xRatio": 0.5473242630385488,
+      "heightRatio": 0.5921298380376793,
+      "baselineRatio": 0.8843674075173757,
+      "phaseMs": 467
     }
   ]
 }
