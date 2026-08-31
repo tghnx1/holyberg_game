@@ -389,6 +389,11 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.doorClosedScaleX = this.stallDoor.scaleX;
     this.stallDoor.scaleX = this.doorClosedScaleX * DOOR_OPEN_SCALE;
     this.doorOpen = true;
+    // The open pose is a sliver at DOOR_OPEN_SCALE width, not an absence — it
+    // stayed on screen as a thin vertical strip drawn in front of whoever
+    // stood behind it. Hidden outright while open; only the close animation
+    // (which needs to be seen swinging shut) makes it visible again.
+    this.stallDoor.setVisible(false);
   }
 
   /**
@@ -737,7 +742,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // impossible to grab and the wrong number to author: what is stored is the
     // *closed* width the swing is derived from. Showing it closed while
     // editing makes the handle usable and makes the edited value already be
-    // the one that gets saved.
+    // the one that gets saved. It may also be hidden outright (the open pose
+    // is invisible now), so force it back on regardless of `doorOpen`.
+    this.stallDoor.setVisible(true);
     this.stallDoor.scaleX = this.doorClosedScaleX;
     // The target zone and its markers are noise during normal play — shown
     // only while there is something to author them against.
@@ -755,6 +762,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.stallDoor.scaleX = this.doorOpen
       ? this.doorClosedScaleX * DOOR_OPEN_SCALE
       : this.doorClosedScaleX;
+    // Restores whichever visibility matches runtime state: hidden if the
+    // sequence had it open, visible if it was genuinely closed.
+    this.stallDoor.setVisible(!this.doorOpen);
     this.stallEntryTargetRect.setVisible(false);
     this.playerTargetMarker.setVisible(false);
     this.npcTargetMarker.setVisible(false);
@@ -920,6 +930,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   }
 
   private closeDoorThenWait(): void {
+    // Made visible again before the tween starts: it was hidden outright at
+    // the end of the previous open pose (see `openDoorAndExit`), and the
+    // closing swing has to actually be seen.
+    this.stallDoor.setVisible(true);
     // Only the door's width animates. Its position and its upright pose are
     // fixed to the stall opening, so it cannot swing onto the floor or drift
     // toward whoever is standing next to it.
@@ -943,6 +957,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       ease: 'Quad.easeOut',
       onComplete: () => {
         this.doorOpen = true;
+        // The open pose is a sliver, not an absence: hide it once the swing
+        // has actually finished so no thin vertical strip is left standing
+        // in front of the NPC's exit walk.
+        this.stallDoor.setVisible(false);
         this.walkNpcOut();
       },
     });
