@@ -114,6 +114,15 @@ const DISSOLVE_END_X_NATIVE = 1450;
  * continuous event rather than two unrelated transitions.
  */
 const RUBBLE_BLEED_NATIVE = DISSOLVE_END_X_NATIVE - DISSOLVE_START_X_NATIVE;
+/**
+ * Extra pixels each rubble-mask rectangle overlaps past its own edges: left
+ * into the still-opaque wall (harmless — the toilet strip is drawn in front
+ * and hides it) and top/bottom past its own height. Closes the sliver of
+ * Holyworld that otherwise showed between the wall's own dark ceiling/floor
+ * pixels and this mask's flat rectangles, which is where the two darknesses
+ * are close but not exactly the same shade or the same edge.
+ */
+const RUBBLE_MASK_SEAM_PX = 6;
 
 // The one stall in the artwork drawn without a door — an open frame with a
 // visible toilet bowl — is the portal stall. Its opening was measured off
@@ -335,15 +344,21 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private buildRubbleMask(): void {
     const start = DISSOLVE_START_X;
     const span = RUBBLE_BLEED_NATIVE * TOILET_SCALE;
-    // Four receding steps: tall chunks close to the wall, tapering to
-    // nothing by the far edge, top and bottom mirrored around the room's own
-    // dark tone (`toneColor`) — a jagged skyline eaten away rather than a
-    // rectangle with a straight edge.
+    // Irregular receding chunks, close to the wall through to nothing by the
+    // far edge — widths and heights deliberately uneven (never a clean halving
+    // sequence) so this reads as broken rubble rather than a staircase.
+    // Overlaps `RUBBLE_MASK_SEAM_PX` past its own edges, so it meets the
+    // toilet strip's own dark ceiling/floor pixels with no sliver of
+    // Holyworld showing between the two darknesses at the seam.
     const steps = [
-      { xFrac: 0, heightFrac: 0.42 },
-      { xFrac: 0.28, heightFrac: 0.3 },
-      { xFrac: 0.55, heightFrac: 0.19 },
-      { xFrac: 0.8, heightFrac: 0.09 },
+      { xFrac: 0, heightFrac: 0.46 },
+      { xFrac: 0.12, heightFrac: 0.36 },
+      { xFrac: 0.22, heightFrac: 0.4 },
+      { xFrac: 0.4, heightFrac: 0.24 },
+      { xFrac: 0.5, heightFrac: 0.29 },
+      { xFrac: 0.68, heightFrac: 0.14 },
+      { xFrac: 0.78, heightFrac: 0.2 },
+      { xFrac: 0.9, heightFrac: 0.06 },
     ];
     const toneColor = 0x0a0612; // matches the camera's own clear colour
     this.rubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
@@ -351,9 +366,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     for (let i = 0; i < steps.length; i += 1) {
       const step = steps[i];
       const next = steps[i + 1];
-      const left = start + step.xFrac * span;
+      const left = start + step.xFrac * span - RUBBLE_MASK_SEAM_PX;
       const right = start + (next ? next.xFrac : 1) * span;
-      const height = step.heightFrac * DESIGN_HEIGHT;
+      const height = step.heightFrac * DESIGN_HEIGHT + RUBBLE_MASK_SEAM_PX;
       this.rubbleMask.fillRect(left, 0, right - left, height);
       this.rubbleMask.fillRect(left, DESIGN_HEIGHT - height, right - left, height);
     }
