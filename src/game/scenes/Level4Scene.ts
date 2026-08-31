@@ -579,7 +579,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   // ------------------------------------------------------- EditableScene
 
   getEditableObjects(): EditableObject[] {
-    const frame = this.resolveActorFrame(this.player, this.time.now);
     return [
       {
         id: LEVEL4_EDITABLE_IDS.toilet,
@@ -670,10 +669,16 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       },
       createPlayerEditable(this, {
         sprite: this.player.sprite,
+        // Resolved per call, not from a frame captured when the objects were
+        // registered: `syncActor` seats the sprite using whichever locomotion
+        // frame is live that instant, so an anchor built from a stale frame's
+        // `footGap` disagrees with where the sprite is actually drawn, and
+        // every drag banks that difference into the saved offset — the edit
+        // then reproduces somewhere other than where it was placed.
         getAnchor: () =>
           this.actorAnchor(
             this.player,
-            frame.footGap,
+            this.resolveActorFrame(this.player, this.time.now).footGap,
             resolveGameplayScale(
               this.player.character,
               resolveLocomotionPose(this.player.character, this.player.motion),
@@ -704,6 +709,17 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   onEditorEnable(): void {
     this.controlsLockedBeforeEditor = this.controlsLocked;
     this.controlsLocked = true;
+    // The stall sequence runs on tweens and `delayedCall`s, not on the walk
+    // controls, so locking those alone left it advancing underneath the
+    // editor: open E while the pair are standing in the closed stall — the
+    // one moment you actually need it, to fix a limb poking out past the
+    // door — and the 4s `delayedCall` fires mid-edit, the door reopens, the
+    // NPC walks out and the level finishes, tearing the scene (and the
+    // unsaved edit) down before P can be pressed. Freezing the scene clock
+    // and the tweens holds the pose still for as long as it takes to author
+    // it; the editor's own input is pointer/keyboard-driven and unaffected.
+    this.time.paused = true;
+    this.tweens.pauseAll();
     // The door spends the level drawn edge-on at 12% width, which is both
     // impossible to grab and the wrong number to author: what is stored is the
     // *closed* width the swing is derived from. Showing it closed while
@@ -721,6 +737,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
 
   onEditorDisable(): void {
     this.controlsLocked = this.controlsLockedBeforeEditor;
+    this.time.paused = false;
+    this.tweens.resumeAll();
     this.stallDoor.scaleX = this.doorOpen
       ? this.doorClosedScaleX * DOOR_OPEN_SCALE
       : this.doorClosedScaleX;
