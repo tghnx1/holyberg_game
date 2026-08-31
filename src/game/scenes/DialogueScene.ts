@@ -95,7 +95,6 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
   private panels!: DialoguePanels;
   private sceneStage?: DialogueSceneStage;
   private stationScene?: StationSceneView;
-  private toiletScene?: ToiletSceneView;
   private portrait?: TalkingPortrait;
   /** Resolved once per run, so casting cannot change mid-dialogue. */
   private sceneCast!: ResolvedSceneCast;
@@ -286,16 +285,14 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
         body: this.stationScene.buildLayoutFromSnapshot(snapshot),
       });
     }
-    if (this.toiletScene) {
-      // The toilet dialogue's staging lives in the shared scene-layout store,
-      // saved through the same validated route every other scene uses; its
-      // ids are written as the editor moves things, so this only has to hand
-      // over this scene's slice.
-      payloads.push({
-        route: '/__scene-editor/save-layout',
-        body: buildSceneLayoutPayload(this.scene.key),
-      });
-    }
+    // Every dialogue stage's whole-scene framing — and the toilet's actors —
+    // live in the shared scene-layout store, written as the editor moves
+    // things, so this only has to hand over this scene's slice. Sent for any
+    // stage, so a future one persists its framing without touching this.
+    payloads.push({
+      route: '/__scene-editor/save-layout',
+      body: buildSceneLayoutPayload(this.scene.key),
+    });
     return payloads;
   }
 
@@ -309,24 +306,15 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
 
   private buildScenePanel(): void {
     const { x, y, width, height } = this.layout.scenePanel;
-    // The seam leans right as it descends, so a scene panel has to keep
-    // rendering past its own vertical edge to stay behind the divider all the
-    // way down. Both dialogue stages take the identical overlap; the panel's
-    // logical `width` is unchanged for either.
-    const renderOverlap = DialogueLayout.dividerSkew + DialogueLayout.dividerThickness;
+    // Framing — canonical space, vertical fit, mask, seam overlap and the
+    // whole-scene editor transform — belongs to DialogueStageViewport, which
+    // both stages compose their content into. A new dialogue stage inherits
+    // all of it without this call site or the stage itself knowing about it.
     const sceneStage =
       this.script.sceneId === 'toilet'
-        ? new ToiletSceneView(this, width, height, this.sceneCast, renderOverlap)
-        : new StationSceneView(
-            this,
-            width,
-            height,
-            this.sceneCast,
-            undefined,
-            renderOverlap,
-          );
+        ? new ToiletSceneView(this, width, height, this.sceneCast)
+        : new StationSceneView(this, width, height, this.sceneCast);
     if (sceneStage instanceof StationSceneView) this.stationScene = sceneStage;
-    if (sceneStage instanceof ToiletSceneView) this.toiletScene = sceneStage;
     this.sceneStage = sceneStage;
     sceneStage.root.setDepth(DialogueDepth.SCENE);
     this.panels.add('scene', sceneStage.root, {

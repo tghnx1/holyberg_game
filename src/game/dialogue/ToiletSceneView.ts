@@ -1,5 +1,4 @@
 import Phaser from 'phaser';
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
 import { footOffset } from '../characters/characterAnimation';
 import {
   resolveLocomotionFrame,
@@ -8,8 +7,11 @@ import {
 } from '../characters/characterLocomotion';
 import { resolveGameplayScale, type CharacterAssetRef, type CharacterDefinition } from '../characters/characterManifest';
 import type { EditableObject } from '../systems/SceneEditor';
-import { DialogueLayout } from './dialogueConstants';
-import { computeCoverFit } from './dialogueLayoutMetrics';
+import {
+  DIALOGUE_STAGE_CANONICAL_HEIGHT,
+  DIALOGUE_STAGE_CANONICAL_WIDTH,
+  DialogueStageViewport,
+} from './DialogueStageViewport';
 import {
   LEVEL4_ASSET_KEYS,
   TOILET_STRIP_NATIVE_HEIGHT,
@@ -35,8 +37,8 @@ export const TOILET_VIEW_IDS = {
  * so both dialogue scenes compose identically and `resize()` is a single
  * uniform cover fit rather than a per-object re-layout.
  */
-const TOILET_CANONICAL_WIDTH = Math.round(DESIGN_WIDTH * DialogueLayout.scenePanelWidthRatio);
-const TOILET_CANONICAL_HEIGHT = DESIGN_HEIGHT - DialogueLayout.topBarHeight - DialogueLayout.bottomBarHeight;
+const TOILET_CANONICAL_WIDTH = DIALOGUE_STAGE_CANONICAL_WIDTH;
+const TOILET_CANONICAL_HEIGHT = DIALOGUE_STAGE_CANONICAL_HEIGHT;
 
 /**
  * Authored-pixel scale for the room, matching the gameplay scene's proportion:
@@ -90,36 +92,23 @@ interface ToiletActor {
  * every aspect ratio and neither is tuned for one desktop resolution.
  */
 export class ToiletSceneView {
-  readonly root: Phaser.GameObjects.Container;
-  private readonly content: Phaser.GameObjects.Container;
-  private readonly mask: Phaser.GameObjects.Graphics;
+  private readonly viewport: DialogueStageViewport;
   private readonly background: Phaser.GameObjects.Image;
   private readonly ceiling: Phaser.GameObjects.Rectangle;
   private readonly door: Phaser.GameObjects.Image;
   private readonly seated: ToiletActor;
   private readonly arriving: ToiletActor;
-  private panelWidth = 0;
-  private panelHeight = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
     width: number,
     height: number,
     cast: ResolvedSceneCast,
-    /**
-     * Extra width this view renders past the panel's own logical width, so the
-     * room keeps covering the ground underneath the diagonal divider (which
-     * drifts right toward the bottom) instead of leaving a black wedge between
-     * the panel's vertical edge and the divider's left edge.
-     *
-     * The same contract `StationSceneView` takes, for the same reason and with
-     * the same rule: only the *mask* is widened. The composition itself is
-     * never stretched, duplicated or otherwise coerced to reach it — whatever
-     * of the real art naturally extends past the panel edge shows through, and
-     * the divider drawn on top covers its own band regardless.
-     */
-    private readonly renderOverlap: number = 0,
   ) {
+    this.viewport = new DialogueStageViewport(scene, {
+      layoutId: TOILET_VIEW_IDS.composition,
+      label: 'TOILET DIALOGUE SCENE',
+    });
     // The room is shorter than the canonical box once its aspect is respected,
     // so its own ceiling tone carries the last few pixels rather than black.
     this.ceiling = this.scene.add
@@ -151,19 +140,20 @@ export class ToiletSceneView {
       TOILET_VIEW_IDS.npc,
     );
 
-    this.content = this.scene.add.container(0, 0, [
+    // Content only: the mask, the fit, the seam overlap and the whole-scene
+    // editor transform all belong to the viewport.
+    this.viewport.add([
       this.ceiling,
       this.background,
       this.door,
       this.seated.sprite,
       this.arriving.sprite,
     ]);
-    this.root = this.scene.add.container(0, 0, [this.content]);
-
-    this.mask = this.scene.add.graphics().setVisible(false);
-    this.root.setMask(this.mask.createGeometryMask());
-
     this.resize(width, height);
+  }
+
+  get root(): Phaser.GameObjects.Container {
+    return this.viewport.root;
   }
 
   private buildActor(
@@ -242,56 +232,8 @@ export class ToiletSceneView {
     });
   }
 
-  /**
-   * The mask is only ever the boundary against the portrait / dialogue UI
-   * beside this panel — never a framing device. Framing itself comes from
-   * `applyComposition`.
-   *
-   * Widened by `renderOverlap` exactly as the station is, so the artwork
-   * continues underneath the diagonal divider and the divider paints over it,
-   * rather than being cut on a vertical line short of the seam and leaving a
-   * black wedge between the two. The composition's own fit is computed against
-   * the real panel size, never the widened one, so extending that coverage
-   * neither rescales nor repositions the room — and an editor-authored
-   * transform is likewise untouched by it.
-   */
   resize(width: number, height: number): void {
-    this.panelWidth = width;
-    this.panelHeight = height;
-    this.mask
-      .clear()
-      .fillStyle(0xffffff)
-      .fillRect(0, 0, width + this.renderOverlap, height);
-    this.applyComposition();
-  }
-
-  /**
-   * Places the whole composition.
-   *
-   * Until someone frames it in the editor this is the composed cover fit, so
-   * the default look is unchanged. Once it *has* been authored, the saved
-   * position and scale are used verbatim and the cover fit is not consulted
-   * again — a resize can no longer re-crop a framing that was set by hand,
-   * which is what made an authored composition impossible to keep.
-   */
-  private applyComposition(): void {
-    const saved = getSceneObjectLayout(this.scene.scene.key, TOILET_VIEW_IDS.composition);
-    if (saved?.scale !== undefined) {
-      this.content
-        .setScale(saved.scale)
-        .setPosition(
-          (saved.xRatio ?? 0) * this.panelWidth,
-          (saved.yRatio ?? 0) * this.panelHeight,
-        );
-      return;
-    }
-    const fit = computeCoverFit(
-      TOILET_CANONICAL_WIDTH,
-      TOILET_CANONICAL_HEIGHT,
-      this.panelWidth,
-      this.panelHeight,
-    );
-    this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
+    this.viewport.resize(width, height);
   }
 
   /** No entrance here: the NPC is already waiting by the stall. */
@@ -320,22 +262,9 @@ export class ToiletSceneView {
    */
   getEditableObjects(): EditableObject[] {
     return [
-      {
-        id: TOILET_VIEW_IDS.composition,
-        label: 'TOILET DIALOGUE SCENE',
-        target: this.content,
-        getNativeSize: () => ({
-          width: TOILET_CANONICAL_WIDTH,
-          height: TOILET_CANONICAL_HEIGHT,
-        }),
-        onChange: (transform) => {
-          setSceneObjectLayout(this.scene.scene.key, TOILET_VIEW_IDS.composition, {
-            xRatio: this.panelWidth > 0 ? transform.x / this.panelWidth : 0,
-            yRatio: this.panelHeight > 0 ? transform.y / this.panelHeight : 0,
-            scale: transform.scaleY,
-          });
-        },
-      },
+      // The whole composition comes from the shared viewport; only the two
+      // actors are this stage's own.
+      this.viewport.getEditableObject(),
       this.actorEditable(this.seated, 'PLAYER'),
       this.actorEditable(this.arriving, 'STORY NPC'),
     ];
@@ -362,7 +291,6 @@ export class ToiletSceneView {
   }
 
   destroy(): void {
-    this.root.destroy(true);
-    this.mask.destroy();
+    this.viewport.destroy();
   }
 }

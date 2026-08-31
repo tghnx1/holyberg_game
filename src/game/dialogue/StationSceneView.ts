@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
-import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
 import type { EditableObject, EditableTransform } from '../systems/SceneEditor';
-import { DialogueLayout } from './dialogueConstants';
-import { computeCoverFit } from './dialogueLayoutMetrics';
+import {
+  DIALOGUE_STAGE_CANONICAL_HEIGHT,
+  DIALOGUE_STAGE_CANONICAL_WIDTH,
+  DialogueStageViewport,
+} from './DialogueStageViewport';
 import {
   DEFAULT_STATION_LAYOUT,
   resolveStationTransform,
@@ -32,8 +34,8 @@ import type { ResolvedSceneCast } from './dialogueCast';
  * throughout the game), so canonical space and the live panel coincide
  * exactly there and desktop's appearance is unchanged bit-for-bit.
  */
-const STATION_CANONICAL_WIDTH = Math.round(DESIGN_WIDTH * DialogueLayout.scenePanelWidthRatio);
-const STATION_CANONICAL_HEIGHT = DESIGN_HEIGHT - DialogueLayout.topBarHeight - DialogueLayout.bottomBarHeight;
+const STATION_CANONICAL_WIDTH = DIALOGUE_STAGE_CANONICAL_WIDTH;
+const STATION_CANONICAL_HEIGHT = DIALOGUE_STAGE_CANONICAL_HEIGHT;
 
 /** Seconds the train sits still before it departs. */
 const STATIONARY_PAUSE_MS = 600;
@@ -77,14 +79,12 @@ const BACKDROP_NATIVE_HEIGHT_FALLBACK = 887;
  * time it changes, so editing it live can't desync the animations.
  */
 export class StationSceneView {
-  readonly root: Phaser.GameObjects.Container;
-  private readonly content: Phaser.GameObjects.Container;
+  private readonly viewport: DialogueStageViewport;
   private readonly background?: Phaser.GameObjects.Image;
   private readonly train: Phaser.GameObjects.Image;
   private readonly foreground?: Phaser.GameObjects.Image;
   private readonly seated: Phaser.GameObjects.Image;
   private readonly arriving: Phaser.GameObjects.Sprite;
-  private readonly mask: Phaser.GameObjects.Graphics;
   /** Recomputed from the train's current rest transform on every edit. */
   private trainDepartX = 0;
   /** Recomputed from the arriving actor's settled rest transform on every edit. */
@@ -109,21 +109,11 @@ export class StationSceneView {
      */
     private readonly cast: ResolvedSceneCast,
     private readonly layout: DialogueStationLayoutConfig = DEFAULT_STATION_LAYOUT,
-    /**
-     * Extra width this view renders past the panel's own logical width, so
-     * the station keeps covering the ground underneath the diagonal divider
-     * (which drifts right toward the bottom) instead of leaving a black wedge
-     * between the panel's vertical edge and the divider's left edge.
-     *
-     * Only the *mask* is widened. The composition itself is never stretched,
-     * duplicated or otherwise coerced to reach it — whatever of the real
-     * station art naturally extends past the panel edge shows through, and
-     * the divider drawn on top of it covers its own band regardless; the
-     * seam is allowed to crop into the art rather than manufacture more of
-     * it.
-     */
-    private readonly renderOverlap: number = 0,
   ) {
+    this.viewport = new DialogueStageViewport(scene, {
+      layoutId: 'station-scene',
+      label: 'METRO DIALOGUE SCENE',
+    });
     // Read before any actor is built; capability validation upstream has
     // already guaranteed both are present for this cast.
     this.appearFrames = cast.arriving.dialogue.appear;
@@ -155,11 +145,14 @@ export class StationSceneView {
     children.push(this.arriving);
     this.recomputeArrivingFloor();
 
-    this.content = scene.add.container(0, 0, children);
-    this.root = scene.add.container(0, 0, [this.content]);
-    this.mask = scene.make.graphics({}, false);
-    this.root.setMask(this.mask.createGeometryMask());
+    // Content only: the mask, the fit, the seam overlap and the whole-scene
+    // editor transform all belong to the viewport.
+    this.viewport.add(children);
     this.resize(width, height);
+  }
+
+  get root(): Phaser.GameObjects.Container {
+    return this.viewport.root;
   }
 
   private hasTexture(key: string): boolean {
@@ -238,31 +231,8 @@ export class StationSceneView {
     return this.arrivingFloorY + footOffset(frame.footGap, this.arriving.scaleY);
   }
 
-  /**
-   * Refits the environment to a new panel size by covering it with the
-   * canonical-box composition (one uniform scale, centred, cropping overflow
-   * rather than leaving gaps) and repositions the mask to match.
-   *
-   * Background, foreground, train and both actors are children of the same
-   * `content` container and were all positioned in the same canonical space
-   * they share, so this single scale/position carries every one of them
-   * together — none of them can drift relative to another, at any aspect
-   * ratio the panel takes.
-   *
-   * The mask alone is widened by `renderOverlap` to reach under the diagonal
-   * divider; the composition's own fit is computed against the real panel
-   * size, never the widened one, so extending that coverage never rescales
-   * or repositions the station. Whatever of the real art naturally reaches
-   * past the panel edge (the background is wide relative to the canonical
-   * box) shows through there; the divider painted on top covers its own
-   * band regardless. No duplicate or stretched art is manufactured to
-   * guarantee full coverage — the seam is allowed to crop into the station
-   * instead.
-   */
   resize(width: number, height: number): void {
-    this.mask.clear().fillStyle(0xffffff).fillRect(0, 0, width + this.renderOverlap, height);
-    const fit = computeCoverFit(STATION_CANONICAL_WIDTH, STATION_CANONICAL_HEIGHT, width, height);
-    this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
+    this.viewport.resize(width, height);
   }
 
   /**
@@ -323,15 +293,21 @@ export class StationSceneView {
       { id: 'seated', label: 'Seated actor', target: this.seated, nativeHeight: CHARACTER_CANVAS_HEIGHT },
       { id: 'arriving', label: 'Arriving actor', target: this.arriving, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeArrivingFloor() },
     ];
-    return entries
-      .filter((entry): entry is typeof entry & { target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite } => entry.target !== undefined)
-      .map((entry) => ({
-        id: entry.id,
-        target: entry.target,
-        label: entry.label,
-        getNativeSize: () => ({ width: entry.target.width, height: entry.nativeHeight }),
-        onChange: entry.onChange,
-      }));
+    return [
+      // The whole composition, from the shared viewport — every stage gets
+      // this for free. `buildLayoutFromSnapshot` ignores ids it does not own,
+      // so it passes straight through the station's own save.
+      this.viewport.getEditableObject(),
+      ...entries
+        .filter((entry): entry is typeof entry & { target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite } => entry.target !== undefined)
+        .map((entry) => ({
+          id: entry.id,
+          target: entry.target,
+          label: entry.label,
+          getNativeSize: () => ({ width: entry.target.width, height: entry.nativeHeight }),
+          onChange: entry.onChange,
+        })),
+    ];
   }
 
   /** Converts the editor's absolute-pixel snapshot back into the panel-relative ratio config it saves. */
@@ -359,16 +335,11 @@ export class StationSceneView {
     return next;
   }
 
-  /** Keeps the mask tracking the panel's current on-screen position (a
-   * GeometryMask follows its own graphics object, not the container it
-   * masks, so this has to run every frame the panel moves). */
   update(): void {
-    this.mask.setPosition(this.root.x, this.root.y);
+    this.viewport.update();
   }
 
   destroy(): void {
-    this.root.clearMask(true);
-    this.mask.destroy();
-    this.root.destroy(true);
+    this.viewport.destroy();
   }
 }
