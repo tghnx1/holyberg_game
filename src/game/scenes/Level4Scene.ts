@@ -93,9 +93,27 @@ const TOILET_FLOOR_NATIVE_Y = TOILET_FLOOR_NATIVE_Y_RAW;
 const TOILET_TOP_Y = 0;
 
 // Native-pixel x where the artwork starts crumbling away to transparency
-// (measured against toilet-full.png), scaled into world space.
-const DISSOLVE_START_X_NATIVE = 1150;
+// (measured against toilet-full.png: fully opaque through x=1050, dropping to
+// 93% by x=1100 and 0% by x=1450). Holyworld has to already be in place by
+// the first of those holes — placed any later and the earliest cracks in the
+// wall show the scene's black clear colour instead of the world beyond it,
+// which is what read as a dead gap between the room and Holyworld rather than
+// a wall breaking open onto it.
+const DISSOLVE_START_X_NATIVE = 1000;
 const DISSOLVE_START_X = DISSOLVE_START_X_NATIVE * TOILET_SCALE;
+// Native x by which the wall has fully dissolved (0% opaque). Together with
+// the start above this is the same crumbling span the artwork already draws;
+// nothing here invents a new one.
+const DISSOLVE_END_X_NATIVE = 1450;
+/**
+ * How much further right of the fully-dissolved edge the room's own dark
+ * tone keeps eating into Holyworld before giving way completely — the visual
+ * difference between "a wall broke and the other world is right there" and
+ * "a wall broke and then, several strides later, a screen-filling backdrop
+ * begins". Reuses the crumbling span's own width so the two feel like one
+ * continuous event rather than two unrelated transitions.
+ */
+const RUBBLE_BLEED_NATIVE = DISSOLVE_END_X_NATIVE - DISSOLVE_START_X_NATIVE;
 
 // The one stall in the artwork drawn without a door — an open frame with a
 // visible toilet bowl — is the portal stall. Its opening was measured off
@@ -178,6 +196,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private holyworldBackground!: Phaser.GameObjects.TileSprite;
   private toiletStrip!: Phaser.GameObjects.Image;
   private stallDoor!: Phaser.GameObjects.Image;
+  private rubbleMask!: Phaser.GameObjects.Graphics;
   private walk!: WalkInput;
   /** The door's scaleX when shut, derived from the measured stall opening. */
   private doorClosedScaleX = 1;
@@ -256,6 +275,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
 
     this.buildBackground();
+    this.buildRubbleMask();
     this.buildToiletStrip();
     this.buildActors();
     this.buildDoor();
@@ -297,6 +317,46 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       .setOrigin(0, 0)
       .setTileScale(tileScale, tileScale)
       .setDepth(Depth.SKY);
+  }
+
+  /**
+   * Extends the room's own near-black tone a stride further into Holyworld
+   * than the wall's alpha alone reaches, in blocky steps rather than a smooth
+   * fade — the wall is pixel art breaking apart, not glass smearing into fog.
+   *
+   * Sits between the background (`Depth.SKY`) and the toilet strip
+   * (`Depth.ENVIRONMENT + 5`): the strip's own crumbling alpha is still the
+   * only thing that makes any of this visible, this only changes what the
+   * strip's holes reveal for a while — hand-painted rubble silhouette rather
+   * than Holyworld already at full brightness the instant a hole opens.
+   * Drawn once against the level's fixed geometry (not the viewport), so it
+   * holds up at every camera size the same way the toilet strip itself does.
+   */
+  private buildRubbleMask(): void {
+    const start = DISSOLVE_START_X;
+    const span = RUBBLE_BLEED_NATIVE * TOILET_SCALE;
+    // Four receding steps: tall chunks close to the wall, tapering to
+    // nothing by the far edge, top and bottom mirrored around the room's own
+    // dark tone (`toneColor`) — a jagged skyline eaten away rather than a
+    // rectangle with a straight edge.
+    const steps = [
+      { xFrac: 0, heightFrac: 0.42 },
+      { xFrac: 0.28, heightFrac: 0.3 },
+      { xFrac: 0.55, heightFrac: 0.19 },
+      { xFrac: 0.8, heightFrac: 0.09 },
+    ];
+    const toneColor = 0x0a0612; // matches the camera's own clear colour
+    this.rubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
+    this.rubbleMask.fillStyle(toneColor, 1);
+    for (let i = 0; i < steps.length; i += 1) {
+      const step = steps[i];
+      const next = steps[i + 1];
+      const left = start + step.xFrac * span;
+      const right = start + (next ? next.xFrac : 1) * span;
+      const height = step.heightFrac * DESIGN_HEIGHT;
+      this.rubbleMask.fillRect(left, 0, right - left, height);
+      this.rubbleMask.fillRect(left, DESIGN_HEIGHT - height, right - left, height);
+    }
   }
 
   /**
@@ -1030,6 +1090,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.time.removeAllEvents();
     this.walk?.destroy();
     this.holyworldBackground?.destroy();
+    this.rubbleMask?.destroy();
     this.toiletStrip?.destroy();
     this.stallDoor?.destroy();
     this.player?.sprite.destroy();
