@@ -200,13 +200,23 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private npcTargetMarker!: Phaser.GameObjects.Arc;
   private playerTargetLabel!: Phaser.GameObjects.Text;
   private npcTargetLabel!: Phaser.GameObjects.Text;
-  /** Set only while both actors are walking into the stall after the dialogue. */
+  /**
+   * Set only while both actors are walking into the stall after the dialogue.
+   *
+   * Deliberately does not cache the destinations: `stallEntryLogicalTargets()`
+   * is re-read every frame so that authoring the zone mid-walk retargets the
+   * walk in progress instead of finishing at a stale position.
+   */
   private stallEntry?: {
-    playerTargetX: number;
-    npcTargetX: number;
     playerArrived: boolean;
     npcArrived: boolean;
   };
+  /**
+   * True from the moment both actors have parked in the stall until the NPC
+   * leaves. While set, authoring the target zone re-seats them live — see
+   * `reseatStallOccupants`.
+   */
+  private stallSettled = false;
   /** True only while the dialogue hand-off and the stall cutscene are running. */
   private controlsLocked = false;
   /** Restored when the editor closes, so it cannot free a cutscene's controls. */
@@ -650,6 +660,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
             this.editorViewport(),
           );
           this.layoutTargetMarkers();
+          // Moves anyone already standing in the stall onto the new target,
+          // so dragging P/N is visibly what repositions them in the cabin.
+          this.reseatStallOccupants();
         },
       },
       {
@@ -834,13 +847,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.player.motion = 'walk';
     this.npc.motion = 'walk';
 
-    const targets = this.stallEntryLogicalTargets();
-    this.stallEntry = {
-      playerTargetX: targets.playerX,
-      npcTargetX: targets.npcX,
-      playerArrived: false,
-      npcArrived: false,
-    };
+    this.stallSettled = false;
+    this.stallEntry = { playerArrived: false, npcArrived: false };
   }
 
   /** Advances both actors toward their stall-entry targets by one frame. */
@@ -848,6 +856,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     const entry = this.stallEntry;
     if (!entry) return;
     const step = (WALK_SPEED * delta) / 1000;
+    // Read live rather than cached at kick-off, so dragging the zone while
+    // the pair are still walking redirects them instead of being ignored.
+    const targets = this.stallEntryLogicalTargets();
 
     const advance = (actor: Level4Actor, targetX: number, arrived: boolean): boolean => {
       if (arrived) return true;
@@ -862,13 +873,34 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       return false;
     };
 
-    entry.playerArrived = advance(this.player, entry.playerTargetX, entry.playerArrived);
-    entry.npcArrived = advance(this.npc, entry.npcTargetX, entry.npcArrived);
+    entry.playerArrived = advance(this.player, targets.playerX, entry.playerArrived);
+    entry.npcArrived = advance(this.npc, targets.npcX, entry.npcArrived);
 
     if (entry.playerArrived && entry.npcArrived) {
       this.stallEntry = undefined;
       this.stepIntoStall();
     }
+  }
+
+  /**
+   * Re-seats actors already parked in the stall onto freshly authored targets.
+   *
+   * Without this, authoring the zone once the walk-in has finished changed only
+   * the markers: `actor.x` was set when they arrived and nothing reads the zone
+   * again, so the pair stayed put and the edit looked like it had been
+   * discarded. This is the channel that actually moves a character standing in
+   * the stall — the PLAYER offset cannot, because
+   * `resolveStallEntryLogicalTargets` subtracts exactly the offset that
+   * `syncActor` then adds back, by design, so that the marker stays the single
+   * authority for where the pair come to rest.
+   */
+  private reseatStallOccupants(): void {
+    if (!this.stallSettled) return;
+    const targets = this.stallEntryLogicalTargets();
+    this.player.x = targets.playerX;
+    this.npc.x = targets.npcX;
+    this.syncActor(this.player, this.time.now);
+    this.syncActor(this.npc, this.time.now);
   }
 
   /**
@@ -883,6 +915,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private stepIntoStall(): void {
     this.player.motion = 'idle';
     this.npc.motion = 'idle';
+    this.stallSettled = true;
     this.time.delayedCall(180, () => this.closeDoorThenWait());
   }
 
@@ -924,6 +957,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
    * switched off mid-frame, in plain view.
    */
   private walkNpcOut(): void {
+    // The pair are no longer parked on the zone, so authoring it must stop
+    // dragging them around mid-exit.
+    this.stallSettled = false;
     this.npc.facing = -1;
     this.npc.motion = 'walk';
     const exitX = Math.min(

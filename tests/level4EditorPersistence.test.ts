@@ -12,6 +12,8 @@ import {
   resolveLevel4Placement,
   storeLevel4Placement,
   LEVEL4_EDITABLE_IDS,
+  resolveStallEntryTargets,
+  resolveStallEntryLogicalTargets,
 } from '../src/game/level/level4/level4Layout';
 
 /**
@@ -192,5 +194,18 @@ describe('PLAYER: rightward move + resize survives save + reload', () => {
     // all, so the authored player layout must be byte-identical afterwards.
     const after = getSceneObjectLayout('Level4Scene', 'player');
     expect(after).toEqual(before);
+  });
+});
+
+describe('DIAGNOSIS: the stall-entry compensation cancels the authored PLAYER offset', () => {
+  it('renders the player on the marker for every authored offset, so PLAYER edits cannot move him', () => {
+    const zone = { x: 1000, y: 0, width: 400 };
+    const marker = resolveStallEntryTargets(zone).playerX;
+    for (const offsetX of [0, 40, -40, 250]) {
+      const logical = resolveStallEntryLogicalTargets(zone, offsetX);
+      // What the cutscene drives actor.x to, then what syncActor draws:
+      const rendered = logical.playerX + offsetX;
+      expect(rendered).toBeCloseTo(marker);
+    }
   });
 });

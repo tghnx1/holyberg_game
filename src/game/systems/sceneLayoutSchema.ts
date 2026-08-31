@@ -4,11 +4,22 @@ import type { SceneLayoutConfig, SceneObjectLayout } from './sceneLayout';
  * Bounds for an editable scene object. Ratios may sit slightly outside the
  * viewport (an object can legitimately start off-screen), but not absurdly so,
  * and a scale of zero would persist an invisible object.
+ *
+ * The upper scale bound is deliberately generous because `scale` is a
+ * multiplier of an object's *native* size, and not every editable object is
+ * artwork. Level 4's stall-entry zone is a 1x1 rectangle whose scaleX/scaleY
+ * are therefore read directly as its width and height in world pixels, so a
+ * perfectly ordinary zone a few hundred pixels wide arrives here as a scale of
+ * a few hundred. The old ceiling of 20 rejected every such save with a 400 —
+ * and because one POST carries a whole scene's slice, a single unauthorable
+ * zone silently took the player and door edits down with it. The ceiling now
+ * sits above the widest level (`LEVEL4_WORLD_WIDTH` is ~4.2k px) while still
+ * catching the NaN/absurd values it was there to catch.
  */
 const MIN_RATIO = -10;
 const MAX_RATIO = 10;
 const MIN_SCALE = 0.01;
-const MAX_SCALE = 20;
+const MAX_SCALE = 10_000;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);

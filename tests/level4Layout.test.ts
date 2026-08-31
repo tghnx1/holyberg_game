@@ -103,7 +103,22 @@ describe('authored Level 4 placement', () => {
 
   it('rejects a scale the editor could never legitimately produce', () => {
     expect(() => validateSceneLayout({ [SCENE]: { toilet: { scaleX: 0 } } })).toThrow();
-    expect(() => validateSceneLayout({ [SCENE]: { toilet: { scaleY: 999 } } })).toThrow();
+    expect(() => validateSceneLayout({ [SCENE]: { toilet: { scaleY: 99_999 } } })).toThrow();
+  });
+
+  /**
+   * `scale` multiplies an object's *native* size, and the stall-entry zone's
+   * native size is 1x1 — so its scaleX/scaleY are its width and height in
+   * world pixels. A few-hundred-pixel zone is completely ordinary and must
+   * validate; the ceiling that used to sit at 20 rejected the whole POST,
+   * taking the player and door edits in the same slice down with it.
+   */
+  it('accepts the pixel-sized scale a 1x1 zone legitimately produces', () => {
+    expect(() =>
+      validateSceneLayout({
+        [SCENE]: { [LEVEL4_EDITABLE_IDS.stallEntryTarget]: { xRatio: 1.34, scaleX: 125, scaleY: 402 } },
+      }),
+    ).not.toThrow();
   });
 });
 
