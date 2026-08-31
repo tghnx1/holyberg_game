@@ -27,8 +27,17 @@ import type {
  * `resolveGameplayScale` keeps applying that pose's own override.
  */
 
-/** What a hand-moved actor can be doing in a connective level. */
-export type LocomotionMotion = 'idle' | 'walk';
+/**
+ * What a hand-moved actor can be doing in a connective level.
+ *
+ * `damage` is the scripted Level 4 toilet-to-Holyworld fall: every playable
+ * character is guaranteed at least one `gameplay/damage` frame (it gates
+ * `capabilities.playable`, the same guarantee the Berlin runner's hit-flash
+ * already relies on in `Player.ts`/`BossPlayer.ts`), so drawing it here needs
+ * no character-specific branch and works for whichever character is
+ * currently selected.
+ */
+export type LocomotionMotion = 'idle' | 'walk' | 'damage';
 
 /** True when this character has real walk artwork to draw. */
 function hasWalkFrames(character: CharacterDefinition): boolean {
@@ -44,6 +53,7 @@ export function resolveLocomotionPose(
   character: CharacterDefinition,
   motion: LocomotionMotion,
 ): CharacterGameplayPose {
+  if (motion === 'damage') return 'damage';
   if (motion !== 'walk') return character.gameplay.idle ? 'idle' : 'run';
   return hasWalkFrames(character) ? 'walk' : 'run';
 }
@@ -54,7 +64,12 @@ export function resolveLocomotionFrame(
   motion: LocomotionMotion,
   now: number,
 ): CharacterAssetRef {
-  const { idle, run, walk } = character.gameplay;
+  const { idle, run, walk, damage } = character.gameplay;
+  if (motion === 'damage') {
+    // A static pose, not a cycle: the fall is meant to hold on one frame of
+    // hurt for its whole duration, not loop the Berlin hit-flash animation.
+    return damage[0] ?? idle ?? run[staticRunFrameIndex(run.length)];
+  }
   if (motion === 'walk') {
     if (hasWalkFrames(character)) {
       return walk[walkFrameIndex(now, walk.length, WALK_CYCLE_MS)];

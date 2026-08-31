@@ -164,4 +164,100 @@ export const LEVEL4_EDITABLE_IDS = {
    * rather than as multipliers of some inherent size.
    */
   stallEntryTarget: 'stall-entry-target',
+  /**
+   * The toilet-to-Holyworld cinematic: a vertical world-x line where the
+   * scripted auto-walk takes over, one where the camera locks, and a
+   * rectangular zone where the scripted fall begins. See
+   * `resolveLevel4CutsceneConfig`.
+   */
+  cameraStop: 'gap-cutscene-camera-stop',
+  autoWalkTrigger: 'gap-cutscene-auto-walk-trigger',
+  autoFallZone: 'gap-cutscene-auto-fall-zone',
+  autoWalkSpeed: 'gap-cutscene-auto-walk-speed',
 } as const;
+
+/** A world-space rectangle, in the same units as everything else here. */
+export interface Level4RectZone {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The authored configuration for the toilet-to-Holyworld gap cutscene
+ * (`Level4Scene`'s `AUTO_WALK`/`FALLING` sequence).
+ *
+ * `cameraStopX` and `autoWalkTriggerX` are two independent world-x lines —
+ * deliberately not one shared coordinate, so the moment control is taken from
+ * the player and the moment the camera settles into its final frame can be
+ * tuned separately in the editor. Both, plus `autoFallZone`, are resolved
+ * through the same per-object ratio store as every other Level 4 placement,
+ * so P/reload round-trips them exactly like the toilet strip or the door.
+ * `autoWalkSpeed` is the one value here that is not a screen position: it is
+ * stored as an absolute number (`SceneObjectLayout.value`), never a viewport
+ * ratio, so it does not silently change with the screen size it happened to
+ * be saved at.
+ */
+export interface Level4CutsceneConfig {
+  cameraStopX: number;
+  autoWalkTriggerX: number;
+  autoFallZone: Level4RectZone;
+  autoWalkSpeed: number;
+}
+
+/** Fallback rectangle used only until an `autoFallZone` has been authored. */
+function fallbackFallZonePlacement(zone: Level4RectZone): Level4Placement {
+  return { x: zone.x, y: zone.y, scaleX: zone.width, scaleY: zone.height };
+}
+
+/**
+ * Resolves the whole gap-cutscene config from the shared layout store in one
+ * call, the same fallback-until-authored pattern as `resolveLevel4Placement`.
+ */
+export function resolveLevel4CutsceneConfig(
+  sceneKey: string,
+  viewport: Level4Viewport,
+  fallback: Level4CutsceneConfig,
+): Level4CutsceneConfig {
+  const cameraStop = resolveLevel4Placement(
+    sceneKey,
+    LEVEL4_EDITABLE_IDS.cameraStop,
+    { x: fallback.cameraStopX, y: 0, scaleX: 1, scaleY: 1 },
+    viewport,
+  );
+  const autoWalkTrigger = resolveLevel4Placement(
+    sceneKey,
+    LEVEL4_EDITABLE_IDS.autoWalkTrigger,
+    { x: fallback.autoWalkTriggerX, y: 0, scaleX: 1, scaleY: 1 },
+    viewport,
+  );
+  const fallZone = resolveLevel4Placement(
+    sceneKey,
+    LEVEL4_EDITABLE_IDS.autoFallZone,
+    fallbackFallZonePlacement(fallback.autoFallZone),
+    viewport,
+  );
+  return {
+    cameraStopX: cameraStop.x,
+    autoWalkTriggerX: autoWalkTrigger.x,
+    autoFallZone: { x: fallZone.x, y: fallZone.y, width: fallZone.scaleX, height: fallZone.scaleY },
+    autoWalkSpeed: resolveLevel4Number(sceneKey, LEVEL4_EDITABLE_IDS.autoWalkSpeed, fallback.autoWalkSpeed),
+  };
+}
+
+/**
+ * An absolute persisted number that is not a screen position or a scale
+ * multiplier — `autoWalkSpeed` is a px/s speed, so running it through the
+ * same viewport-ratio conversion as `Level4Placement`'s x/y would make the
+ * saved speed depend on the screen size it happened to be saved at. Reuses
+ * `SceneObjectLayout.value`, the same store, schema and save route as
+ * everything else here; there is no second config file.
+ */
+export function resolveLevel4Number(sceneKey: string, id: string, fallback: number): number {
+  return getSceneObjectLayout(sceneKey, id)?.value ?? fallback;
+}
+
+export function storeLevel4Number(sceneKey: string, id: string, value: number): void {
+  setSceneObjectLayout(sceneKey, id, { value });
+}

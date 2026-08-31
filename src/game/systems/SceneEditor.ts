@@ -50,6 +50,8 @@ export interface SceneEditorOptions {
    */
   onEnable?: () => void;
   onDisable?: () => void;
+  /** Extra HUD lines under the shortcut list, for a value with no world-space handle of its own. */
+  describe?: () => string[];
 }
 
 export class SceneEditor {
@@ -61,6 +63,7 @@ export class SceneEditor {
       camera: options.camera,
       onEnable: options.onEnable,
       onDisable: options.onDisable,
+      describe: options.describe,
       title: 'SCENE EDITOR  —  E exit   P save',
       onSave: () => {
         void Promise.resolve(options.onSave?.(this.getSnapshot())).then(() =>

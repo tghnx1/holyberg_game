@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   hasAuthoredLevel4Placement,
   LEVEL4_EDITABLE_IDS,
+  resolveLevel4CutsceneConfig,
+  resolveLevel4Number,
   resolveLevel4Placement,
   resolveStallEntryLogicalTargets,
   resolveStallEntryTargets,
   STALL_ENTRY_NPC_FRACTION,
   STALL_ENTRY_PLAYER_FRACTION,
+  storeLevel4Number,
   storeLevel4Placement,
 } from '../src/game/level/level4/level4Layout';
 import { resetSceneLayout } from '../src/game/systems/sceneLayout';
@@ -224,5 +227,69 @@ describe('stall entry logical targets (corrected for the player render offset)',
       const logical = resolveStallEntryLogicalTargets(zone, offset);
       expect(logical.playerX + offset).toBeCloseTo(resolveStallEntryTargets(zone).playerX);
     }
+  });
+});
+
+/**
+ * The toilet-to-Holyworld gap cutscene: `cameraStopX` and `autoWalkTriggerX`
+ * are independently editable world-x lines (never coupled to one shared
+ * coordinate), `autoFallZone` is a rectangle, and `autoWalkSpeed` is a plain
+ * absolute number rather than a screen-position ratio, so it must not
+ * silently change when resolved against a different viewport than the one it
+ * was saved from.
+ */
+describe('gap cutscene config', () => {
+  const viewport = { width: 1280, height: 720 };
+  const fallback = {
+    cameraStopX: 3000,
+    autoWalkTriggerX: 3500,
+    autoFallZone: { x: 3800, y: 550, width: 200, height: 200 },
+    autoWalkSpeed: 240,
+  };
+
+  it('falls back to the composed defaults until something is authored', () => {
+    const resolved = resolveLevel4CutsceneConfig(SCENE, viewport, fallback);
+    expect(resolved).toEqual(fallback);
+  });
+
+  it('round-trips an authored camera stop and auto-walk trigger independently', () => {
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.cameraStop, { x: 2500, y: 0, scaleX: 1, scaleY: 1 }, viewport);
+    const resolved = resolveLevel4CutsceneConfig(SCENE, viewport, fallback);
+    expect(resolved.cameraStopX).toBeCloseTo(2500);
+    // Moving the camera stop alone must not drag the auto-walk trigger with it.
+    expect(resolved.autoWalkTriggerX).toBeCloseTo(fallback.autoWalkTriggerX);
+  });
+
+  it('round-trips an authored, resized fall zone', () => {
+    storeLevel4Placement(
+      SCENE,
+      LEVEL4_EDITABLE_IDS.autoFallZone,
+      { x: 4000, y: 500, scaleX: 300, scaleY: 150 },
+      viewport,
+    );
+    const resolved = resolveLevel4CutsceneConfig(SCENE, viewport, fallback);
+    expect(resolved.autoFallZone).toEqual({ x: 4000, y: 500, width: 300, height: 150 });
+  });
+
+  it('stores autoWalkSpeed as an absolute number, unaffected by the resolving viewport', () => {
+    storeLevel4Number(SCENE, LEVEL4_EDITABLE_IDS.autoWalkSpeed, 320);
+    expect(resolveLevel4Number(SCENE, LEVEL4_EDITABLE_IDS.autoWalkSpeed, fallback.autoWalkSpeed)).toBe(320);
+    // A speed is not a screen position: resolving it against a completely
+    // different viewport must not change it, unlike xRatio/yRatio.
+    const phone = resolveLevel4CutsceneConfig(SCENE, { width: 400, height: 800 }, fallback);
+    expect(phone.autoWalkSpeed).toBe(320);
+  });
+
+  it('produces a payload the shared save route accepts', () => {
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.autoWalkTrigger, { x: 3600, y: 0, scaleX: 1, scaleY: 1 }, viewport);
+    storeLevel4Number(SCENE, LEVEL4_EDITABLE_IDS.autoWalkSpeed, 260);
+    const payload = {
+      [SCENE]: {
+        [LEVEL4_EDITABLE_IDS.autoWalkTrigger]: { xRatio: 2.8125, yRatio: 0, scaleX: 1, scaleY: 1 },
+        [LEVEL4_EDITABLE_IDS.autoWalkSpeed]: { value: 260 },
+      },
+    };
+    expect(() => validateSceneLayout(payload)).not.toThrow();
+    expect(validateSceneLayout(payload)[SCENE][LEVEL4_EDITABLE_IDS.autoWalkSpeed].value).toBe(260);
   });
 });

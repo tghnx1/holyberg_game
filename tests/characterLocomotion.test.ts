@@ -55,6 +55,20 @@ describe('walking in the connective levels', () => {
     expect(resolveLocomotionPose(klaus, 'walk')).toBe('run');
   });
 
+  it('holds the damage pose for every playable character, without naming one', () => {
+    // playable gates on having at least one damage frame, so this must hold
+    // for every playable character, not just one hand-picked example.
+    for (const character of ['atmos', 'klaus', 'doctor-doms'] as const) {
+      const def = getCharacter(character);
+      expect(def.capabilities.playable).toBe(true);
+      expect(resolveLocomotionPose(def, 'damage')).toBe('damage');
+      const frame = resolveLocomotionFrame(def, 'damage', 999);
+      expect(frame.key).toBe(def.gameplay.damage[0].key);
+      // Static: unlike walk/run it must not advance with time.
+      expect(resolveLocomotionFrame(def, 'damage', 5000).key).toBe(frame.key);
+    }
+  });
+
   it('falls back to run frames rather than freezing without a walk set', () => {
     const klaus = getCharacter('klaus');
     const runKeys = new Set(klaus.gameplay.run.map((frame) => frame.key));

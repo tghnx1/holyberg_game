@@ -39,12 +39,15 @@ import type { EditableScene, EditorSavePayload } from '../systems/editableScene'
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import {
   LEVEL4_EDITABLE_IDS,
+  resolveLevel4CutsceneConfig,
   resolveLevel4Placement,
   resolveStallEntryLogicalTargets,
   storeLevel4Placement,
+  type Level4CutsceneConfig,
   type Level4Placement,
 } from '../level/level4/level4Layout';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
+import { isSceneEditorActive } from '../systems/sceneEditorState';
 
 // Native pixel dimensions of assets/level_4/toilet-full.png. The artwork is
 // authored as a short wide strip (floor-to-ceiling height, full room width)
@@ -163,10 +166,47 @@ const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 const LEVEL4_WORLD_WIDTH = TOILET_STRIP_WIDTH * TOILET_SCALE + DESIGN_WIDTH;
 const NPC_WAIT_FACING: 1 | -1 = -1;
 
+/**
+ * Defaults for the toilet-to-Holyworld gap cutscene (see
+ * `resolveLevel4CutsceneConfig`), all overridden the moment any of them is
+ * authored in the Visual Editor — nothing here is a permanent gameplay
+ * hardcode, only what a fresh, never-edited layout starts from.
+ *
+ * There is no floor collider anywhere in Level 4 — every character always
+ * walks at a fixed `GROUND_Y`, the same way the stall-entry zone above is a
+ * pure authored rectangle rather than a physics trigger — so the "first
+ * gap" is authored entirely by `AUTO_FALL_ZONE_DEFAULT` rather than measured
+ * off any collision geometry that does not exist.
+ */
+const TOILET_RIGHT_EDGE_X = TOILET_STRIP_WIDTH * TOILET_SCALE;
+const AUTO_WALK_TRIGGER_X_DEFAULT = TOILET_RIGHT_EDGE_X - 40;
+const CAMERA_STOP_X_DEFAULT = Phaser.Math.Clamp(
+  AUTO_WALK_TRIGGER_X_DEFAULT - DESIGN_WIDTH * 0.55,
+  0,
+  LEVEL4_WORLD_WIDTH - DESIGN_WIDTH,
+);
+const AUTO_FALL_ZONE_DEFAULT = {
+  x: AUTO_WALK_TRIGGER_X_DEFAULT + 260,
+  y: GROUND_Y - 60,
+  width: 220,
+  height: 220,
+};
+/** Matches the ordinary walking pace, so auto-walk reads as the same stride continuing. */
+const AUTO_WALK_SPEED_DEFAULT = WALK_SPEED;
+
+/** Downward acceleration once FALLING starts, in world px/s². Not editor-authored: a physics constant, not a placement. */
+const FALL_GRAVITY_PX_S2 = 1500;
+/** Fraction of the auto-walk speed the fall keeps drifting right at, so the character lands inside the authored fall zone rather than dropping perfectly straight down or still running at full stride mid-air. */
+const FALL_HORIZONTAL_RETENTION = 0.4;
+/** Extra world px past the bottom mask's own top edge before the now-invisible sprite is safe to stop rendering; see `enterComplete`. */
+const FALL_HIDE_MARGIN_PX = 60;
+
+type Level4SequenceState = 'normal' | 'autoWalk' | 'falling' | 'complete';
+
 interface Level4Actor {
   sprite: Phaser.GameObjects.Sprite;
   character: CharacterDefinition;
-  motion: 'idle' | 'walk';
+  motion: 'idle' | 'walk' | 'damage';
   x: number;
   y: number;
   facing: 1 | -1;
@@ -194,7 +234,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private holyworldBackground!: Phaser.GameObjects.TileSprite;
   private toiletStrip!: Phaser.GameObjects.Image;
   private stallDoor!: Phaser.GameObjects.Image;
-  private rubbleMask!: Phaser.GameObjects.Graphics;
+  private topRubbleMask!: Phaser.GameObjects.Graphics;
+  private bottomRubbleMask!: Phaser.GameObjects.Graphics;
+  /** World-y of the bottom rubble bar's own top edge; see `buildRubbleMask`. */
+  private bottomMaskTopWorldY = 0;
   private walk!: WalkInput;
   /** The door's scaleX when shut, derived from the measured stall opening. */
   private doorClosedScaleX = 1;
@@ -241,6 +284,26 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private dialogueTriggered = false;
   private finished = false;
 
+  // ------------------------------------------------ gap cutscene (fall)
+  /** Authored trigger/camera-stop/fall-zone/speed; reloaded fresh in `create()` every entry. */
+  private cutsceneConfig!: Level4CutsceneConfig;
+  /** Runtime-only; reset to 'normal' in `init()` every entry — never persisted. */
+  private sequenceState: Level4SequenceState = 'normal';
+  private cameraLocked = false;
+  /** The exact scrollX the camera is frozen at once `cameraLocked` is true. */
+  private lockedScrollX = 0;
+  private fallVelocityY = 0;
+  private fallHorizontalVelocity = 0;
+  /** Thin draggable world-x lines, visible only while the editor is open. */
+  private autoWalkTriggerHandle!: Phaser.GameObjects.Rectangle;
+  private autoWalkTriggerLine!: Phaser.GameObjects.Rectangle;
+  private autoWalkTriggerLabel!: Phaser.GameObjects.Text;
+  private cameraStopHandle!: Phaser.GameObjects.Rectangle;
+  private cameraStopLine!: Phaser.GameObjects.Rectangle;
+  private cameraStopLabel!: Phaser.GameObjects.Text;
+  private autoFallZoneRect!: Phaser.GameObjects.Rectangle;
+  private autoFallZoneLabel!: Phaser.GameObjects.Text;
+
   constructor() {
     super('Level4Scene');
   }
@@ -257,6 +320,14 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // walk straight back into DialogueScene, looping forever at the stall.
     this.dialogueTriggered = this.introComplete;
     this.finished = false;
+    // Runtime-only: a fresh Level 4 entry always re-arms the gap cutscene.
+    // Only the authored trigger/camera-stop/fall-zone/speed persist — those
+    // are reloaded from the editor's own store in `create()`, not reset here.
+    this.sequenceState = 'normal';
+    this.cameraLocked = false;
+    this.lockedScrollX = 0;
+    this.fallVelocityY = 0;
+    this.fallHorizontalVelocity = 0;
   }
 
   preload(): void {
@@ -278,6 +349,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.buildActors();
     this.buildDoor();
     this.buildStallEntryTarget();
+    this.buildGapCutscene();
 
     // Same manual walk control as the Level 2 walk: arrows/A-D on desktop,
     // hold either half of the screen on touch. Below Depth.UI so the pause,
@@ -338,14 +410,26 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // toilet strip's dark ceiling/floor with no sliver of Holyworld showing
     // at the seam, and runs to the level's own right edge rather than a fixed
     // span, so nothing after it is left uncovered regardless of level width.
+    //
+    // Two separate Graphics objects, not one draw call, so the bottom bar's
+    // depth can be raised above the player the moment the gap cutscene's
+    // FALLING state begins (see `enterFalling`) without touching the top
+    // bar, which never needs to occlude anything.
     const left = DISSOLVE_START_X - RUBBLE_MASK_SEAM_PX;
     const width = LEVEL4_WORLD_WIDTH - left;
     const height = RUBBLE_MASK_HEIGHT_FRAC * DESIGN_HEIGHT + RUBBLE_MASK_SEAM_PX;
     const toneColor = 0x0a0612; // matches the camera's own clear colour
-    this.rubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
-    this.rubbleMask.fillStyle(toneColor, 1);
-    this.rubbleMask.fillRect(left, 0, width, height);
-    this.rubbleMask.fillRect(left, DESIGN_HEIGHT - height, width, height);
+    this.topRubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
+    this.topRubbleMask.fillStyle(toneColor, 1);
+    this.topRubbleMask.fillRect(left, 0, width, height);
+    this.bottomRubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
+    this.bottomRubbleMask.fillStyle(toneColor, 1);
+    this.bottomRubbleMask.fillRect(left, DESIGN_HEIGHT - height, width, height);
+    // World-y of the bottom bar's own top edge — the line the falling player
+    // has to cross before it is safe to stop rendering him at all (see
+    // `enterComplete`); occlusion itself starts as soon as `enterFalling`
+    // raises this mask's depth, well before he reaches this line.
+    this.bottomMaskTopWorldY = DESIGN_HEIGHT - height;
   }
 
   /**
@@ -541,6 +625,89 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.npcTargetMarker.setPosition(targets.npcX, y);
     this.playerTargetLabel.setPosition(targets.playerX, y - TARGET_MARKER_RADIUS - 3);
     this.npcTargetLabel.setPosition(targets.npcX, y - TARGET_MARKER_RADIUS - 3);
+  }
+
+  /**
+   * Loads the toilet-to-Holyworld gap cutscene's authored config and builds
+   * its three editor-only markers.
+   *
+   * `autoWalkTriggerHandle`/`cameraStopHandle` are the actual `EditableObject`
+   * targets the shared `SceneEditor` drags — thin, invisible, full-height
+   * rectangles whose `x` is the only coordinate that means anything, the same
+   * "invisible interactive rect plus a separate always-visible companion"
+   * split `stallEntryTargetRect`'s own P/N markers already use above, so the
+   * shared editor's own selection outline never has to double up with a
+   * second filled box drawn on top of it. `autoFallZoneRect` needs no such
+   * split — like `stallEntryTargetRect`, its own outline and handles already
+   * are the visual, so it only gets a text label.
+   */
+  private buildGapCutscene(): void {
+    this.cutsceneConfig = resolveLevel4CutsceneConfig(this.scene.key, this.editorViewport(), {
+      cameraStopX: CAMERA_STOP_X_DEFAULT,
+      autoWalkTriggerX: AUTO_WALK_TRIGGER_X_DEFAULT,
+      autoFallZone: AUTO_FALL_ZONE_DEFAULT,
+      autoWalkSpeed: AUTO_WALK_SPEED_DEFAULT,
+    });
+
+    const lineWidth = 4;
+    this.autoWalkTriggerHandle = this.add
+      .rectangle(this.cutsceneConfig.autoWalkTriggerX, DESIGN_HEIGHT / 2, lineWidth, DESIGN_HEIGHT, 0x000000, 0)
+      .setDepth(Depth.FOREGROUND + 20)
+      .setVisible(false);
+    this.autoWalkTriggerLine = this.add
+      .rectangle(0, DESIGN_HEIGHT / 2, lineWidth, DESIGN_HEIGHT, 0x7ef0ff, 0.6)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+    this.autoWalkTriggerLabel = this.add
+      .text(0, 8, 'AUTO WALK', TARGET_LABEL_STYLE)
+      .setOrigin(0.5, 0)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+
+    this.cameraStopHandle = this.add
+      .rectangle(this.cutsceneConfig.cameraStopX, DESIGN_HEIGHT / 2, lineWidth, DESIGN_HEIGHT, 0x000000, 0)
+      .setDepth(Depth.FOREGROUND + 20)
+      .setVisible(false);
+    this.cameraStopLine = this.add
+      .rectangle(0, DESIGN_HEIGHT / 2, lineWidth, DESIGN_HEIGHT, 0xffe36d, 0.6)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+    this.cameraStopLabel = this.add
+      .text(0, 8, 'CAMERA STOP', TARGET_LABEL_STYLE)
+      .setOrigin(0.5, 0)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+
+    const zone = this.cutsceneConfig.autoFallZone;
+    // 1x1 rect scaled to width/height, same convention as `stallEntryTargetRect`:
+    // `getNativeSize` reports {1, 1} so the editor's scaleX/scaleY resize
+    // reads directly as the zone's pixel size.
+    this.autoFallZoneRect = this.add
+      .rectangle(zone.x, zone.y, 1, 1, 0x000000, 0)
+      .setScale(zone.width, zone.height)
+      .setDepth(Depth.FOREGROUND + 20)
+      .setVisible(false);
+    this.autoFallZoneLabel = this.add
+      .text(0, 0, 'AUTO FALL', TARGET_LABEL_STYLE)
+      .setOrigin(0.5, 0.5)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+
+    this.layoutGapCutsceneMarkers();
+  }
+
+  /** Repositions the visible line/label companions onto the handles' current bounds. */
+  private layoutGapCutsceneMarkers(): void {
+    const triggerX = this.autoWalkTriggerHandle.x;
+    this.autoWalkTriggerLine.setPosition(triggerX, DESIGN_HEIGHT / 2);
+    this.autoWalkTriggerLabel.setPosition(triggerX, 8);
+
+    const cameraStopX = this.cameraStopHandle.x;
+    this.cameraStopLine.setPosition(cameraStopX, DESIGN_HEIGHT / 2);
+    this.cameraStopLabel.setPosition(cameraStopX, 8);
+
+    const zone = this.autoFallZoneRect;
+    this.autoFallZoneLabel.setPosition(zone.x, zone.y);
   }
 
   private createActor(
@@ -758,6 +925,73 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
           ),
         refresh: () => this.syncActor(this.player, this.time.now),
       }),
+      {
+        id: LEVEL4_EDITABLE_IDS.autoWalkTrigger,
+        label: 'AUTO WALK',
+        target: this.autoWalkTriggerHandle,
+        getNativeSize: () => ({ width: 1, height: 1 }),
+        // A vertical line, not a box: only its x is ever read, so there is
+        // nothing here to resize.
+        resizable: false,
+        onChange: (transform) => {
+          // Keeps it a full-height vertical line regardless of an accidental
+          // vertical drag — only x is ever authored for this marker.
+          this.autoWalkTriggerHandle.setPosition(transform.x, DESIGN_HEIGHT / 2);
+          storeLevel4Placement(
+            this.scene.key,
+            LEVEL4_EDITABLE_IDS.autoWalkTrigger,
+            { x: transform.x, y: 0, scaleX: 1, scaleY: 1 },
+            this.editorViewport(),
+          );
+          this.cutsceneConfig.autoWalkTriggerX = transform.x;
+          this.layoutGapCutsceneMarkers();
+        },
+      },
+      {
+        id: LEVEL4_EDITABLE_IDS.cameraStop,
+        label: 'CAMERA STOP',
+        target: this.cameraStopHandle,
+        getNativeSize: () => ({ width: 1, height: 1 }),
+        resizable: false,
+        onChange: (transform) => {
+          this.cameraStopHandle.setPosition(transform.x, DESIGN_HEIGHT / 2);
+          storeLevel4Placement(
+            this.scene.key,
+            LEVEL4_EDITABLE_IDS.cameraStop,
+            { x: transform.x, y: 0, scaleX: 1, scaleY: 1 },
+            this.editorViewport(),
+          );
+          this.cutsceneConfig.cameraStopX = transform.x;
+          this.layoutGapCutsceneMarkers();
+        },
+      },
+      {
+        id: LEVEL4_EDITABLE_IDS.autoFallZone,
+        label: 'AUTO FALL',
+        target: this.autoFallZoneRect,
+        getNativeSize: () => ({ width: 1, height: 1 }),
+        allowNonUniformScale: true,
+        onChange: (transform) => {
+          storeLevel4Placement(
+            this.scene.key,
+            LEVEL4_EDITABLE_IDS.autoFallZone,
+            {
+              x: transform.x,
+              y: transform.y,
+              scaleX: transform.scaleX,
+              scaleY: transform.scaleY,
+            },
+            this.editorViewport(),
+          );
+          this.cutsceneConfig.autoFallZone = {
+            x: transform.x,
+            y: transform.y,
+            width: transform.scaleX,
+            height: transform.scaleY,
+          };
+          this.layoutGapCutsceneMarkers();
+        },
+      },
     ];
   }
 
@@ -802,6 +1036,16 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.npcTargetMarker.setVisible(true);
     this.playerTargetLabel.setVisible(true);
     this.npcTargetLabel.setVisible(true);
+    // The gap cutscene's three markers are equally noise during normal play
+    // — and `updateGapSequence` itself checks `isSceneEditorActive`, so the
+    // sequence is already frozen the instant the editor opens regardless of
+    // which state it was in.
+    this.autoWalkTriggerLine.setVisible(true);
+    this.autoWalkTriggerLabel.setVisible(true);
+    this.cameraStopLine.setVisible(true);
+    this.cameraStopLabel.setVisible(true);
+    this.autoFallZoneRect.setVisible(true);
+    this.autoFallZoneLabel.setVisible(true);
   }
 
   onEditorDisable(): void {
@@ -819,25 +1063,55 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.npcTargetMarker.setVisible(false);
     this.playerTargetLabel.setVisible(false);
     this.npcTargetLabel.setVisible(false);
+    this.autoWalkTriggerLine.setVisible(false);
+    this.autoWalkTriggerLabel.setVisible(false);
+    this.cameraStopLine.setVisible(false);
+    this.cameraStopLabel.setVisible(false);
+    this.autoFallZoneRect.setVisible(false);
+    this.autoFallZoneLabel.setVisible(false);
+  }
+
+  /** Read-only HUD line for `autoWalkSpeed`, which has no world-space handle of its own. */
+  describeEditor(): string[] {
+    return [`autoWalkSpeed ${this.cutsceneConfig.autoWalkSpeed.toFixed(0)} px/s (edit sceneLayout.json to change)`];
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
     const camera = this.cameras.main;
-    this.cameraX = Phaser.Math.Clamp(this.cameraX, 0, Math.max(0, LEVEL4_WORLD_WIDTH - camera.width));
+    // Once the gap cutscene has locked the camera, its own scroll — not the
+    // ordinary follow-derived `cameraX` — is the only thing a resize is
+    // allowed to reassert; recomputing `cameraX` from the current (frozen)
+    // scroll and writing it straight back would be a no-op today, but would
+    // silently start fighting the lock the moment anything else in this
+    // method's ordering changed.
+    if (!this.cameraLocked) {
+      this.cameraX = Phaser.Math.Clamp(this.cameraX, 0, Math.max(0, LEVEL4_WORLD_WIDTH - camera.width));
+    }
     this.walk.layout(camera.width, camera.height);
     this.syncActor(this.player, this.time.now);
     this.syncActor(this.npc, this.time.now);
-    this.cameras.main.setScroll(this.cameraX, 0);
     if (viewport) {
       // Keep the composition consistent after resize; the actual gameplay
       // geometry remains world-space and untouched.
       this.cameras.main.setBounds(0, 0, LEVEL4_WORLD_WIDTH, DESIGN_HEIGHT);
     }
+    // `setBounds` above can itself re-clamp scroll against the new bounds, so
+    // the lock is reasserted after it rather than before — otherwise a
+    // narrower viewport could nudge the "static" shot mid-fall.
+    this.cameras.main.setScroll(this.cameraLocked ? this.lockedScrollX : this.cameraX, 0);
   }
 
   update(_time: number, delta: number): void {
     if (this.finished) return;
     const now = this.time.now;
+
+    if (this.sequenceState !== 'normal') {
+      this.updateGapSequence(delta);
+      this.syncActor(this.player, now);
+      this.syncActor(this.npc, now);
+      this.cameraX = this.cameras.main.scrollX;
+      return;
+    }
 
     if (this.stallEntry) {
       this.advanceStallEntry(delta);
@@ -852,6 +1126,17 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
         );
       }
       this.player.motion = direction === 0 ? 'idle' : 'walk';
+
+      // Checked before the dialogue/finish triggers below: past this point
+      // control belongs to the scripted sequence, exactly once, for the rest
+      // of the level.
+      if (this.player.x >= this.cutsceneConfig.autoWalkTriggerX) {
+        this.enterAutoWalk();
+        this.syncActor(this.player, now);
+        this.syncActor(this.npc, now);
+        this.cameraX = this.cameras.main.scrollX;
+        return;
+      }
 
       // Reads the NPC's authored position, not the constant, so moving them
       // in the editor moves the conversation trigger with them instead of
@@ -869,6 +1154,130 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.syncActor(this.player, now);
     this.syncActor(this.npc, now);
     this.cameraX = this.cameras.main.scrollX;
+  }
+
+  // ------------------------------------------------- gap cutscene (fall)
+
+  /**
+   * NORMAL -> AUTO_WALK. Reuses `controlsLocked` — the exact flag that
+   * already gates keyboard/touch direction, the dialogue trigger and the
+   * ordinary finish trigger above — so none of those can race a held
+   * direction key against the scripted velocity or fire a heartbeat after
+   * this point; they are simply never evaluated again this run.
+   */
+  private enterAutoWalk(): void {
+    if (this.sequenceState !== 'normal') return; // run-once
+    this.sequenceState = 'autoWalk';
+    this.controlsLocked = true;
+    this.player.facing = 1;
+    this.player.motion = 'walk';
+    // Covers the (legitimate) case where cameraStopX sits behind wherever
+    // the camera's own follow lerp has already carried it.
+    this.maybeLockCamera();
+  }
+
+  /** Advances AUTO_WALK/FALLING by one frame. Frozen while the editor is open, exactly like the stall sequence's tweens. */
+  private updateGapSequence(delta: number): void {
+    if (isSceneEditorActive(this)) return;
+    if (this.sequenceState === 'autoWalk') {
+      this.player.x += (this.cutsceneConfig.autoWalkSpeed * delta) / 1000;
+      this.player.facing = 1;
+      this.player.motion = 'walk';
+      this.maybeLockCamera();
+      if (this.playerIntersectsFallZone()) this.enterFalling();
+    } else if (this.sequenceState === 'falling') {
+      this.fallVelocityY += (FALL_GRAVITY_PX_S2 * delta) / 1000;
+      this.player.y += (this.fallVelocityY * delta) / 1000;
+      this.player.x += (this.fallHorizontalVelocity * delta) / 1000;
+      if (this.player.y >= this.bottomMaskTopWorldY + FALL_HIDE_MARGIN_PX) {
+        this.enterComplete();
+      }
+    }
+  }
+
+  /** True once the camera has reached its authored stop position under its own follow, or is already locked there. */
+  private maybeLockCamera(): void {
+    if (this.cameraLocked) return;
+    if (this.cameras.main.scrollX >= this.cutsceneConfig.cameraStopX) {
+      this.lockCamera(this.cutsceneConfig.cameraStopX);
+    }
+  }
+
+  /**
+   * Stops following the player and freezes scroll at `scrollX`, permanently
+   * for the rest of this run — `applyResponsiveLayout` re-asserts
+   * `lockedScrollX` on every resize once this is set, and nothing else in
+   * this scene ever calls `setScroll`/`startFollow` again after it. This is
+   * the one and only place that happens, so there is nowhere else a stray
+   * follow-restoration could sneak back in.
+   */
+  private lockCamera(scrollX: number): void {
+    if (this.cameraLocked) return;
+    this.cameraLocked = true;
+    this.cameras.main.stopFollow();
+    this.lockedScrollX = Phaser.Math.Clamp(
+      scrollX,
+      0,
+      Math.max(0, LEVEL4_WORLD_WIDTH - this.cameras.main.width),
+    );
+    this.cameras.main.setScroll(this.lockedScrollX, 0);
+  }
+
+  /**
+   * The player's actual rendered bounding box against the authored zone —
+   * not just `actor.x`/the sprite origin — so differently sized characters
+   * all trigger the fall at the same physical overlap rather than whichever
+   * one's origin happens to sit further from its own edges.
+   */
+  private playerIntersectsFallZone(): boolean {
+    const zone = this.cutsceneConfig.autoFallZone;
+    const zoneRect = new Phaser.Geom.Rectangle(
+      zone.x - zone.width / 2,
+      zone.y - zone.height / 2,
+      zone.width,
+      zone.height,
+    );
+    return Phaser.Geom.Intersects.RectangleToRectangle(this.player.sprite.getBounds(), zoneRect);
+  }
+
+  /**
+   * AUTO_WALK -> FALLING. The camera is force-locked here regardless of
+   * whether it had already reached `cameraStopX` under its own follow, so
+   * the shot is guaranteed static for the entire fall even if the fall zone
+   * is authored close enough to the trigger that the follow lerp never
+   * caught up in time.
+   */
+  private enterFalling(): void {
+    if (this.sequenceState !== 'autoWalk') return; // run-once
+    this.sequenceState = 'falling';
+    if (!this.cameraLocked) this.lockCamera(this.cutsceneConfig.cameraStopX);
+    this.fallVelocityY = 0;
+    this.fallHorizontalVelocity = this.cutsceneConfig.autoWalkSpeed * FALL_HORIZONTAL_RETENTION;
+    // The existing damage pose, resolved through the same
+    // CharacterRegistry-backed locomotion module every other pose in this
+    // scene already goes through — nothing here names a character, and every
+    // playable character is guaranteed at least one damage frame (it gates
+    // `capabilities.playable`).
+    this.player.motion = 'damage';
+    // From this point the lower black bar has to render in front of the
+    // player, not behind him, so the fall reads as passing behind it rather
+    // than the sprite just stopping in front of a wall of black.
+    this.bottomRubbleMask.setDepth(Depth.PLAYER + 1);
+  }
+
+  /**
+   * FALLING -> COMPLETE. By now the player has been occluded by
+   * `bottomRubbleMask` (raised above him in `enterFalling`) for a while —
+   * this only stops rendering him once he is well past that line, so the
+   * `setVisible(false)` is cleanup after the fact, not what makes him
+   * disappear. Hands off to whatever Level 4 already does at the end of a
+   * normal run, exactly as if the ordinary finish threshold had fired.
+   */
+  private enterComplete(): void {
+    if (this.sequenceState !== 'falling') return; // run-once
+    this.sequenceState = 'complete';
+    this.player.sprite.setVisible(false);
+    this.finishLevel();
   }
 
   private startDialogue(): void {
@@ -1079,7 +1488,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.time.removeAllEvents();
     this.walk?.destroy();
     this.holyworldBackground?.destroy();
-    this.rubbleMask?.destroy();
+    this.topRubbleMask?.destroy();
+    this.bottomRubbleMask?.destroy();
     this.toiletStrip?.destroy();
     this.stallDoor?.destroy();
     this.player?.sprite.destroy();

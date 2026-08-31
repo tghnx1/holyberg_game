@@ -29,6 +29,16 @@ export interface SceneObjectLayout {
    */
   scaleX?: number;
   scaleY?: number;
+  /**
+   * A plain absolute number, for an authored value that is not a screen
+   * position or a scale multiplier at all — Level 4's `autoWalkSpeed` (a
+   * px/s speed) is the first of these. Deliberately not run through the
+   * xRatio/yRatio viewport conversion above: a speed saved as a fraction of
+   * whatever screen happened to be open would silently change on a
+   * different screen, which is exactly what every other field here exists
+   * to avoid for on-screen positions.
+   */
+  value?: number;
 }
 
 export type SceneLayoutConfig = Record<string, Record<string, SceneObjectLayout>>;

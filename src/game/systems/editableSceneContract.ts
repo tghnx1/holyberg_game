@@ -35,6 +35,8 @@ export interface EditableScene {
   /** Freeze/resume any time-based progression while the editor is open. */
   onEditorEnable?(): void;
   onEditorDisable?(): void;
+  /** Extra read-only HUD lines, for a tunable value with no world-space handle of its own. */
+  describeEditor?(): string[];
 }
 
 export interface EditorSavePayload {

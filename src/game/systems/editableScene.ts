@@ -44,6 +44,7 @@ function attachSceneEditor(scene: Phaser.Scene & EditableScene): void {
       },
       onEnable: () => scene.onEditorEnable?.(),
       onDisable: () => scene.onEditorDisable?.(),
+      describe: scene.describeEditor ? () => scene.describeEditor!() : undefined,
     });
     return editor;
   };

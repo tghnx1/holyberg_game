@@ -20,6 +20,9 @@ const MIN_RATIO = -10;
 const MAX_RATIO = 10;
 const MIN_SCALE = 0.01;
 const MAX_SCALE = 10_000;
+/** Bounds for the plain absolute `value` field — generous, just catching NaN/absurd saves. */
+const MIN_VALUE = -100_000;
+const MAX_VALUE = 100_000;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -46,6 +49,13 @@ function validateObjectLayout(value: unknown, where: string): SceneObjectLayout 
       throw new Error(`${where}.${key} must be between ${MIN_SCALE} and ${MAX_SCALE}`);
     }
     layout[key] = record[key];
+  }
+  if (record.value !== undefined) {
+    if (!isFiniteNumber(record.value)) throw new Error(`${where}.value must be a finite number`);
+    if (record.value < MIN_VALUE || record.value > MAX_VALUE) {
+      throw new Error(`${where}.value must be between ${MIN_VALUE} and ${MAX_VALUE}`);
+    }
+    layout.value = record.value;
   }
   return layout;
 }
