@@ -83,8 +83,53 @@ export function hasAuthoredLevel4Placement(sceneKey: string, id: string): boolea
   return getSceneObjectLayout(sceneKey, id) !== undefined;
 }
 
+/**
+ * Horizontal fraction of the stall-entry target zone each character walks
+ * to. Stable fractions rather than world coordinates, so both destinations
+ * stay inside the authored zone however it is moved or resized, and read as
+ * two people rather than one wherever the zone ends up.
+ */
+export const STALL_ENTRY_PLAYER_FRACTION = 0.32;
+export const STALL_ENTRY_NPC_FRACTION = 0.68;
+
+export interface StallEntryZone {
+  /** Centre x/y and pixel width of the authored target rectangle. */
+  x: number;
+  y: number;
+  width: number;
+}
+
+export interface StallEntryTargets {
+  playerX: number;
+  npcX: number;
+}
+
+/**
+ * Where PLAYER TARGET and NPC TARGET sit inside the authored zone.
+ *
+ * Pure so the "both destinations stay inside the zone, whatever its size or
+ * position" guarantee is checkable without a running scene: both fractions
+ * are in (0, 1), so the result is always strictly between the zone's left
+ * and right edges.
+ */
+export function resolveStallEntryTargets(zone: StallEntryZone): StallEntryTargets {
+  const left = zone.x - zone.width / 2;
+  return {
+    playerX: left + zone.width * STALL_ENTRY_PLAYER_FRACTION,
+    npcX: left + zone.width * STALL_ENTRY_NPC_FRACTION,
+  };
+}
+
 export const LEVEL4_EDITABLE_IDS = {
   toilet: 'toilet',
   stallDoor: 'stall-door',
   npc: 'npc',
+  /**
+   * The stall-entry target zone. Resolved through the same
+   * `Level4Placement` shape as everything else here, but for a plain
+   * rectangle rather than artwork: its "native size" is 1x1, so `scaleX`/
+   * `scaleY` are read directly as the zone's width/height in world pixels
+   * rather than as multipliers of some inherent size.
+   */
+  stallEntryTarget: 'stall-entry-target',
 } as const;

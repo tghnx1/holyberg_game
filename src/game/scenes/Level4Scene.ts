@@ -40,6 +40,7 @@ import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPr
 import {
   LEVEL4_EDITABLE_IDS,
   resolveLevel4Placement,
+  resolveStallEntryTargets,
   storeLevel4Placement,
   type Level4Placement,
 } from '../level/level4/level4Layout';
@@ -122,6 +123,8 @@ const DOOR_OPEN_SCALE = 0.12;
  * it rather than as an empty frame.
  */
 const DOOR_FLOOR_GAP_NATIVE = 7;
+/** Editor-only marker radius for PLAYER TARGET / NPC TARGET. */
+const TARGET_MARKER_RADIUS = 5;
 
 // Walkway positions, in the same native pixel space as the stall rect.
 const PLAYER_START_X = 160 * TOILET_SCALE;
@@ -174,6 +177,22 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private npcScale = 1;
   /** Whether the stall door is currently drawn edge-on; see `onEditorEnable`. */
   private doorOpen = true;
+  /**
+   * Editor-only rectangle marking where both characters must walk to after
+   * the dialogue. Visual only: never collides with anything, and is only
+   * ever visible while the editor is open.
+   */
+  private stallEntryTargetRect!: Phaser.GameObjects.Rectangle;
+  /** Small dots inside the target zone showing PLAYER TARGET / NPC TARGET. */
+  private playerTargetMarker!: Phaser.GameObjects.Arc;
+  private npcTargetMarker!: Phaser.GameObjects.Arc;
+  /** Set only while both actors are walking into the stall after the dialogue. */
+  private stallEntry?: {
+    playerTargetX: number;
+    npcTargetX: number;
+    playerArrived: boolean;
+    npcArrived: boolean;
+  };
   /** True only while the dialogue hand-off and the stall cutscene are running. */
   private controlsLocked = false;
   /** Restored when the editor closes, so it cannot free a cutscene's controls. */
@@ -216,6 +235,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.buildToiletStrip();
     this.buildActors();
     this.buildDoor();
+    this.buildStallEntryTarget();
 
     // Same manual walk control as the Level 2 walk: arrows/A-D on desktop,
     // hold either half of the screen on touch. Below Depth.UI so the pause,
@@ -345,6 +365,64 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.doorClosedScaleX = this.stallDoor.scaleX;
     this.stallDoor.scaleX = this.doorClosedScaleX * DOOR_OPEN_SCALE;
     this.doorOpen = true;
+  }
+
+  /**
+   * The stall-entry target zone.
+   *
+   * A separate authored thing from the door on purpose: the door's own
+   * editor entry can be moved without silently dragging the target zone with
+   * it, so a designer nudging the door's fit does not also relocate where
+   * the cutscene walks. It is only initialised *from* the stall opening
+   * (fixed measured constants, not the door's live position) the first time
+   * nothing has been authored yet, so a fresh layout still starts somewhere
+   * sensible.
+   */
+  private buildStallEntryTarget(): void {
+    const placement = resolveLevel4Placement(
+      this.scene.key,
+      LEVEL4_EDITABLE_IDS.stallEntryTarget,
+      {
+        x: (STALL_OPENING_LEFT + STALL_OPENING_RIGHT) / 2,
+        y: (STALL_OPENING_TOP + STALL_OPENING_BOTTOM) / 2,
+        scaleX: STALL_OPENING_WIDTH,
+        scaleY: STALL_OPENING_HEIGHT,
+      },
+      this.editorViewport(),
+    );
+    // A 1x1 rectangle scaled to the authored width/height: getNativeSize
+    // below reports {1, 1} to match, so the editor's scaleX/scaleY resize
+    // reads directly as the zone's pixel size rather than as a multiplier of
+    // some inherent artwork size that does not exist here.
+    this.stallEntryTargetRect = this.add
+      .rectangle(placement.x, placement.y, 1, 1, 0x53ffe0, 0.12)
+      .setStrokeStyle(2, 0x53ffe0, 0.9)
+      .setScale(placement.scaleX, placement.scaleY)
+      .setDepth(Depth.FOREGROUND + 20)
+      .setVisible(false);
+
+    this.playerTargetMarker = this.add
+      .circle(0, 0, TARGET_MARKER_RADIUS, 0x7ef0ff, 1)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+    this.npcTargetMarker = this.add
+      .circle(0, 0, TARGET_MARKER_RADIUS, 0xff7ac1, 1)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+    this.layoutTargetMarkers();
+  }
+
+  /** Where each character walks to, inside the authored zone. */
+  private stallEntryTargets(): { playerX: number; npcX: number } {
+    const rect = this.stallEntryTargetRect;
+    return resolveStallEntryTargets({ x: rect.x, y: rect.y, width: rect.scaleX });
+  }
+
+  /** Repositions the two target markers onto the zone's current bounds. */
+  private layoutTargetMarkers(): void {
+    const targets = this.stallEntryTargets();
+    this.playerTargetMarker.setPosition(targets.playerX, this.stallEntryTargetRect.y);
+    this.npcTargetMarker.setPosition(targets.npcX, this.stallEntryTargetRect.y);
   }
 
   private createActor(
@@ -498,6 +576,30 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
         },
       },
       {
+        id: LEVEL4_EDITABLE_IDS.stallEntryTarget,
+        label: 'STALL ENTRY TARGET',
+        target: this.stallEntryTargetRect,
+        // 1x1 native size: scaleX/scaleY are read directly as the zone's
+        // pixel width/height. Never a `remove`/`clone` — this is a single
+        // authored zone, not something the scene spawns copies of.
+        getNativeSize: () => ({ width: 1, height: 1 }),
+        allowNonUniformScale: true,
+        onChange: (transform) => {
+          storeLevel4Placement(
+            this.scene.key,
+            LEVEL4_EDITABLE_IDS.stallEntryTarget,
+            {
+              x: transform.x,
+              y: transform.y,
+              scaleX: transform.scaleX,
+              scaleY: transform.scaleY,
+            },
+            this.editorViewport(),
+          );
+          this.layoutTargetMarkers();
+        },
+      },
+      {
         id: LEVEL4_EDITABLE_IDS.npc,
         label: `STORY NPC (${this.npcCharacter.name})`,
         target: this.npc.sprite,
@@ -554,6 +656,11 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // editing makes the handle usable and makes the edited value already be
     // the one that gets saved.
     this.stallDoor.scaleX = this.doorClosedScaleX;
+    // The target zone and its markers are noise during normal play — shown
+    // only while there is something to author them against.
+    this.stallEntryTargetRect.setVisible(true);
+    this.playerTargetMarker.setVisible(true);
+    this.npcTargetMarker.setVisible(true);
   }
 
   onEditorDisable(): void {
@@ -561,6 +668,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.stallDoor.scaleX = this.doorOpen
       ? this.doorClosedScaleX * DOOR_OPEN_SCALE
       : this.doorClosedScaleX;
+    this.stallEntryTargetRect.setVisible(false);
+    this.playerTargetMarker.setVisible(false);
+    this.npcTargetMarker.setVisible(false);
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
@@ -581,7 +691,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     if (this.finished) return;
     const now = this.time.now;
 
-    if (!this.controlsLocked) {
+    if (this.stallEntry) {
+      this.advanceStallEntry(delta);
+    } else if (!this.controlsLocked) {
       const direction = this.walk.direction;
       if (direction !== 0) {
         this.player.facing = direction;
@@ -633,51 +745,54 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   }
 
   /**
-   * The stall opening, derived from the door as it is actually authored — the
-   * door hangs on the opening's right edge at its closed width — so moving or
-   * resizing the door in the editor moves where the characters walk to with
-   * it, instead of leaving the staging at unrelated hardcoded coordinates.
+   * Both characters walk into the authored STALL ENTRY TARGET zone.
+   *
+   * Driven frame by frame from `update()`, at the same walk speed normal
+   * gameplay uses, rather than a fixed-duration tween: the door-close
+   * sequence starts only once each actor's *actual position* has reached its
+   * target, so neither a slow nor a long walk can let the door close early,
+   * and neither actor can overshoot past where it was told to stop.
    */
-  private stallOpening(): { left: number; right: number } {
-    const right = this.stallDoor.x;
-    const width = this.doorClosedScaleX * this.stallDoor.frame.realWidth;
-    return { left: right - width, right };
-  }
-
   private startPostDialogueCutscene(): void {
     this.controlsLocked = true;
     this.player.motion = 'walk';
     this.npc.motion = 'walk';
-    this.npc.facing = 1;
-    this.player.facing = 1;
 
-    let arrivals = 0;
-    const onArrived = (): void => {
-      arrivals += 1;
-      if (arrivals < 2) return;
-      this.stepIntoStall();
+    const targets = this.stallEntryTargets();
+    this.stallEntry = {
+      playerTargetX: targets.playerX,
+      npcTargetX: targets.npcX,
+      playerArrived: false,
+      npcArrived: false,
+    };
+  }
+
+  /** Advances both actors toward their stall-entry targets by one frame. */
+  private advanceStallEntry(delta: number): void {
+    const entry = this.stallEntry;
+    if (!entry) return;
+    const step = (WALK_SPEED * delta) / 1000;
+
+    const advance = (actor: Level4Actor, targetX: number, arrived: boolean): boolean => {
+      if (arrived) return true;
+      const diff = targetX - actor.x;
+      if (Math.abs(diff) <= step) {
+        actor.x = targetX;
+        actor.motion = 'idle';
+        return true;
+      }
+      actor.facing = diff > 0 ? 1 : -1;
+      actor.x += Math.sign(diff) * step;
+      return false;
     };
 
-    // Both walk the whole way *into* the opening rather than stopping just
-    // short of it: the targets are the opening's own centre, spread just far
-    // enough apart to read as two people rather than one.
-    const opening = this.stallOpening();
-    const centre = (opening.left + opening.right) / 2;
-    const spread = (opening.right - opening.left) * 0.22;
-    this.tweens.add({
-      targets: this.player,
-      x: centre - spread,
-      duration: 620,
-      ease: 'Quad.easeOut',
-      onComplete: onArrived,
-    });
-    this.tweens.add({
-      targets: this.npc,
-      x: centre + spread,
-      duration: 620,
-      ease: 'Quad.easeOut',
-      onComplete: onArrived,
-    });
+    entry.playerArrived = advance(this.player, entry.playerTargetX, entry.playerArrived);
+    entry.npcArrived = advance(this.npc, entry.npcTargetX, entry.npcArrived);
+
+    if (entry.playerArrived && entry.npcArrived) {
+      this.stallEntry = undefined;
+      this.stepIntoStall();
+    }
   }
 
   /**

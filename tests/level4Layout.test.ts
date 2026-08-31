@@ -3,6 +3,9 @@ import {
   hasAuthoredLevel4Placement,
   LEVEL4_EDITABLE_IDS,
   resolveLevel4Placement,
+  resolveStallEntryTargets,
+  STALL_ENTRY_NPC_FRACTION,
+  STALL_ENTRY_PLAYER_FRACTION,
   storeLevel4Placement,
 } from '../src/game/level/level4/level4Layout';
 import { resetSceneLayout } from '../src/game/systems/sceneLayout';
@@ -100,5 +103,57 @@ describe('authored Level 4 placement', () => {
   it('rejects a scale the editor could never legitimately produce', () => {
     expect(() => validateSceneLayout({ [SCENE]: { toilet: { scaleX: 0 } } })).toThrow();
     expect(() => validateSceneLayout({ [SCENE]: { toilet: { scaleY: 999 } } })).toThrow();
+  });
+});
+
+/**
+ * Both stall-entry destinations must stay inside the authored zone, however
+ * it is moved or resized, and must read as two separate people rather than
+ * one — that is the whole point of replacing the old centre-plus-spread
+ * calculation with an explicit authored target.
+ */
+describe('stall entry targets', () => {
+  it('places both targets strictly inside the zone, for a wide range of zones', () => {
+    const zones = [
+      { x: 0, y: 0, width: 100 },
+      { x: 500, y: 200, width: 40 },
+      { x: -300, y: 0, width: 250 },
+      { x: 1000, y: 50, width: 1 },
+    ];
+    for (const zone of zones) {
+      const targets = resolveStallEntryTargets(zone);
+      const left = zone.x - zone.width / 2;
+      const right = zone.x + zone.width / 2;
+      expect(targets.playerX).toBeGreaterThan(left);
+      expect(targets.playerX).toBeLessThan(right);
+      expect(targets.npcX).toBeGreaterThan(left);
+      expect(targets.npcX).toBeLessThan(right);
+    }
+  });
+
+  it('keeps the player left of the NPC, so they read as two people', () => {
+    const targets = resolveStallEntryTargets({ x: 0, y: 0, width: 200 });
+    expect(targets.playerX).toBeLessThan(targets.npcX);
+  });
+
+  it('moves with the zone: dragging it moves both destinations by the same amount', () => {
+    const before = resolveStallEntryTargets({ x: 0, y: 0, width: 200 });
+    const after = resolveStallEntryTargets({ x: 300, y: 0, width: 200 });
+    expect(after.playerX - before.playerX).toBeCloseTo(300);
+    expect(after.npcX - before.npcX).toBeCloseTo(300);
+  });
+
+  it('scales with the zone width, using the documented fractions', () => {
+    const zone = { x: 1000, y: 0, width: 400 };
+    const targets = resolveStallEntryTargets(zone);
+    const left = zone.x - zone.width / 2;
+    expect(targets.playerX).toBeCloseTo(left + zone.width * STALL_ENTRY_PLAYER_FRACTION);
+    expect(targets.npcX).toBeCloseTo(left + zone.width * STALL_ENTRY_NPC_FRACTION);
+  });
+
+  it('degrades to the zone centre for a zero-width zone rather than throwing', () => {
+    const targets = resolveStallEntryTargets({ x: 500, y: 0, width: 0 });
+    expect(targets.playerX).toBeCloseTo(500);
+    expect(targets.npcX).toBeCloseTo(500);
   });
 });
