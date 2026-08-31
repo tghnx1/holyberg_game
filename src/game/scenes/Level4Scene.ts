@@ -101,19 +101,6 @@ const TOILET_TOP_Y = 0;
 // a wall breaking open onto it.
 const DISSOLVE_START_X_NATIVE = 1000;
 const DISSOLVE_START_X = DISSOLVE_START_X_NATIVE * TOILET_SCALE;
-// Native x by which the wall has fully dissolved (0% opaque). Together with
-// the start above this is the same crumbling span the artwork already draws;
-// nothing here invents a new one.
-const DISSOLVE_END_X_NATIVE = 1450;
-/**
- * How much further right of the fully-dissolved edge the room's own dark
- * tone keeps eating into Holyworld before giving way completely — the visual
- * difference between "a wall broke and the other world is right there" and
- * "a wall broke and then, several strides later, a screen-filling backdrop
- * begins". Reuses the crumbling span's own width so the two feel like one
- * continuous event rather than two unrelated transitions.
- */
-const RUBBLE_BLEED_NATIVE = DISSOLVE_END_X_NATIVE - DISSOLVE_START_X_NATIVE;
 /**
  * Extra pixels each rubble-mask rectangle overlaps past its own edges: left
  * into the still-opaque wall (harmless — the toilet strip is drawn in front
@@ -122,9 +109,9 @@ const RUBBLE_BLEED_NATIVE = DISSOLVE_END_X_NATIVE - DISSOLVE_START_X_NATIVE;
  * pixels and this mask's flat rectangles, which is where the two darknesses
  * are close but not exactly the same shade or the same edge.
  */
-const RUBBLE_MASK_SEAM_PX = 6;
+const RUBBLE_MASK_SEAM_PX = 8;
 /** Height of each rubble-mask bar, as a fraction of the screen. */
-const RUBBLE_MASK_HEIGHT_FRAC = 0.4;
+const RUBBLE_MASK_HEIGHT_FRAC = 0.26;
 
 // The one stall in the artwork drawn without a door — an open frame with a
 // visible toilet bowl — is the portal stall. Its opening was measured off
@@ -344,13 +331,15 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
    * way the toilet strip itself does.
    */
   private buildRubbleMask(): void {
-    // Two plain bars, top and bottom, continuing the room's own dark tone a
-    // stride further over Holyworld than the wall's alpha alone reaches — a
-    // flat overhang, not a shaped silhouette. Starts `RUBBLE_MASK_SEAM_PX`
-    // before the wall's own crumbling so it meets the toilet strip's dark
-    // ceiling/floor with no sliver of Holyworld showing at the seam.
+    // Two plain bars, top and bottom, continuing the room's own dark tone
+    // over Holyworld for the rest of the level rather than stopping partway
+    // across it — a flat overhang, not a shaped silhouette. Starts
+    // `RUBBLE_MASK_SEAM_PX` before the wall's own crumbling so it meets the
+    // toilet strip's dark ceiling/floor with no sliver of Holyworld showing
+    // at the seam, and runs to the level's own right edge rather than a fixed
+    // span, so nothing after it is left uncovered regardless of level width.
     const left = DISSOLVE_START_X - RUBBLE_MASK_SEAM_PX;
-    const width = RUBBLE_BLEED_NATIVE * TOILET_SCALE + RUBBLE_MASK_SEAM_PX;
+    const width = LEVEL4_WORLD_WIDTH - left;
     const height = RUBBLE_MASK_HEIGHT_FRAC * DESIGN_HEIGHT + RUBBLE_MASK_SEAM_PX;
     const toneColor = 0x0a0612; // matches the camera's own clear colour
     this.rubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
