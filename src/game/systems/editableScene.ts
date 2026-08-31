@@ -24,16 +24,23 @@ function attachSceneEditor(scene: Phaser.Scene & EditableScene): void {
 
   const ensureEditor = (): SceneEditor => {
     editor ??= new SceneEditor(scene, {
-      onSave: (snapshot) => {
-        for (const payload of toSavePayloads(scene.buildEditorSave?.(snapshot))) {
-          void fetch(payload.route, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload.body),
-          }).catch((error: unknown) => {
-            console.error(`[scene-editor] failed to save ${payload.route}`, error);
-          });
-        }
+      // Awaited by SceneEditor before it flashes "LAYOUT SAVED", so that
+      // banner is a true signal the write reached disk rather than firing
+      // the instant P is pressed — pressing P then immediately reloading
+      // could otherwise race the in-flight POST and reload the pre-edit
+      // file while still showing a save confirmation.
+      onSave: async (snapshot) => {
+        await Promise.all(
+          toSavePayloads(scene.buildEditorSave?.(snapshot)).map((payload) =>
+            fetch(payload.route, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload.body),
+            }).catch((error: unknown) => {
+              console.error(`[scene-editor] failed to save ${payload.route}`, error);
+            }),
+          ),
+        );
       },
       onEnable: () => scene.onEditorEnable?.(),
       onDisable: () => scene.onEditorDisable?.(),

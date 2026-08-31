@@ -31,8 +31,12 @@ export type {
  * is what keeps duplication away from objects it makes no sense for.
  */
 export interface SceneEditorOptions {
-  /** Called when the user presses P while the editor is active. */
-  onSave?: (snapshot: EditableSnapshot[]) => void;
+  /**
+   * Called when the user presses P while the editor is active. May return a
+   * promise; the "LAYOUT SAVED" toast waits for it, so it only appears once
+   * the save has actually completed rather than the instant P is pressed.
+   */
+  onSave?: (snapshot: EditableSnapshot[]) => void | Promise<void>;
   /** Camera the editor pans/zooms; omit to disable that behaviour. Defaults to scene.cameras.main. */
   camera?: Phaser.Cameras.Scene2D.Camera | null;
   /**
@@ -59,8 +63,9 @@ export class SceneEditor {
       onDisable: options.onDisable,
       title: 'SCENE EDITOR  —  E exit   P save',
       onSave: () => {
-        options.onSave?.(this.getSnapshot());
-        this.core.flash('LAYOUT SAVED');
+        void Promise.resolve(options.onSave?.(this.getSnapshot())).then(() =>
+          this.core.flash('LAYOUT SAVED'),
+        );
       },
     });
     scene.events.once('shutdown', () => this.destroy());
