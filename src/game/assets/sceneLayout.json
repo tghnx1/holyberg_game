@@ -35,6 +35,24 @@
       "yRatio": 0.5676965230999996,
       "scaleX": 53.68514742796788,
       "scaleY": 402.51700680269994
+    },
+    "gap-cutscene-auto-fall-zone": {
+      "xRatio": 2.5706634920634914,
+      "yRatio": 0.7199742088387008,
+      "scaleX": 220,
+      "scaleY": 220
+    },
+    "gap-cutscene-camera-stop": {
+      "xRatio": 2.268558427815571,
+      "yRatio": 0,
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    "gap-cutscene-auto-walk-trigger": {
+      "xRatio": 2.2020882842025697,
+      "yRatio": 0,
+      "scaleX": 1,
+      "scaleY": 1
     }
   },
   "BossScene": {

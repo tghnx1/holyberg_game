@@ -198,8 +198,22 @@ const AUTO_WALK_SPEED_DEFAULT = WALK_SPEED;
 const FALL_GRAVITY_PX_S2 = 1500;
 /** Fraction of the auto-walk speed the fall keeps drifting right at, so the character lands inside the authored fall zone rather than dropping perfectly straight down or still running at full stride mid-air. */
 const FALL_HORIZONTAL_RETENTION = 0.4;
-/** Extra world px past the bottom mask's own top edge before the now-invisible sprite is safe to stop rendering; see `enterComplete`. */
-const FALL_HIDE_MARGIN_PX = 60;
+/**
+ * World px the player must actually fall — measured from where FALLING
+ * began, not from the black bar's own boundary — before COMPLETE fires.
+ *
+ * `GROUND_Y` (610) already sits *below* the bottom rubble bar's own top edge
+ * (`bottomMaskTopWorldY`, ~517 at the current mask height): measuring
+ * completion against that boundary meant the player was already "past" it
+ * the instant FALLING began, at zero elapsed fall distance — the level
+ * completed on the very first FALLING frame, before any visible drop.
+ * Occlusion (raising `bottomRubbleMask` above the player) still happens
+ * immediately in `enterFalling`, which is correct — the mask is meant to
+ * start swallowing him from ground level; only *how long the fall plays
+ * before the level moves on* needed to be independent of that geometry.
+ * ~0.65s at `FALL_GRAVITY_PX_S2`, long enough to read as an actual fall.
+ */
+const FALL_COMPLETE_DISTANCE_PX = 320;
 
 type Level4SequenceState = 'normal' | 'autoWalk' | 'falling' | 'complete';
 
@@ -236,8 +250,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private stallDoor!: Phaser.GameObjects.Image;
   private topRubbleMask!: Phaser.GameObjects.Graphics;
   private bottomRubbleMask!: Phaser.GameObjects.Graphics;
-  /** World-y of the bottom rubble bar's own top edge; see `buildRubbleMask`. */
-  private bottomMaskTopWorldY = 0;
   private walk!: WalkInput;
   /** The door's scaleX when shut, derived from the measured stall opening. */
   private doorClosedScaleX = 1;
@@ -294,6 +306,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private lockedScrollX = 0;
   private fallVelocityY = 0;
   private fallHorizontalVelocity = 0;
+  /** `player.y` at the moment FALLING began; COMPLETE waits for a real drop past this, not a fixed world-y. */
+  private fallStartY = 0;
   /** Thin draggable world-x lines, visible only while the editor is open. */
   private autoWalkTriggerHandle!: Phaser.GameObjects.Rectangle;
   private autoWalkTriggerLine!: Phaser.GameObjects.Rectangle;
@@ -328,6 +342,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.lockedScrollX = 0;
     this.fallVelocityY = 0;
     this.fallHorizontalVelocity = 0;
+    this.fallStartY = 0;
   }
 
   preload(): void {
@@ -425,11 +440,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.bottomRubbleMask = this.add.graphics().setDepth(Depth.SKY + 1);
     this.bottomRubbleMask.fillStyle(toneColor, 1);
     this.bottomRubbleMask.fillRect(left, DESIGN_HEIGHT - height, width, height);
-    // World-y of the bottom bar's own top edge — the line the falling player
-    // has to cross before it is safe to stop rendering him at all (see
-    // `enterComplete`); occlusion itself starts as soon as `enterFalling`
-    // raises this mask's depth, well before he reaches this line.
-    this.bottomMaskTopWorldY = DESIGN_HEIGHT - height;
   }
 
   /**
@@ -1189,7 +1199,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       this.fallVelocityY += (FALL_GRAVITY_PX_S2 * delta) / 1000;
       this.player.y += (this.fallVelocityY * delta) / 1000;
       this.player.x += (this.fallHorizontalVelocity * delta) / 1000;
-      if (this.player.y >= this.bottomMaskTopWorldY + FALL_HIDE_MARGIN_PX) {
+      if (this.player.y >= this.fallStartY + FALL_COMPLETE_DISTANCE_PX) {
         this.enterComplete();
       }
     }
@@ -1253,6 +1263,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     if (!this.cameraLocked) this.lockCamera(this.cutsceneConfig.cameraStopX);
     this.fallVelocityY = 0;
     this.fallHorizontalVelocity = this.cutsceneConfig.autoWalkSpeed * FALL_HORIZONTAL_RETENTION;
+    this.fallStartY = this.player.y;
     // The existing damage pose, resolved through the same
     // CharacterRegistry-backed locomotion module every other pose in this
     // scene already goes through — nothing here names a character, and every
