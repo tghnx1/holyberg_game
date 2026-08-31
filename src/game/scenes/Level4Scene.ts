@@ -125,6 +125,14 @@ const DOOR_OPEN_SCALE = 0.12;
 const DOOR_FLOOR_GAP_NATIVE = 7;
 /** Editor-only marker radius for PLAYER TARGET / NPC TARGET. */
 const TARGET_MARKER_RADIUS = 5;
+/** Editor-only "P"/"N" labels above the two markers. */
+const TARGET_LABEL_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
+  fontFamily: 'Space Mono',
+  fontSize: '11px',
+  color: '#120b1d',
+  backgroundColor: '#ffe36d',
+  padding: { x: 3, y: 1 },
+};
 
 // Walkway positions, in the same native pixel space as the stall rect.
 const PLAYER_START_X = 160 * TOILET_SCALE;
@@ -178,14 +186,20 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   /** Whether the stall door is currently drawn edge-on; see `onEditorEnable`. */
   private doorOpen = true;
   /**
-   * Editor-only rectangle marking where both characters must walk to after
-   * the dialogue. Visual only: never collides with anything, and is only
-   * ever visible while the editor is open.
+   * Editor-only transform anchor marking where both characters must walk to
+   * after the dialogue. Carries no fill or stroke of its own: the shared
+   * SceneEditor already draws a thin idle/selected outline and resize
+   * handles for every registered editable object, so this is purely a
+   * position/size the editor can grab, never a second, redundant visual on
+   * top of it. Never collides with anything, and is only ever visible (as
+   * far as it is visible at all — see above) while the editor is open.
    */
   private stallEntryTargetRect!: Phaser.GameObjects.Rectangle;
-  /** Small dots inside the target zone showing PLAYER TARGET / NPC TARGET. */
+  /** Small labelled dots inside the target zone showing PLAYER TARGET / NPC TARGET. */
   private playerTargetMarker!: Phaser.GameObjects.Arc;
   private npcTargetMarker!: Phaser.GameObjects.Arc;
+  private playerTargetLabel!: Phaser.GameObjects.Text;
+  private npcTargetLabel!: Phaser.GameObjects.Text;
   /** Set only while both actors are walking into the stall after the dialogue. */
   private stallEntry?: {
     playerTargetX: number;
@@ -393,10 +407,14 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // A 1x1 rectangle scaled to the authored width/height: getNativeSize
     // below reports {1, 1} to match, so the editor's scaleX/scaleY resize
     // reads directly as the zone's pixel size rather than as a multiplier of
-    // some inherent artwork size that does not exist here.
+    // some inherent artwork size that does not exist here. No fill and no
+    // stroke: SceneEditor draws its own thin idle/selected outline and resize
+    // handles for it, exactly as it does for every other Level 4 object, so
+    // painting a second filled box on top of that would only double it up —
+    // which is what made this read as one large translucent block instead of
+    // a normal editor helper.
     this.stallEntryTargetRect = this.add
-      .rectangle(placement.x, placement.y, 1, 1, 0x53ffe0, 0.12)
-      .setStrokeStyle(2, 0x53ffe0, 0.9)
+      .rectangle(placement.x, placement.y, 1, 1, 0x000000, 0)
       .setScale(placement.scaleX, placement.scaleY)
       .setDepth(Depth.FOREGROUND + 20)
       .setVisible(false);
@@ -409,6 +427,16 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       .circle(0, 0, TARGET_MARKER_RADIUS, 0xff7ac1, 1)
       .setDepth(Depth.FOREGROUND + 21)
       .setVisible(false);
+    this.playerTargetLabel = this.add
+      .text(0, 0, 'P', TARGET_LABEL_STYLE)
+      .setOrigin(0.5, 1)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
+    this.npcTargetLabel = this.add
+      .text(0, 0, 'N', TARGET_LABEL_STYLE)
+      .setOrigin(0.5, 1)
+      .setDepth(Depth.FOREGROUND + 21)
+      .setVisible(false);
     this.layoutTargetMarkers();
   }
 
@@ -418,11 +446,14 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     return resolveStallEntryTargets({ x: rect.x, y: rect.y, width: rect.scaleX });
   }
 
-  /** Repositions the two target markers onto the zone's current bounds. */
+  /** Repositions the two labelled target markers onto the zone's current bounds. */
   private layoutTargetMarkers(): void {
     const targets = this.stallEntryTargets();
-    this.playerTargetMarker.setPosition(targets.playerX, this.stallEntryTargetRect.y);
-    this.npcTargetMarker.setPosition(targets.npcX, this.stallEntryTargetRect.y);
+    const y = this.stallEntryTargetRect.y;
+    this.playerTargetMarker.setPosition(targets.playerX, y);
+    this.npcTargetMarker.setPosition(targets.npcX, y);
+    this.playerTargetLabel.setPosition(targets.playerX, y - TARGET_MARKER_RADIUS - 3);
+    this.npcTargetLabel.setPosition(targets.npcX, y - TARGET_MARKER_RADIUS - 3);
   }
 
   private createActor(
@@ -661,6 +692,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.stallEntryTargetRect.setVisible(true);
     this.playerTargetMarker.setVisible(true);
     this.npcTargetMarker.setVisible(true);
+    this.playerTargetLabel.setVisible(true);
+    this.npcTargetLabel.setVisible(true);
   }
 
   onEditorDisable(): void {
@@ -671,6 +704,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.stallEntryTargetRect.setVisible(false);
     this.playerTargetMarker.setVisible(false);
     this.npcTargetMarker.setVisible(false);
+    this.playerTargetLabel.setVisible(false);
+    this.npcTargetLabel.setVisible(false);
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
