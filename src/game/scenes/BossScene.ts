@@ -196,13 +196,14 @@ export class BossScene extends Phaser.Scene {
    * rather than killing a player who is standing still to be positioned.
    */
   onEditorEnable(): void {
+    // Tweens, physics and the scene clock are frozen by the shared core. This
+    // is the fight's own progression on top of that: the director stops
+    // advancing, so the timer, the telegraphs and the live attacks hold.
     this.runningBeforeEditor = this.running;
     this.running = false;
-    this.tweens.pauseAll();
   }
 
   onEditorDisable(): void {
-    this.tweens.resumeAll();
     this.running = this.runningBeforeEditor;
   }
 

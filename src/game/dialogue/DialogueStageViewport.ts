@@ -54,6 +54,15 @@ export const DIALOGUE_STAGE_CANONICAL_HEIGHT =
 export const DIALOGUE_STAGE_RENDER_OVERLAP =
   DialogueLayout.dividerSkew + DialogueLayout.dividerThickness;
 
+/**
+ * `Phaser.Scenes.Events.UPDATE`, as its literal value.
+ *
+ * Spelled out so this module never imports Phaser as a *value*: the framing
+ * maths below is unit-tested in the node environment, and pulling in the real
+ * package there fails on `window` at import time.
+ */
+const SCENE_UPDATE_EVENT = 'update';
+
 export interface DialogueStageFit {
   scale: number;
   offsetX: number;
@@ -137,6 +146,20 @@ export class DialogueStageViewport {
     this.root = scene.add.container(0, 0, [this.content]);
     this.mask = scene.make.graphics({}, false);
     this.root.setMask(this.mask.createGeometryMask());
+
+    // Driven from the scene's own update rather than left to each stage to
+    // remember. A GeometryMask follows its own graphics object, not the
+    // container it masks, so the mask has to be moved onto the panel every
+    // frame the panel moves — and the panel both starts offset by the top bar
+    // and slides in on a tween. The metro view happened to do this; the toilet
+    // view did not, so its mask sat a full top-bar height above the content
+    // and clipped that much off the bottom of the room. Owning it here is what
+    // stops the next stage inheriting the same bug.
+    scene.events.on(SCENE_UPDATE_EVENT, this.syncMask, this);
+  }
+
+  private syncMask(): void {
+    this.mask.setPosition(this.root.x, this.root.y);
   }
 
   /** Puts the stage's own objects into the framed content container. */
@@ -160,6 +183,7 @@ export class DialogueStageViewport {
       .clear()
       .fillStyle(0xffffff)
       .fillRect(0, 0, width + DIALOGUE_STAGE_RENDER_OVERLAP, height);
+    this.syncMask();
     this.applyComposition();
   }
 
@@ -178,11 +202,6 @@ export class DialogueStageViewport {
       this.canonicalHeight,
     );
     this.content.setScale(fit.scale).setPosition(fit.offsetX, fit.offsetY);
-  }
-
-  /** Keeps the mask tracking the panel's on-screen position. */
-  update(): void {
-    this.mask.setPosition(this.root.x, this.root.y);
   }
 
   /**
@@ -209,6 +228,7 @@ export class DialogueStageViewport {
   }
 
   destroy(): void {
+    this.scene.events.off(SCENE_UPDATE_EVENT, this.syncMask, this);
     this.root.clearMask(true);
     this.mask.destroy();
     this.root.destroy(true);

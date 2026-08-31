@@ -94,7 +94,7 @@ export class LevelEditorSystem {
   private readonly authored = new Map<string, { x: number; y: number; movementDistance?: number }>();
   private readonly core: SceneEditorCore;
   private readonly toast: Phaser.GameObjects.Text;
-  private toastTimer?: Phaser.Time.TimerEvent;
+  private toastTimer?: ReturnType<typeof setTimeout>;
 
   private readonly deleted: string[] = [];
   private restored = false;
@@ -178,17 +178,16 @@ export class LevelEditorSystem {
   /** Drops every listener this system registered, for scene shutdown. */
   destroy(): void {
     this.core.destroy();
-    this.toastTimer?.remove();
+    if (this.toastTimer !== undefined) clearTimeout(this.toastTimer);
     this.toastTimer = undefined;
     this.toast.destroy();
   }
 
   private onEditorEnable(): void {
-    // Freezing the tween manager stops the moving platforms mid-flight; the
-    // snap below then puts them back on their authored centre so what you
-    // drag is the position the config actually stores.
-    this.scene.tweens.pauseAll();
-    this.scene.physics.pause();
+    // Tweens, physics and the scene clock are frozen by the shared core for
+    // every scene alike. What is Berlin's own is the snap below: the moving
+    // platforms stop mid-flight, so they are put back on their authored
+    // centre, and what you drag is the position the config actually stores.
     for (const entity of this.entities) {
       if (entity.config.type !== 'movingPlatform') continue;
       this.shift(entity, entity.config.x - entity.artwork.x, entity.config.y - entity.artwork.y);
@@ -199,8 +198,6 @@ export class LevelEditorSystem {
   private onEditorDisable(): void {
     this.editBaseline = undefined;
     this.hooks.restoreCamera();
-    this.scene.physics.resume();
-    this.scene.tweens.resumeAll();
   }
 
   // ------------------------------------------------------- item adapter
@@ -681,7 +678,9 @@ export class LevelEditorSystem {
 
   private flash(message: string): void {
     this.toast.setText(message).setVisible(true);
-    this.toastTimer?.remove();
-    this.toastTimer = this.scene.time.delayedCall(TOAST_MS, () => this.toast.setVisible(false));
+    // Wall-clock: the scene clock is paused while the editor is open, and
+    // saveConfig is exactly the thing you press while it is.
+    if (this.toastTimer !== undefined) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toast.setVisible(false), TOAST_MS);
   }
 }

@@ -95,11 +95,16 @@ function createScene() {
     down: {} as FakeKey,
   };
   const camera = { scrollX: 0, scrollY: 0, zoom: 1, width: 1280, height: 720 };
+  const physics = { world: { isPaused: false, pause() { physics.world.isPaused = true; }, resume() { physics.world.isPaused = false; } } };
   const scene = {
     add: { graphics: chainableGraphics, text: chainableText },
     scale: { width: 1280 },
     cameras: { main: camera },
-    time: { delayedCall: () => ({ remove: () => {} }) },
+    // The core freezes the scene it edits, so the fake has to offer the
+    // handles it reaches for.
+    tweens: { paused: false, pauseAll() { scene.tweens.paused = true; }, resumeAll() { scene.tweens.paused = false; } },
+    physics,
+    time: { paused: false, delayedCall: () => ({ remove: () => {} }) },
     input: {
       keyboard: {
         createCursorKeys: () => cursors,
@@ -127,6 +132,7 @@ function createScene() {
     camera,
     cursors,
     key: (code: number) => keys.get(code),
+    physicsPaused: () => physics.world.isPaused,
     emit: (event: string, pointer: unknown) => {
       for (const entry of pointerHandlers.get(event) ?? []) {
         entry.handler.call(entry.context, pointer);
@@ -310,6 +316,40 @@ describe('shared editor core', () => {
     harness.key(80)!.justDown = true;
     core.update();
     expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Opening the editor freezes the scene being edited, so a cutscene stops
+   * advancing and the object under the cursor stays where it is while it is
+   * positioned. Owned by the core, so it holds for every scene alike.
+   */
+  it('freezes tweens, physics and the scene clock while the editor is open', () => {
+    const core = build();
+    expect(harness.scene.time.paused).toBe(false);
+
+    core.toggle();
+    expect(harness.scene.time.paused).toBe(true);
+    expect(harness.scene.tweens.paused).toBe(true);
+    expect(harness.physicsPaused()).toBe(true);
+
+    core.toggle();
+    expect(harness.scene.time.paused).toBe(false);
+    expect(harness.scene.tweens.paused).toBe(false);
+    expect(harness.physicsPaused()).toBe(false);
+  });
+
+  it('keeps running its own update loop while the scene is frozen', () => {
+    // The freeze must not switch the editor itself off: it is driven by the
+    // scene's update event and pointer input, not by the scene clock.
+    const core = build();
+    const item = makeItem('a', { left: 0, top: 0, right: 50, bottom: 50 });
+    core.register(item);
+    core.toggle();
+    core.select('a');
+    harness.cursors.right.justDown = true;
+    harness.cursors.right.isDown = true;
+    core.update();
+    expect(item.getBounds().left).toBe(1);
   });
 
   it('reports enable and disable so a scene can freeze its own progression', () => {

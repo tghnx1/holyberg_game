@@ -140,7 +140,7 @@ export class SceneEditorCore {
   private panning?: PanState;
   private clipboardId?: string;
   private status = '';
-  private toastTimer?: Phaser.Time.TimerEvent;
+  private toastTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -273,8 +273,22 @@ export class SceneEditorCore {
     else this.enable();
   }
 
+  /**
+   * Opening the editor freezes the scene it is editing.
+   *
+   * Tweens, the arcade world and the scene clock are all stopped, so a
+   * cutscene stops advancing, a character stops walking, animation frames
+   * hold, and every `delayedCall` waits — the object under the cursor stays
+   * exactly where it is while it is being positioned. Owned here rather than
+   * per scene so it is true everywhere, including in a level added later; a
+   * scene with progression of its own still gets `onEnable` to freeze that
+   * too.
+   */
   private enable(): void {
     this.enabled = true;
+    this.scene.tweens.pauseAll();
+    this.scene.physics?.world?.pause?.();
+    this.scene.time.paused = true;
     this.graphics.setVisible(true);
     this.panel.setVisible(true);
     setSceneEditorActive(this.scene, true);
@@ -283,6 +297,9 @@ export class SceneEditorCore {
 
   private disable(): void {
     this.enabled = false;
+    this.scene.time.paused = false;
+    this.scene.physics?.world?.resume?.();
+    this.scene.tweens.resumeAll();
     this.drag = undefined;
     this.markerDrag = undefined;
     this.resizing = undefined;
@@ -305,7 +322,7 @@ export class SceneEditorCore {
     this.panel.destroy();
     this.toast.destroy();
     this.sizeLabel.destroy();
-    this.toastTimer?.remove();
+    if (this.toastTimer !== undefined) clearTimeout(this.toastTimer);
     this.toastTimer = undefined;
   }
 
@@ -717,8 +734,10 @@ export class SceneEditorCore {
   /** Screen-fixed confirmation, shown even when the panel is hidden. */
   flash(message: string): void {
     this.toast.setText(message).setVisible(true);
-    this.toastTimer?.remove();
-    this.toastTimer = this.scene.time.delayedCall(TOAST_MS, () => this.toast.setVisible(false));
+    // Wall-clock, not the scene clock: that one is paused for as long as the
+    // editor is open, so a scene-timed toast would never clear.
+    if (this.toastTimer !== undefined) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toast.setVisible(false), TOAST_MS);
   }
 
   setStatus(message: string): void {

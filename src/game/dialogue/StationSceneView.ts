@@ -335,10 +335,6 @@ export class StationSceneView {
     return next;
   }
 
-  update(): void {
-    this.viewport.update();
-  }
-
   destroy(): void {
     this.viewport.destroy();
   }
