@@ -39,6 +39,7 @@ import type { EditableScene, EditorSavePayload } from '../systems/editableScene'
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import {
   LEVEL4_EDITABLE_IDS,
+  resolveCameraStopScroll,
   resolveLevel4CutsceneConfig,
   resolveLevel4Placement,
   resolveStallEntryLogicalTargets,
@@ -180,10 +181,17 @@ const NPC_WAIT_FACING: 1 | -1 = -1;
  */
 const TOILET_RIGHT_EDGE_X = TOILET_STRIP_WIDTH * TOILET_SCALE;
 const AUTO_WALK_TRIGGER_X_DEFAULT = TOILET_RIGHT_EDGE_X - 40;
-const CAMERA_STOP_X_DEFAULT = Phaser.Math.Clamp(
-  AUTO_WALK_TRIGGER_X_DEFAULT - DESIGN_WIDTH * 0.55,
-  0,
-  LEVEL4_WORLD_WIDTH - DESIGN_WIDTH,
+/**
+ * World x the locked cinematic frame centres on, expressed in the same
+ * canonical design space as every other authored position here — never a raw
+ * `scrollX`, which would mean a different composition on every aspect ratio.
+ * A little behind the auto-walk trigger, so the character walks the last
+ * stretch toward the gap across the middle of a settled frame.
+ */
+const CAMERA_STOP_FOCUS_X_DEFAULT = Phaser.Math.Clamp(
+  AUTO_WALK_TRIGGER_X_DEFAULT - DESIGN_WIDTH * 0.05,
+  DESIGN_WIDTH / 2,
+  LEVEL4_WORLD_WIDTH - DESIGN_WIDTH / 2,
 );
 const AUTO_FALL_ZONE_DEFAULT = {
   x: AUTO_WALK_TRIGGER_X_DEFAULT + 260,
@@ -310,8 +318,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   /** Runtime-only; reset to 'normal' in `init()` every entry — never persisted. */
   private sequenceState: Level4SequenceState = 'normal';
   private cameraLocked = false;
-  /** The exact scrollX the camera is frozen at once `cameraLocked` is true. */
-  private lockedScrollX = 0;
+  /** The world x the frozen frame is centred on once `cameraLocked` is true. */
+  private lockedFocusX = 0;
   private fallVelocityY = 0;
   private fallHorizontalVelocity = 0;
   /** `player.y` at the moment FALLING began; COMPLETE waits for a real drop past this, not a fixed world-y. */
@@ -347,7 +355,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // are reloaded from the editor's own store in `create()`, not reset here.
     this.sequenceState = 'normal';
     this.cameraLocked = false;
-    this.lockedScrollX = 0;
+    this.lockedFocusX = 0;
     this.fallVelocityY = 0;
     this.fallHorizontalVelocity = 0;
     this.fallStartY = 0;
@@ -470,7 +478,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       this.scene.key,
       LEVEL4_EDITABLE_IDS.toilet,
       this.defaultToiletPlacement(),
-      this.editorViewport(),
     );
     this.toiletStrip = this.add
       .image(placement.x, placement.y, LEVEL4_ASSET_KEYS.toiletStrip)
@@ -488,7 +495,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       this.scene.key,
       LEVEL4_EDITABLE_IDS.npc,
       { x: NPC_WAIT_X, y: GROUND_Y, scaleX: 1, scaleY: 1 },
-      this.editorViewport(),
     );
     this.npcScale = npcPlacement.scaleY;
     this.npc = this.createActor(
@@ -498,12 +504,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       NPC_WAIT_FACING,
       'idle',
     );
-  }
-
-  /** The viewport the authored ratios are expressed against. */
-  private editorViewport(): { width: number; height: number } {
-    const camera = this.cameras.main;
-    return { width: camera.width, height: camera.height };
   }
 
   /** Where the story NPC is actually standing, which the trigger follows. */
@@ -532,7 +532,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
         scaleX: this.stallDoor.scaleX,
         scaleY: this.stallDoor.scaleY,
       },
-      this.editorViewport(),
     );
     this.stallDoor.setPosition(placement.x, placement.y).setScale(placement.scaleX, placement.scaleY);
     // The authored width is the *closed* one; the open pose is derived from it
@@ -568,7 +567,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
         scaleX: STALL_OPENING_WIDTH,
         scaleY: STALL_OPENING_HEIGHT,
       },
-      this.editorViewport(),
     );
     // A 1x1 rectangle scaled to the authored width/height: getNativeSize
     // below reports {1, 1} to match, so the editor's scaleX/scaleY resize
@@ -660,8 +658,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
    * are the visual, so it only gets a text label.
    */
   private buildGapCutscene(): void {
-    this.cutsceneConfig = resolveLevel4CutsceneConfig(this.scene.key, this.editorViewport(), {
-      cameraStopX: CAMERA_STOP_X_DEFAULT,
+    this.cutsceneConfig = resolveLevel4CutsceneConfig(this.scene.key, {
+      cameraStopFocusX: CAMERA_STOP_FOCUS_X_DEFAULT,
       autoWalkTriggerX: AUTO_WALK_TRIGGER_X_DEFAULT,
       autoFallZone: AUTO_FALL_ZONE_DEFAULT,
       autoWalkSpeed: AUTO_WALK_SPEED_DEFAULT,
@@ -683,7 +681,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       .setVisible(false);
 
     this.cameraStopHandle = this.add
-      .rectangle(this.cutsceneConfig.cameraStopX, DESIGN_HEIGHT / 2, lineWidth, DESIGN_HEIGHT, 0x000000, 0)
+      .rectangle(this.cutsceneConfig.cameraStopFocusX, DESIGN_HEIGHT / 2, lineWidth, DESIGN_HEIGHT, 0x000000, 0)
       .setDepth(Depth.FOREGROUND + 20)
       .setVisible(false);
     this.cameraStopLine = this.add
@@ -789,8 +787,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // The NPC carries no drawing offset — its authored position lives in
     // `actor.x/y` itself — but it does carry an authored scale multiplier.
     if (actor !== this.player) return { offsetX: 0, offsetY: 0, scale: this.npcScale };
-    const camera = this.cameras.main;
-    return getPlayerVisualOffset(this.scene.key, camera.width, camera.height);
+    return getPlayerVisualOffset(this.scene.key);
   }
 
   /**
@@ -821,7 +818,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       this.scene.key,
       LEVEL4_EDITABLE_IDS.npc,
       { x: this.npc.x, y: this.npc.y, scaleX: this.npcScale, scaleY: this.npcScale },
-      this.editorViewport(),
     );
   }
 
@@ -848,7 +844,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
               scaleX: transform.scaleX,
               scaleY: transform.scaleY,
             },
-            this.editorViewport(),
           ),
       },
       {
@@ -873,7 +868,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
               scaleX: transform.scaleX,
               scaleY: transform.scaleY,
             },
-            this.editorViewport(),
           );
         },
       },
@@ -896,7 +890,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
               scaleX: transform.scaleX,
               scaleY: transform.scaleY,
             },
-            this.editorViewport(),
           );
           this.layoutTargetMarkers();
           // Moves anyone already standing in the stall onto the new target,
@@ -959,7 +952,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
             this.scene.key,
             LEVEL4_EDITABLE_IDS.autoWalkTrigger,
             { x: transform.x, y: 0, scaleX: 1, scaleY: 1 },
-            this.editorViewport(),
           );
           this.cutsceneConfig.autoWalkTriggerX = transform.x;
           this.layoutGapCutsceneMarkers();
@@ -977,9 +969,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
             this.scene.key,
             LEVEL4_EDITABLE_IDS.cameraStop,
             { x: transform.x, y: 0, scaleX: 1, scaleY: 1 },
-            this.editorViewport(),
           );
-          this.cutsceneConfig.cameraStopX = transform.x;
+          this.cutsceneConfig.cameraStopFocusX = transform.x;
           this.layoutGapCutsceneMarkers();
         },
       },
@@ -999,7 +990,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
               scaleX: transform.scaleX,
               scaleY: transform.scaleY,
             },
-            this.editorViewport(),
           );
           this.cutsceneConfig.autoFallZone = {
             x: transform.x,
@@ -1089,9 +1079,17 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.autoFallZoneLabel.setVisible(false);
   }
 
-  /** Read-only HUD line for `autoWalkSpeed`, which has no world-space handle of its own. */
+  /**
+   * Read-only HUD lines: `autoWalkSpeed`, which has no world-space handle of
+   * its own, and what the CAMERA STOP line actually means — it marks the
+   * world x the locked shot is *centred* on, not where the frame's left edge
+   * lands, which is what keeps the same composition on every screen width.
+   */
   describeEditor(): string[] {
-    return [`autoWalkSpeed ${this.cutsceneConfig.autoWalkSpeed.toFixed(0)} px/s (edit sceneLayout.json to change)`];
+    return [
+      `autoWalkSpeed ${this.cutsceneConfig.autoWalkSpeed.toFixed(0)} px/s (edit sceneLayout.json to change)`,
+      'CAMERA STOP = world x the locked shot centres on',
+    ];
   }
 
   private applyResponsiveLayout(viewport?: ViewportInfo): void {
@@ -1116,7 +1114,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // `setBounds` above can itself re-clamp scroll against the new bounds, so
     // the lock is reasserted after it rather than before — otherwise a
     // narrower viewport could nudge the "static" shot mid-fall.
-    this.cameras.main.setScroll(this.cameraLocked ? this.lockedScrollX : this.cameraX, 0);
+    this.cameras.main.setScroll(this.cameraLocked ? this.lockedScrollX() : this.cameraX, 0);
   }
 
   update(_time: number, delta: number): void {
@@ -1189,7 +1187,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.controlsLocked = true;
     this.player.facing = 1;
     this.player.motion = 'walk';
-    // Covers the (legitimate) case where cameraStopX sits behind wherever
+    // Covers the (legitimate) case where the focus point sits behind wherever
     // the camera's own follow lerp has already carried it.
     this.maybeLockCamera();
   }
@@ -1213,32 +1211,43 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     }
   }
 
-  /** True once the camera has reached its authored stop position under its own follow, or is already locked there. */
+  /** Locks once the camera's own follow has carried the frame's centre onto the authored focus point. */
   private maybeLockCamera(): void {
     if (this.cameraLocked) return;
-    if (this.cameras.main.scrollX >= this.cutsceneConfig.cameraStopX) {
-      this.lockCamera(this.cutsceneConfig.cameraStopX);
+    const camera = this.cameras.main;
+    if (camera.scrollX + camera.width / 2 >= this.cutsceneConfig.cameraStopFocusX) {
+      this.lockCamera(this.cutsceneConfig.cameraStopFocusX);
     }
   }
 
   /**
-   * Stops following the player and freezes scroll at `scrollX`, permanently
-   * for the rest of this run — `applyResponsiveLayout` re-asserts
-   * `lockedScrollX` on every resize once this is set, and nothing else in
-   * this scene ever calls `setScroll`/`startFollow` again after it. This is
-   * the one and only place that happens, so there is nowhere else a stray
-   * follow-restoration could sneak back in.
+   * Stops following the player and freezes the frame on `focusX`, permanently
+   * for the rest of this run — `applyResponsiveLayout` re-asserts the lock on
+   * every resize once this is set, and nothing else in this scene ever calls
+   * `setScroll`/`startFollow` again after it. This is the one and only place
+   * that happens, so there is nowhere else a stray follow-restoration could
+   * sneak back in.
+   *
+   * What is remembered is the *focus point*, not the scroll it works out to:
+   * the scroll depends on how wide the camera currently is, so a resize (or a
+   * device with a different aspect ratio) has to re-derive it to keep the
+   * same world detail in the middle of the shot.
    */
-  private lockCamera(scrollX: number): void {
+  private lockCamera(focusX: number): void {
     if (this.cameraLocked) return;
     this.cameraLocked = true;
+    this.lockedFocusX = focusX;
     this.cameras.main.stopFollow();
-    this.lockedScrollX = Phaser.Math.Clamp(
-      scrollX,
-      0,
-      Math.max(0, LEVEL4_WORLD_WIDTH - this.cameras.main.width),
-    );
-    this.cameras.main.setScroll(this.lockedScrollX, 0);
+    this.cameras.main.setScroll(this.lockedScrollX(), 0);
+  }
+
+  /**
+   * The scroll that centres `lockedFocusX`, clamped to the level's own
+   * bounds. Recomputed rather than stored, so the locked shot survives a
+   * resize or an orientation change with the same world point centred.
+   */
+  private lockedScrollX(): number {
+    return resolveCameraStopScroll(this.lockedFocusX, this.cameras.main.width, LEVEL4_WORLD_WIDTH);
   }
 
   /**
@@ -1287,7 +1296,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
 
   /**
    * AUTO_WALK -> FALLING. The camera is force-locked here regardless of
-   * whether it had already reached `cameraStopX` under its own follow, so
+   * whether it had already reached the authored focus under its own follow, so
    * the shot is guaranteed static for the entire fall even if the fall zone
    * is authored close enough to the trigger that the follow lerp never
    * caught up in time.
@@ -1295,7 +1304,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private enterFalling(): void {
     if (this.sequenceState !== 'autoWalk') return; // run-once
     this.sequenceState = 'falling';
-    if (!this.cameraLocked) this.lockCamera(this.cutsceneConfig.cameraStopX);
+    if (!this.cameraLocked) this.lockCamera(this.cutsceneConfig.cameraStopFocusX);
     this.fallVelocityY = 0;
     this.fallHorizontalVelocity = this.cutsceneConfig.autoWalkSpeed * FALL_HORIZONTAL_RETENTION;
     this.fallStartY = this.player.y;
@@ -1525,8 +1534,17 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     } satisfies LevelCompleteSceneData);
   }
 
+  /**
+   * The world x the ordinary (non-cutscene) walk ends at.
+   *
+   * Fixed world geometry, expressed against the canonical design width the
+   * level itself is built from — not `camera.width`, which made how far the
+   * character was allowed to walk depend on the browser window, so a
+   * landscape phone let them walk ~140px further into the level than a
+   * desktop did before the level completed.
+   */
   private finishThreshold(): number {
-    return TOILET_STRIP_WIDTH * TOILET_SCALE + this.cameras.main.width / 2 + 16;
+    return TOILET_RIGHT_EDGE_X + DESIGN_WIDTH / 2 + 16;
   }
 
   private cleanup(): void {

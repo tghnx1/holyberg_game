@@ -1,4 +1,8 @@
 import {
+  designPointFromLayout,
+  layoutRatiosFromDesignPoint,
+} from '../../systems/designSpace';
+import {
   getSceneObjectLayout,
   setSceneObjectLayout,
   type SceneObjectLayout,
@@ -21,9 +25,14 @@ import {
  * `/__scene-editor/save-layout` route every other scene already uses. There
  * is no second editor config for this level.
  *
- * Positions are stored as ratios of the logical viewport so one authored
- * layout is correct on desktop and phone; Level 4's world is wider than one
- * viewport, so these ratios legitimately exceed 1.
+ * Positions are world-space: they are resolved against the fixed canonical
+ * `DESIGN_SPACE` box, never against the live camera. Level 4 scrolls, so its
+ * world is several viewports wide and these coordinates legitimately run
+ * past one screen — and, crucially, they mean the same physical place in the
+ * room on every device. Resolving them against the live camera width instead
+ * (which `Phaser.Scale.EXPAND` grows with the aspect ratio) is what used to
+ * slide the NPC, the stall and the whole gap cutscene several hundred pixels
+ * right on a landscape phone while the room itself stayed put.
  */
 
 export interface Level4Placement {
@@ -32,11 +41,6 @@ export interface Level4Placement {
   y: number;
   scaleX: number;
   scaleY: number;
-}
-
-export interface Level4Viewport {
-  width: number;
-  height: number;
 }
 
 /**
@@ -50,13 +54,13 @@ export function resolveLevel4Placement(
   sceneKey: string,
   id: string,
   fallback: Level4Placement,
-  viewport: Level4Viewport,
 ): Level4Placement {
   const layout = getSceneObjectLayout(sceneKey, id);
   if (!layout) return fallback;
+  const point = designPointFromLayout(layout, fallback);
   return {
-    x: layout.xRatio === undefined ? fallback.x : layout.xRatio * viewport.width,
-    y: layout.yRatio === undefined ? fallback.y : layout.yRatio * viewport.height,
+    x: point.x,
+    y: point.y,
     scaleX: layout.scaleX ?? layout.scale ?? fallback.scaleX,
     scaleY: layout.scaleY ?? layout.scale ?? fallback.scaleY,
   };
@@ -67,11 +71,9 @@ export function storeLevel4Placement(
   sceneKey: string,
   id: string,
   placement: Level4Placement,
-  viewport: Level4Viewport,
 ): void {
   const layout: SceneObjectLayout = {
-    xRatio: viewport.width > 0 ? placement.x / viewport.width : 0,
-    yRatio: viewport.height > 0 ? placement.y / viewport.height : 0,
+    ...layoutRatiosFromDesignPoint(placement),
     scaleX: placement.scaleX,
     scaleY: placement.scaleY,
   };
@@ -188,19 +190,33 @@ export interface Level4RectZone {
  * The authored configuration for the toilet-to-Holyworld gap cutscene
  * (`Level4Scene`'s `AUTO_WALK`/`FALLING` sequence).
  *
- * `cameraStopX` and `autoWalkTriggerX` are two independent world-x lines —
- * deliberately not one shared coordinate, so the moment control is taken from
- * the player and the moment the camera settles into its final frame can be
- * tuned separately in the editor. Both, plus `autoFallZone`, are resolved
- * through the same per-object ratio store as every other Level 4 placement,
- * so P/reload round-trips them exactly like the toilet strip or the door.
- * `autoWalkSpeed` is the one value here that is not a screen position: it is
- * stored as an absolute number (`SceneObjectLayout.value`), never a viewport
- * ratio, so it does not silently change with the screen size it happened to
- * be saved at.
+ * `cameraStopFocusX` and `autoWalkTriggerX` are two independent world-x lines
+ * — deliberately not one shared coordinate, so the moment control is taken
+ * from the player and the moment the camera settles into its final frame can
+ * be tuned separately in the editor. Both, plus `autoFallZone`, are resolved
+ * through the same per-object world-space store as every other Level 4
+ * placement, so P/reload round-trips them exactly like the toilet strip or
+ * the door. `autoWalkSpeed` is the one value here that is not a position at
+ * all: it is stored as an absolute number (`SceneObjectLayout.value`), so it
+ * does not silently change with the screen it happened to be saved at.
  */
 export interface Level4CutsceneConfig {
-  cameraStopX: number;
+  /**
+   * The world x the camera *centres on* once the cinematic locks it — a
+   * focus point, not a raw final `scrollX`.
+   *
+   * A scrollX is the camera's left edge, so storing one made the authored
+   * shot mean "start the frame here and show however much of the world this
+   * screen happens to fit", which frames a different composition on every
+   * aspect ratio: at 16:9 the locked frame ended 1280px later, on a
+   * landscape phone ~1560px later, and the gap the shot exists to show sat
+   * in a different place in it. A centre is the one point of the frame every
+   * aspect ratio agrees on, so the same world detail stays in the middle of
+   * the shot and a wider screen simply reveals a little more to either side
+   * of it — the same "preserve the composition, reveal more horizontally"
+   * policy `Phaser.Scale.EXPAND` already applies to the rest of the game.
+   */
+  cameraStopFocusX: number;
   autoWalkTriggerX: number;
   autoFallZone: Level4RectZone;
   autoWalkSpeed: number;
@@ -217,29 +233,25 @@ function fallbackFallZonePlacement(zone: Level4RectZone): Level4Placement {
  */
 export function resolveLevel4CutsceneConfig(
   sceneKey: string,
-  viewport: Level4Viewport,
   fallback: Level4CutsceneConfig,
 ): Level4CutsceneConfig {
   const cameraStop = resolveLevel4Placement(
     sceneKey,
     LEVEL4_EDITABLE_IDS.cameraStop,
-    { x: fallback.cameraStopX, y: 0, scaleX: 1, scaleY: 1 },
-    viewport,
+    { x: fallback.cameraStopFocusX, y: 0, scaleX: 1, scaleY: 1 },
   );
   const autoWalkTrigger = resolveLevel4Placement(
     sceneKey,
     LEVEL4_EDITABLE_IDS.autoWalkTrigger,
     { x: fallback.autoWalkTriggerX, y: 0, scaleX: 1, scaleY: 1 },
-    viewport,
   );
   const fallZone = resolveLevel4Placement(
     sceneKey,
     LEVEL4_EDITABLE_IDS.autoFallZone,
     fallbackFallZonePlacement(fallback.autoFallZone),
-    viewport,
   );
   return {
-    cameraStopX: cameraStop.x,
+    cameraStopFocusX: cameraStop.x,
     autoWalkTriggerX: autoWalkTrigger.x,
     autoFallZone: { x: fallZone.x, y: fallZone.y, width: fallZone.scaleX, height: fallZone.scaleY },
     autoWalkSpeed: resolveLevel4Number(sceneKey, LEVEL4_EDITABLE_IDS.autoWalkSpeed, fallback.autoWalkSpeed),
@@ -249,8 +261,8 @@ export function resolveLevel4CutsceneConfig(
 /**
  * An absolute persisted number that is not a screen position or a scale
  * multiplier — `autoWalkSpeed` is a px/s speed, so running it through the
- * same viewport-ratio conversion as `Level4Placement`'s x/y would make the
- * saved speed depend on the screen size it happened to be saved at. Reuses
+ * same design-space conversion as `Level4Placement`'s x/y would only obscure
+ * it; it is neither a place in the world nor a fraction of anything. Reuses
  * `SceneObjectLayout.value`, the same store, schema and save route as
  * everything else here; there is no second config file.
  */
@@ -260,4 +272,28 @@ export function resolveLevel4Number(sceneKey: string, id: string, fallback: numb
 
 export function storeLevel4Number(sceneKey: string, id: string, value: number): void {
   setSceneObjectLayout(sceneKey, id, { value });
+}
+
+/**
+ * The scroll that puts `focusX` in the middle of the frame, clamped to the
+ * level's own bounds.
+ *
+ * This is the level's explicit responsive framing rule, kept pure so the
+ * guarantee it exists for — *the same world point is centred at every camera
+ * width* — is checkable without a running scene. The camera, not the stored
+ * data, is what absorbs a change of aspect ratio: a wider frame reveals more
+ * of the world symmetrically either side of the focus point rather than
+ * sliding the composition sideways, which is what a stored `scrollX` did.
+ *
+ * Clamping is the one place a wider camera legitimately shifts the focus off
+ * centre, because the level has edges and showing black past them would be
+ * worse than an off-centre shot.
+ */
+export function resolveCameraStopScroll(
+  focusX: number,
+  cameraWidth: number,
+  worldWidth: number,
+): number {
+  const maxScroll = Math.max(0, worldWidth - cameraWidth);
+  return Math.min(Math.max(focusX - cameraWidth / 2, 0), maxScroll);
 }

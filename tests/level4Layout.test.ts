@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   hasAuthoredLevel4Placement,
+  resolveCameraStopScroll,
   LEVEL4_EDITABLE_IDS,
   resolveLevel4CutsceneConfig,
   resolveLevel4Number,
@@ -12,7 +13,7 @@ import {
   storeLevel4Number,
   storeLevel4Placement,
 } from '../src/game/level/level4/level4Layout';
-import { resetSceneLayout } from '../src/game/systems/sceneLayout';
+import { buildSceneLayoutPayload, resetSceneLayout } from '../src/game/systems/sceneLayout';
 import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
 
 /**
@@ -21,7 +22,6 @@ import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
  * for the real Level 4 at the time.
  */
 const SCENE = 'Level4LayoutTestScene';
-const viewport = { width: 1280, height: 720 };
 const composed = { x: 0, y: 0, scaleX: 0.4, scaleY: 0.24 };
 
 beforeEach(() => {
@@ -38,15 +38,15 @@ beforeEach(() => {
 describe('authored Level 4 placement', () => {
   it('falls back to the composed default until something is authored', () => {
     expect(hasAuthoredLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet)).toBe(false);
-    expect(resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed, viewport)).toEqual(
+    expect(resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed)).toEqual(
       composed,
     );
   });
 
   it('round-trips an edit, so a reload reproduces what the editor saved', () => {
     const edited = { x: 320, y: 48, scaleX: 0.5, scaleY: 0.31 };
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, edited, viewport);
-    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed, viewport);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, edited);
+    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed);
     expect(resolved.x).toBeCloseTo(edited.x);
     expect(resolved.y).toBeCloseTo(edited.y);
     expect(resolved.scaleX).toBeCloseTo(edited.scaleX);
@@ -54,44 +54,57 @@ describe('authored Level 4 placement', () => {
   });
 
   it('does not fall back to the default once a value has been authored', () => {
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, { x: 100, y: 10, scaleX: 1, scaleY: 2 }, viewport);
-    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed, viewport);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, { x: 100, y: 10, scaleX: 1, scaleY: 2 });
+    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed);
     expect(resolved).not.toEqual(composed);
     expect(hasAuthoredLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet)).toBe(true);
   });
 
   it('keeps the non-uniform toilet scale, which a single scale cannot express', () => {
     const stretched = { x: 0, y: 0, scaleX: 0.41, scaleY: 0.98 };
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, stretched, viewport);
-    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed, viewport);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, stretched);
+    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed);
     expect(resolved.scaleX).toBeCloseTo(0.41);
     expect(resolved.scaleY).toBeCloseTo(0.98);
     expect(resolved.scaleX).not.toBeCloseTo(resolved.scaleY);
   });
 
-  it('stores positions as viewport ratios, so one layout suits every screen', () => {
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.npc, { x: 640, y: 360, scaleX: 1, scaleY: 1 }, viewport);
-    // Half the width and half the height, resolved against a smaller screen.
-    const phone = resolveLevel4Placement(
-      SCENE,
-      LEVEL4_EDITABLE_IDS.npc,
-      composed,
-      { width: 800, height: 480 },
-    );
-    expect(phone.x).toBeCloseTo(400);
-    expect(phone.y).toBeCloseTo(240);
+  /**
+   * The responsive bug this replaced: these are *world* coordinates, and a
+   * world coordinate cannot be a function of the browser window. They used
+   * to be stored as fractions of the live camera, which `Scale.EXPAND` grows
+   * with the aspect ratio — so the same saved NPC stood ~340px further right
+   * in the room on a landscape phone than on a 16:9 desktop, while the room
+   * itself (built from fixed constants) stayed exactly where it was.
+   */
+  it('resolves to the same world position no matter what screen is resolving it', () => {
+    const authored = { x: 1571, y: 610, scaleX: 1, scaleY: 1 };
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.npc, authored);
+    // Nothing in the resolver can even see a viewport any more, so this is
+    // asserting the shape of the API as much as the number it produces.
+    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.npc, composed);
+    expect(resolved.x).toBeCloseTo(authored.x);
+    expect(resolved.y).toBeCloseTo(authored.y);
+  });
+
+  it('keeps a world x that is several screens along the level, which a scrolling world needs', () => {
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.autoFallZone, { x: 4141, y: 550, scaleX: 220, scaleY: 220 });
+    const resolved = resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.autoFallZone, composed);
+    expect(resolved.x).toBeCloseTo(4141);
+    // And the payload that produced it still validates through the shared route.
+    expect(() => validateSceneLayout(buildSceneLayoutPayload(SCENE))).not.toThrow();
   });
 
   it('keeps each object independent', () => {
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.npc, { x: 900, y: 600, scaleX: 1.2, scaleY: 1.2 }, viewport);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.npc, { x: 900, y: 600, scaleX: 1.2, scaleY: 1.2 });
     expect(hasAuthoredLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet)).toBe(false);
-    expect(resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed, viewport)).toEqual(
+    expect(resolveLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.toilet, composed)).toEqual(
       composed,
     );
   });
 
   it('produces a payload the shared save route accepts', () => {
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.stallDoor, { x: 512, y: 300, scaleX: 0.8, scaleY: 1.1 }, viewport);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.stallDoor, { x: 512, y: 300, scaleX: 0.8, scaleY: 1.1 });
     const payload = { [SCENE]: { [LEVEL4_EDITABLE_IDS.stallDoor]: { xRatio: 0.4, yRatio: 0.41, scaleX: 0.8, scaleY: 1.1 } } };
     expect(() => validateSceneLayout(payload)).not.toThrow();
     expect(validateSceneLayout(payload)[SCENE][LEVEL4_EDITABLE_IDS.stallDoor].scaleX).toBe(0.8);
@@ -231,31 +244,28 @@ describe('stall entry logical targets (corrected for the player render offset)',
 });
 
 /**
- * The toilet-to-Holyworld gap cutscene: `cameraStopX` and `autoWalkTriggerX`
+ * The toilet-to-Holyworld gap cutscene: `cameraStopFocusX` and `autoWalkTriggerX`
  * are independently editable world-x lines (never coupled to one shared
  * coordinate), `autoFallZone` is a rectangle, and `autoWalkSpeed` is a plain
- * absolute number rather than a screen-position ratio, so it must not
- * silently change when resolved against a different viewport than the one it
- * was saved from.
+ * absolute number rather than a position at all.
  */
 describe('gap cutscene config', () => {
-  const viewport = { width: 1280, height: 720 };
   const fallback = {
-    cameraStopX: 3000,
+    cameraStopFocusX: 3000,
     autoWalkTriggerX: 3500,
     autoFallZone: { x: 3800, y: 550, width: 200, height: 200 },
     autoWalkSpeed: 240,
   };
 
   it('falls back to the composed defaults until something is authored', () => {
-    const resolved = resolveLevel4CutsceneConfig(SCENE, viewport, fallback);
+    const resolved = resolveLevel4CutsceneConfig(SCENE, fallback);
     expect(resolved).toEqual(fallback);
   });
 
   it('round-trips an authored camera stop and auto-walk trigger independently', () => {
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.cameraStop, { x: 2500, y: 0, scaleX: 1, scaleY: 1 }, viewport);
-    const resolved = resolveLevel4CutsceneConfig(SCENE, viewport, fallback);
-    expect(resolved.cameraStopX).toBeCloseTo(2500);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.cameraStop, { x: 2500, y: 0, scaleX: 1, scaleY: 1 });
+    const resolved = resolveLevel4CutsceneConfig(SCENE, fallback);
+    expect(resolved.cameraStopFocusX).toBeCloseTo(2500);
     // Moving the camera stop alone must not drag the auto-walk trigger with it.
     expect(resolved.autoWalkTriggerX).toBeCloseTo(fallback.autoWalkTriggerX);
   });
@@ -265,23 +275,21 @@ describe('gap cutscene config', () => {
       SCENE,
       LEVEL4_EDITABLE_IDS.autoFallZone,
       { x: 4000, y: 500, scaleX: 300, scaleY: 150 },
-      viewport,
     );
-    const resolved = resolveLevel4CutsceneConfig(SCENE, viewport, fallback);
+    const resolved = resolveLevel4CutsceneConfig(SCENE, fallback);
     expect(resolved.autoFallZone).toEqual({ x: 4000, y: 500, width: 300, height: 150 });
   });
 
-  it('stores autoWalkSpeed as an absolute number, unaffected by the resolving viewport', () => {
+  it('stores autoWalkSpeed as an absolute number, never a fraction of anything', () => {
     storeLevel4Number(SCENE, LEVEL4_EDITABLE_IDS.autoWalkSpeed, 320);
     expect(resolveLevel4Number(SCENE, LEVEL4_EDITABLE_IDS.autoWalkSpeed, fallback.autoWalkSpeed)).toBe(320);
-    // A speed is not a screen position: resolving it against a completely
-    // different viewport must not change it, unlike xRatio/yRatio.
-    const phone = resolveLevel4CutsceneConfig(SCENE, { width: 400, height: 800 }, fallback);
-    expect(phone.autoWalkSpeed).toBe(320);
+    // A speed is not a position at all, and survives the round trip as the
+    // absolute number it was saved as.
+    expect(resolveLevel4CutsceneConfig(SCENE, fallback).autoWalkSpeed).toBe(320);
   });
 
   it('produces a payload the shared save route accepts', () => {
-    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.autoWalkTrigger, { x: 3600, y: 0, scaleX: 1, scaleY: 1 }, viewport);
+    storeLevel4Placement(SCENE, LEVEL4_EDITABLE_IDS.autoWalkTrigger, { x: 3600, y: 0, scaleX: 1, scaleY: 1 });
     storeLevel4Number(SCENE, LEVEL4_EDITABLE_IDS.autoWalkSpeed, 260);
     const payload = {
       [SCENE]: {
@@ -291,5 +299,49 @@ describe('gap cutscene config', () => {
     };
     expect(() => validateSceneLayout(payload)).not.toThrow();
     expect(validateSceneLayout(payload)[SCENE][LEVEL4_EDITABLE_IDS.autoWalkSpeed].value).toBe(260);
+  });
+});
+
+/**
+ * Level 4's explicit responsive framing policy, and the reason CAMERA STOP
+ * is a world focus point rather than the raw final `scrollX` it used to be.
+ *
+ * The game runs `Phaser.Scale.EXPAND` from a 720-unit base, so a landscape
+ * viewport keeps a 720 logical height and takes whatever logical *width* its
+ * aspect ratio implies — 1280 at 16:9, ~1560 on a landscape phone. A stored
+ * scrollX is the frame's left edge, so the same saved number framed a
+ * different composition on every device; a centre is the one point every
+ * aspect ratio agrees on.
+ */
+describe('camera stop framing', () => {
+  const WORLD = 5202;
+  const widths = [1024, 1280, 1440, 1560, 1920];
+
+  it('centres the same world point at every camera width', () => {
+    const focusX = 2965;
+    for (const width of widths) {
+      const scroll = resolveCameraStopScroll(focusX, width, WORLD);
+      expect(scroll + width / 2).toBeCloseTo(focusX);
+    }
+  });
+
+  it('reveals more world symmetrically as the frame widens, never sliding the shot sideways', () => {
+    const focusX = 2965;
+    const narrow = resolveCameraStopScroll(focusX, 1280, WORLD);
+    const wide = resolveCameraStopScroll(focusX, 1560, WORLD);
+    // Both edges move outward by the same amount: half the extra width.
+    expect(narrow - wide).toBeCloseTo(140);
+    expect(wide + 1560 - (narrow + 1280)).toBeCloseTo(140);
+  });
+
+  it('never scrolls past either end of the level, whatever is authored', () => {
+    for (const width of widths) {
+      expect(resolveCameraStopScroll(-10_000, width, WORLD)).toBe(0);
+      expect(resolveCameraStopScroll(10_000, width, WORLD)).toBeCloseTo(Math.max(0, WORLD - width));
+    }
+  });
+
+  it('degrades to 0 rather than a negative scroll when the camera is wider than the level', () => {
+    expect(resolveCameraStopScroll(2965, 8000, WORLD)).toBe(0);
   });
 });

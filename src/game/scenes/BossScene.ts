@@ -14,6 +14,7 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import { OrientationController } from '../responsive/OrientationController';
 import type { RhythmResult } from '../rhythm/types';
 import type { EditorSavePayload } from '../systems/editableSceneContract';
+import { designPointFromLayout, layoutRatiosFromDesignPoint } from '../systems/designSpace';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import type { EditableObject } from '../systems/SceneEditor';
 import { buildSceneLayoutPayload, getSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
@@ -128,14 +129,18 @@ export class BossScene extends Phaser.Scene {
    * display object would be overwritten immediately and lost on the next entry.
    */
   private applyAuthoredPresentation(): void {
-    const camera = this.cameras.main;
     const boss = getSceneObjectLayout(this.scene.key, BOSS_EDITABLE_ID);
+    // World-space offsets from each renderer's own anchor, resolved against
+    // the canonical design box exactly as `getPlayerVisualOffset` does — the
+    // boss entry is the same kind of value as the player's and must not
+    // resolve differently.
+    const offset = designPointFromLayout(boss, { x: 0, y: 0 });
     this.boss.setPresentation({
-      offsetX: (boss?.xRatio ?? 0) * camera.width,
-      offsetY: (boss?.yRatio ?? 0) * camera.height,
+      offsetX: offset.x,
+      offsetY: offset.y,
       scale: boss?.scale ?? 1,
     });
-    this.player.setPresentation(getPlayerVisualOffset(this.scene.key, camera.width, camera.height));
+    this.player.setPresentation(getPlayerVisualOffset(this.scene.key));
   }
 
   /**
@@ -163,11 +168,12 @@ export class BossScene extends Phaser.Scene {
           return { width: bounds.width / scale, height: bounds.height / scale };
         },
         onChange: (transform) => {
-          const camera = this.cameras.main;
           const anchor = this.boss.anchorAt(this.time.now, this.bossX);
           setSceneObjectLayout(this.scene.key, BOSS_EDITABLE_ID, {
-            xRatio: camera.width > 0 ? (transform.x - anchor.x) / camera.width : 0,
-            yRatio: camera.height > 0 ? (transform.y - anchor.y) / camera.height : 0,
+            ...layoutRatiosFromDesignPoint({
+              x: transform.x - anchor.x,
+              y: transform.y - anchor.y,
+            }),
             scale: transform.scaleY,
           });
           this.applyAuthoredPresentation();

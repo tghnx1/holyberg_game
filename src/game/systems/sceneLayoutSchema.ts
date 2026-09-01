@@ -1,9 +1,10 @@
 import type { SceneLayoutConfig, SceneObjectLayout } from './sceneLayout';
 
 /**
- * Bounds for an editable scene object. Ratios may sit slightly outside the
- * viewport (an object can legitimately start off-screen), but not absurdly so,
- * and a scale of zero would persist an invisible object.
+ * Bounds for an editable scene object. Ratios may sit well outside 0..1 — a
+ * screen-space object can legitimately start off-panel, and a world-space one
+ * in a scrolling level is routinely several design widths along it — but not
+ * absurdly so, and a scale of zero would persist an invisible object.
  *
  * The upper scale bound is deliberately generous because `scale` is a
  * multiplier of an object's *native* size, and not every editable object is

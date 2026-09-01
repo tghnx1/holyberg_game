@@ -229,8 +229,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     const anchor = this.playerAnchor(frame.footGap, baseScale);
     // Visual only: the saved offset moves the drawn sprite, never `walkX`, so
     // room edges and transitions trigger at exactly the same places.
-    const camera = this.cameras.main;
-    const visual = getPlayerVisualOffset(this.scene.key, camera.width, camera.height);
+    const visual = getPlayerVisualOffset(this.scene.key);
     this.playerSprite.setScale(baseScale * visual.scale);
     this.playerSprite.setPosition(
       Math.round(anchor.x + visual.offsetX),

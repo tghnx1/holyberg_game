@@ -7,34 +7,37 @@ import {
 } from '../src/game/systems/sceneLayout';
 import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
 import { getPlayerVisualOffset, PLAYER_EDITABLE_ID } from '../src/game/systems/playerPresentation';
+import { DESIGN_SPACE } from '../src/game/systems/designSpace';
 
 afterEach(() => resetSceneLayout());
 
 describe('shared scene layout', () => {
   it('is empty for a scene nobody has edited, so a new level still runs', () => {
     expect(getSceneObjectLayout('BrandNewScene', 'anything')).toBeUndefined();
-    expect(getPlayerVisualOffset('BrandNewScene', 1280, 720)).toEqual({
+    expect(getPlayerVisualOffset('BrandNewScene')).toEqual({
       offsetX: 0,
       offsetY: 0,
       scale: 1,
     });
   });
 
-  it('resolves a saved player offset against the current viewport', () => {
+  /**
+   * The offset is a distance in the world from the character's own gameplay
+   * anchor, so it resolves against the canonical design box and is the same
+   * number on every device. It used to be multiplied by the live camera
+   * width, which `Scale.EXPAND` grows with the aspect ratio — so the drawn
+   * character sat further from its anchor on a landscape phone than the
+   * layout was authored with.
+   */
+  it('resolves a saved player offset in world pixels, identically on every screen', () => {
     setSceneObjectLayout('Level4Scene', PLAYER_EDITABLE_ID, {
       xRatio: 0.1,
       yRatio: -0.05,
       scale: 1.25,
     });
-    // Ratios, not pixels: the same saved value lands proportionally on any size.
-    expect(getPlayerVisualOffset('Level4Scene', 1280, 720)).toEqual({
-      offsetX: 128,
-      offsetY: -36,
-      scale: 1.25,
-    });
-    expect(getPlayerVisualOffset('Level4Scene', 640, 360)).toEqual({
-      offsetX: 64,
-      offsetY: -18,
+    expect(getPlayerVisualOffset('Level4Scene')).toEqual({
+      offsetX: 0.1 * DESIGN_SPACE.width,
+      offsetY: -0.05 * DESIGN_SPACE.height,
       scale: 1.25,
     });
   });

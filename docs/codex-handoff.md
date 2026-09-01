@@ -239,3 +239,34 @@ public/assets/level_2/
   room_1_poster.webp
   room_2_poster.webp
 ```
+
+# Coordinate spaces
+
+The game runs `Phaser.Scale.EXPAND` from a 720x720 base (`src/game/config.ts`).
+For any landscape viewport the logical height is therefore pinned at
+`DESIGN_HEIGHT` (720) and the logical *width* comes out as
+`720 * aspectRatio` — 1280 at 16:9, ~1560 on a landscape phone. The camera is
+what absorbs a change of aspect ratio: a wider screen reveals more world
+horizontally, it does not rescale or reposition anything.
+
+That makes exactly one rule matter, and breaking it is what made Level 4
+reframe itself on mobile:
+
+- **World-space** values — actors, scenery, triggers, fall zones, camera focus
+  points, walk limits — must never be derived from `camera.width` /
+  `scale.width`. Resolve them against the canonical box in
+  `src/game/systems/designSpace.ts` (`DESIGN_SPACE`, i.e. `DESIGN_WIDTH` x
+  `DESIGN_HEIGHT`). One design unit is one rendered logical unit on every
+  supported viewport, so these are world pixels and mean the same physical
+  place on every device.
+- **Screen-space** values — HUD, pause, touch zones, the dialogue's panel
+  layout — should and do follow the live viewport.
+
+`sceneLayout.json` stores both kinds as `xRatio`/`yRatio`; what the ratio is a
+fraction *of* is the consumer's choice. `DialogueStageViewport` divides its
+live panel (screen-space, correct); `level4Layout.ts` and
+`playerPresentation.ts` divide `DESIGN_SPACE` (world-space, correct).
+
+A camera "stop" is stored as the world x the frame **centres** on, never as a
+raw `scrollX` — a left edge frames a different composition at every width. See
+`resolveCameraStopScroll` in `src/game/level/level4/level4Layout.ts`.

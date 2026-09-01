@@ -85,7 +85,6 @@ beforeEach(() => {
 describe('STALL DOOR: left-edge resize survives save + reload', () => {
   it('keeps the right hinge fixed and reproduces the authored closed bounds exactly', () => {
     const fallback = { x: 1792, y: 610, scaleX: 2.5, scaleY: 2.4 };
-    const viewport = { width: 1280, height: 720 };
     const target = fakeTarget(fallback.x, fallback.y, fallback.scaleX, fallback.scaleY);
     const object: EditableObject = {
       id: LEVEL4_EDITABLE_IDS.stallDoor,
@@ -97,7 +96,6 @@ describe('STALL DOOR: left-edge resize survives save + reload', () => {
           'Level4Scene',
           LEVEL4_EDITABLE_IDS.stallDoor,
           { x: t.x, y: t.y, scaleX: t.scaleX, scaleY: t.scaleY },
-          viewport,
         ),
     };
     const item = toEditableItem(object);
@@ -123,7 +121,7 @@ describe('STALL DOOR: left-edge resize survives save + reload', () => {
     resetSceneLayout();
     loadSceneLayoutFromFake(merged);
 
-    const resolved = resolveLevel4Placement('Level4Scene', LEVEL4_EDITABLE_IDS.stallDoor, fallback, viewport);
+    const resolved = resolveLevel4Placement('Level4Scene', LEVEL4_EDITABLE_IDS.stallDoor, fallback);
     expect(resolved.x).toBeCloseTo(target.x, 3);
     expect(resolved.y).toBeCloseTo(target.y, 3);
     expect(resolved.scaleX).toBeCloseTo(target.scaleX, 3);
@@ -136,7 +134,6 @@ describe('STALL DOOR: left-edge resize survives save + reload', () => {
 
 describe('PLAYER: rightward move + resize survives save + reload', () => {
   it('reproduces the exact authored offset and scale, independent of the stall-entry compensation', () => {
-    const viewport = { width: 1280, height: 720 };
     const anchorX = 200;
     const anchorY = 600;
     const baseScale = 0.8;
@@ -146,7 +143,7 @@ describe('PLAYER: rightward move + resize survives save + reload', () => {
     target.frame = { realWidth: 64, realHeight: 96 };
     let refreshCount = 0;
     const object = createPlayerEditable(
-      { cameras: { main: viewport }, scene: { key: 'Level4Scene' } } as never,
+      { scene: { key: 'Level4Scene' } } as never,
       {
         sprite: target as never,
         getAnchor: () => ({ x: anchorX, y: anchorY }),

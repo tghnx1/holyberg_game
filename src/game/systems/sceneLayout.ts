@@ -9,13 +9,22 @@ import rawLayout from '../assets/sceneLayout.json';
  * speeds, collision and balance are untouched by every value in this file, and
  * the player entry in particular only ever drives the sprite that is drawn.
  *
- * Stored as ratios of the logical viewport rather than absolute pixels, so one
- * saved layout is correct on desktop and on a phone. A scene with no entry
- * falls back to whatever it computes itself, which is what lets a brand-new
- * level participate before anyone has edited it.
+ * Stored as ratios rather than absolute pixels, so one saved layout is
+ * correct on desktop and on a phone. What each ratio is a fraction *of* is
+ * the consumer's decision, and there are exactly two right answers:
+ *
+ * - a **screen-space composition** — the dialogue's scene/portrait panels —
+ *   divides up a live panel, so it resolves against that panel's current
+ *   size (`DialogueStageViewport`);
+ * - a **world-space position** — anything standing in a level — resolves
+ *   against the fixed canonical box in `designSpace.ts`, because a place in
+ *   the world does not move when the window does.
+ *
+ * A scene with no entry falls back to whatever it computes itself, which is
+ * what lets a brand-new level participate before anyone has edited it.
  */
 export interface SceneObjectLayout {
-  /** Fraction of the logical viewport width/height. */
+  /** Fraction of the consumer's reference box: a live panel, or `DESIGN_SPACE`. */
   xRatio?: number;
   yRatio?: number;
   /** Visual scale multiplier applied on top of the object's own natural scale. */

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { designPointFromLayout, layoutRatiosFromDesignPoint } from './designSpace';
 import type { EditableObject } from './SceneEditor';
 import { getSceneObjectLayout, setSceneObjectLayout } from './sceneLayout';
 
@@ -25,20 +26,19 @@ export interface PlayerVisualOffset {
 }
 
 /**
- * The saved offset for this scene, resolved against the current viewport.
- * Ratios rather than pixels, so one saved value is right on desktop and phone.
+ * The saved offset for this scene, in world pixels.
+ *
+ * Resolved against the canonical `DESIGN_SPACE` box rather than the live
+ * camera: this is a displacement from the character's gameplay anchor — a
+ * distance in the world, next to whatever scenery the character is standing
+ * beside — so it must not grow with the browser window the way it did when
+ * it was multiplied by `camera.width`, which on a landscape phone drew the
+ * character further from its own anchor than the layout was authored with.
  */
-export function getPlayerVisualOffset(
-  sceneKey: string,
-  viewportWidth: number,
-  viewportHeight: number,
-): PlayerVisualOffset {
+export function getPlayerVisualOffset(sceneKey: string): PlayerVisualOffset {
   const layout = getSceneObjectLayout(sceneKey, PLAYER_EDITABLE_ID);
-  return {
-    offsetX: (layout?.xRatio ?? 0) * viewportWidth,
-    offsetY: (layout?.yRatio ?? 0) * viewportHeight,
-    scale: layout?.scale ?? 1,
-  };
+  const offset = designPointFromLayout(layout, { x: 0, y: 0 });
+  return { offsetX: offset.x, offsetY: offset.y, scale: layout?.scale ?? 1 };
 }
 
 export interface PlayerEditableOptions {
@@ -62,6 +62,8 @@ export interface PlayerEditableOptions {
  * Storing an *offset* rather than an absolute position is what makes this work
  * in a scrolling level: the character keeps walking under player control while
  * the editor is open, and the saved value still means the same thing next run.
+ * The offset itself is world-space (see `getPlayerVisualOffset`), so it also
+ * means the same thing on the next *device*.
  */
 export function createPlayerEditable(
   scene: Phaser.Scene,
@@ -78,12 +80,10 @@ export function createPlayerEditable(
       return { width: frame.realWidth, height: frame.realHeight };
     },
     onChange: (transform) => {
-      const camera = scene.cameras.main;
       const anchor = getAnchor();
       const base = getBaseScale();
       setSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID, {
-        xRatio: camera.width > 0 ? (transform.x - anchor.x) / camera.width : 0,
-        yRatio: camera.height > 0 ? (transform.y - anchor.y) / camera.height : 0,
+        ...layoutRatiosFromDesignPoint({ x: transform.x - anchor.x, y: transform.y - anchor.y }),
         scale: base > 0 ? transform.scaleY / base : 1,
       });
       refresh();
