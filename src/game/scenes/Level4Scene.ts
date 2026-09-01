@@ -143,6 +143,19 @@ const DOOR_OPEN_SCALE = 0.12;
  * it rather than as an empty frame.
  */
 const DOOR_FLOOR_GAP_NATIVE = 7;
+/**
+ * Spacing of the editor-only world ruler, in world pixels.
+ *
+ * The ruler exists to make the level's coordinate model *visible*: a labelled
+ * line every this many world px, drawn in world space like everything else in
+ * the room. Open the editor at the same player position on two devices and
+ * the same ruler mark must sit against the same tile, stall and character on
+ * both. If it does, every world object is on the canonical system and any
+ * remaining difference is the camera showing a wider slice; if it does not,
+ * something is still being placed from the viewport. It is the check that
+ * settles that question without a screenshot comparison by eye.
+ */
+const WORLD_RULER_SPACING = 500;
 /** Editor-only marker radius for PLAYER TARGET / NPC TARGET. */
 const TARGET_MARKER_RADIUS = 5;
 /** Editor-only "P"/"N" labels above the two markers. */
@@ -344,6 +357,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private cameraStopLabel!: Phaser.GameObjects.Text;
   private autoFallZoneRect!: Phaser.GameObjects.Rectangle;
   private autoFallZoneLabel!: Phaser.GameObjects.Text;
+  /** Editor-only world ruler; see `WORLD_RULER_SPACING`. */
+  private worldRuler: Phaser.GameObjects.GameObject[] = [];
 
   constructor() {
     super('Level4Scene');
@@ -393,6 +408,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.buildDoor();
     this.buildStallEntryTarget();
     this.buildGapCutscene();
+    this.buildWorldRuler();
 
     // Same manual walk control as the Level 2 walk: arrows/A-D on desktop,
     // hold either half of the screen on touch. Below Depth.UI so the pause,
@@ -731,6 +747,31 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       .setVisible(false);
 
     this.layoutGapCutsceneMarkers();
+  }
+
+  /**
+   * A labelled line every `WORLD_RULER_SPACING` world px, from the level's
+   * left edge to its right one.
+   *
+   * Built from the level's own width, not the camera's, so it covers the
+   * whole world rather than one screen of it, and it is drawn exactly like
+   * the room: at a world x, with no scroll factor and no offset. That is the
+   * point — it is a direct read-out of the coordinate system every other
+   * world object in this scene uses.
+   */
+  private buildWorldRuler(): void {
+    for (let x = 0; x <= LEVEL4_WORLD_WIDTH; x += WORLD_RULER_SPACING) {
+      const line = this.add
+        .rectangle(x, DESIGN_HEIGHT / 2, 1, DESIGN_HEIGHT, 0x4be3a1, 0.35)
+        .setDepth(Depth.FOREGROUND + 19)
+        .setVisible(false);
+      const label = this.add
+        .text(x, DESIGN_HEIGHT - 8, `x ${x}`, TARGET_LABEL_STYLE)
+        .setOrigin(0.5, 1)
+        .setDepth(Depth.FOREGROUND + 19)
+        .setVisible(false);
+      this.worldRuler.push(line, label);
+    }
   }
 
   /** Repositions the visible line/label companions onto the handles' current bounds. */
@@ -1075,6 +1116,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.cameraStopLabel.setVisible(true);
     this.autoFallZoneRect.setVisible(true);
     this.autoFallZoneLabel.setVisible(true);
+    for (const part of this.worldRuler) (part as Phaser.GameObjects.Image).setVisible(true);
   }
 
   onEditorDisable(): void {
@@ -1098,6 +1140,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.cameraStopLabel.setVisible(false);
     this.autoFallZoneRect.setVisible(false);
     this.autoFallZoneLabel.setVisible(false);
+    for (const part of this.worldRuler) (part as Phaser.GameObjects.Image).setVisible(false);
   }
 
   /**
@@ -1110,6 +1153,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     return [
       `autoWalkSpeed ${this.cutsceneConfig.autoWalkSpeed.toFixed(0)} px/s (edit sceneLayout.json to change)`,
       'CAMERA STOP = world x the locked shot centres on',
+      `world ruler every ${WORLD_RULER_SPACING}px — same mark must meet the same tile on every device`,
     ];
   }
 
@@ -1594,5 +1638,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.stallDoor?.destroy();
     this.player?.sprite.destroy();
     this.npc?.sprite.destroy();
+    for (const part of this.worldRuler) part.destroy();
+    this.worldRuler = [];
   }
 }
