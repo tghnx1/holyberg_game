@@ -9,7 +9,14 @@ import type { RhythmResult } from '../../rhythm/types';
 export interface Level4ResumePayload {
   introComplete: boolean;
   playerX: number;
-  cameraX: number;
+  /**
+   * World x the camera was centred on when the dialogue took over — a focus
+   * point, not a `scrollX`. A scroll is a left edge, so handing one back
+   * restored a different composition on any viewport that changed while the
+   * conversation was on screen (a rotation, a resize, entering fullscreen),
+   * and made the resumed frame depend on the window rather than the room.
+   */
+  cameraFocusX: number;
   npcId: string;
   rhythmResult: RhythmResult;
 }

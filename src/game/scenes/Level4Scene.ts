@@ -161,6 +161,13 @@ const NPC_WAIT_X = 645 * TOILET_SCALE;
 const NPC_EXIT_X = 555 * TOILET_SCALE;
 /** How far past the camera's left edge the NPC walks before being hidden. */
 const NPC_EXIT_OFFSCREEN_MARGIN = 160;
+/**
+ * World px/s the story NPC leaves at. A pace, not a duration, so a wider
+ * frame — which is a longer walk out of it — does not make the same stride
+ * play faster on a phone than on a desktop. Matches the ~527 px/s the exit
+ * ran at on a 16:9 frame, so desktop pacing is unchanged.
+ */
+const NPC_EXIT_SPEED = 527;
 /** How close to the waiting NPC the player must walk for them to speak up. */
 const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 
@@ -247,7 +254,8 @@ export interface Level4SceneData {
   rhythmResult?: RhythmResult;
   introComplete?: boolean;
   playerX?: number;
-  cameraX?: number;
+  /** World x the camera was centred on; see `Level4ResumePayload`. */
+  cameraFocusX?: number;
   npcId?: string;
 }
 
@@ -255,7 +263,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private rhythmResult: RhythmResult = createEmptyRhythmResult();
   private introComplete = false;
   private playerX = PLAYER_START_X;
+  /** Live mirror of `camera.scrollX`, reasserted after bounds changes. */
   private cameraX = 0;
+  /** Set only when resuming from the dialogue; see `Level4ResumePayload`. */
+  private resumeCameraFocusX?: number;
   private npcId?: string;
   private playerCharacter!: CharacterDefinition;
   private npcCharacter!: CharacterDefinition;
@@ -342,7 +353,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.rhythmResult = data.rhythmResult ?? createEmptyRhythmResult();
     this.introComplete = data.introComplete === true;
     this.playerX = data.playerX ?? PLAYER_START_X;
-    this.cameraX = data.cameraX ?? 0;
+    this.resumeCameraFocusX = data.cameraFocusX;
+    this.cameraX = 0;
     this.npcId = data.npcId;
     this.controlsLocked = false;
     // Coming back from DialogueScene the conversation has already happened.
@@ -389,6 +401,16 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
 
     this.cameras.main.setBounds(0, 0, LEVEL4_WORLD_WIDTH, DESIGN_HEIGHT);
     this.cameras.main.startFollow(this.player.sprite, true, 0.08, 0.08, -220, 0);
+    // Resuming centres the same world point the conversation interrupted,
+    // through the same framing rule the cutscene lock uses, rather than
+    // replaying a scroll measured on whatever viewport was open then.
+    if (this.resumeCameraFocusX !== undefined) {
+      this.cameraX = resolveCameraStopScroll(
+        this.resumeCameraFocusX,
+        this.cameras.main.width,
+        LEVEL4_WORLD_WIDTH,
+      );
+    }
     this.cameras.main.setScroll(this.cameraX, 0);
 
     new OrientationController(this, {
@@ -398,7 +420,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
 
     if (this.introComplete) {
       this.player.x = this.playerX;
-      this.cameraX = Math.max(0, this.cameraX);
       this.syncActor(this.player, this.time.now);
       this.syncActor(this.npc, this.time.now);
       this.startPostDialogueCutscene();
@@ -1345,7 +1366,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     const payload: Level4ResumePayload = {
       introComplete: true,
       playerX: this.player.x,
-      cameraX: this.cameras.main.scrollX,
+      cameraFocusX: this.cameras.main.scrollX + this.cameras.main.width / 2,
       npcId: this.npcCharacter.id,
       rhythmResult: this.rhythmResult,
     };
@@ -1486,6 +1507,20 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
    * than a fixed world x, so the NPC is only hidden once they have actually
    * carried themselves out of the visible staging area — previously they were
    * switched off mid-frame, in plain view.
+   *
+   * This is the one place in Level 4 where the camera legitimately feeds a
+   * world position, and it is worth being explicit about why: nothing is
+   * being *placed* here. The NPC's authored position, the stall, the door and
+   * every trigger are fixed world coordinates; this is a transient "walk
+   * until you are out of frame" whose only meaning is visibility, and how
+   * much is in frame is exactly what the camera decides. It leaves nothing
+   * behind — no authored value, no state that outlives the tween.
+   *
+   * The *pace*, however, must not depend on the screen: a wider frame means a
+   * longer walk, and holding the duration fixed made the same character stride
+   * measurably faster on a phone. The duration is derived from the distance
+   * instead, so the exit reads identically everywhere and only takes as long
+   * as the extra ground needs.
    */
   private walkNpcOut(): void {
     // The pair are no longer parked on the zone, so authoring it must stop
@@ -1497,10 +1532,11 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       NPC_EXIT_X,
       this.cameras.main.scrollX - NPC_EXIT_OFFSCREEN_MARGIN,
     );
+    const distance = Math.abs(this.npc.x - exitX);
     this.tweens.add({
       targets: this.npc,
       x: exitX,
-      duration: 1100,
+      duration: Math.max(1, (distance / NPC_EXIT_SPEED) * 1000),
       ease: 'Sine.easeIn',
       onComplete: () => {
         this.npc.motion = 'idle';
