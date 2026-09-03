@@ -4,6 +4,7 @@ export const BossDepth = {
   ARENA: 10,
   TELEGRAPH: 40,
   BOSS: 60,
+  COLLECTIBLE: 70,
   LASER: 80,
   PLAYER: 100,
   UI: 1000,
@@ -17,5 +18,5 @@ export const BossPalette = {
   laser: 0xff477e,
   laserCore: 0xffffff,
   safeGap: 0x56ffff,
-  phaseTints: [0x2a1140, 0x3a1030, 0x481038, 0x5a0f2a],
+  emerald: 0x56ffb0,
 } as const;

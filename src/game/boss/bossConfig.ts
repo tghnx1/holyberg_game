@@ -17,7 +17,6 @@ export const BOSS_ARENA = {
 } as const;
 
 export const BOSS_PLAYER = {
-  hitPoints: 3,
   /** Horizontal run speed in px/s; the only way the player avoids a laser. */
   moveSpeed: 430,
   /** Acceleration ramp keeps input responsive without feeling slippery. */
@@ -26,7 +25,38 @@ export const BOSS_PLAYER = {
   hitHalfWidth: 14,
   knockbackSpeed: 300,
   knockbackDurationMs: 180,
+  /**
+   * Still here without lives: it stops one laser wall counting as several hits
+   * while the player stands in it. Nothing about it can end the fight.
+   */
   invulnerabilityMs: 1100,
+} as const;
+
+/**
+ * Emerald collectibles.
+ *
+ * A set appears with every telegraph and is gone the moment the laser fires,
+ * which turns the windup from "wait somewhere safe" into "how much can you
+ * grab and still get out".
+ *
+ * `reachableFraction` is what keeps that fair. The furthest an emerald may be
+ * placed is the distance the player could cover in the telegraph they have,
+ * times this — well under 1, so there is time to reach it *and* leave again,
+ * and the acceleration ramp is comfortably absorbed.
+ */
+export const BOSS_EMERALDS = {
+  minPerAttack: 2,
+  maxPerAttack: 3,
+  /** Fraction of the telegraph's travel distance an emerald may sit within. */
+  reachableFraction: 0.55,
+  /** Never spawn one in the player's lap; it should always be worth running to. */
+  minPlayerDistancePx: 90,
+  /** Keeps two emeralds of one set from overlapping into a single blob. */
+  minSeparationPx: 96,
+  /** Half-extent of the pickup box, and the drawn size, in world pixels. */
+  halfSizePx: 26,
+  /** Centre height above the floor line: leg height, so no jump is needed. */
+  floorOffsetPx: 62,
 } as const;
 
 /** Base phase durations per attack type, before per-phase telegraph scaling. */
@@ -48,14 +78,19 @@ export const ATTACK_SHAPES = {
 } as const;
 
 /**
- * Escalating fight structure. Total duration is the sum of these phases; the
- * player wins by surviving all of them.
+ * Escalating fight structure. Total duration is the sum of these phases.
+ *
+ * Each duration is 70% of what it was: the fight was outstaying its welcome,
+ * so every phase simply runs for less time. The pattern, the gaps and the
+ * telegraph scales are untouched, so a phase is the same fight with fewer
+ * repetitions of it — reading and dodging an individual laser is exactly as
+ * generous as before.
  */
 export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
   {
     index: 0,
     label: 'PHASE 1',
-    durationMs: 22_000,
+    durationMs: 15_400,
     pattern: ['aimedLaser'],
     gapMs: 900,
     telegraphScale: 1.35,
@@ -63,7 +98,7 @@ export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
   {
     index: 1,
     label: 'PHASE 2',
-    durationMs: 24_000,
+    durationMs: 16_800,
     pattern: ['aimedLaser', 'laserWall', 'aimedLaser'],
     gapMs: 620,
     telegraphScale: 1.1,
@@ -71,7 +106,7 @@ export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
   {
     index: 2,
     label: 'PHASE 3',
-    durationMs: 26_000,
+    durationMs: 18_200,
     pattern: ['aimedLaser', 'laserWall', 'aimedLaser', 'laserWall'],
     gapMs: 480,
     telegraphScale: 0.95,
@@ -79,7 +114,7 @@ export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
   {
     index: 3,
     label: 'FINAL',
-    durationMs: 14_000,
+    durationMs: 9_800,
     pattern: ['aimedLaser', 'laserWall', 'aimedLaser'],
     gapMs: 360,
     telegraphScale: 0.85,
@@ -99,6 +134,8 @@ export const MINIMUM_TELEGRAPH_MS = 520;
 
 export const BOSS_SCORING = {
   dodgeScore: 100,
+  /** The single source for what one emerald is worth. */
+  emeraldScore: 100,
   hitPenalty: 500,
   survivalBonus: 2000,
   flawlessBonus: 5000,

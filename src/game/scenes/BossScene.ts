@@ -5,12 +5,15 @@ import { BossFightDirector, type BossFightEvent } from '../boss/BossFightDirecto
 import { BossHud } from '../boss/BossHud';
 import { BossInput } from '../boss/BossInput';
 import { BossPlayer } from '../boss/BossPlayer';
+import { EmeraldLayer } from '../boss/EmeraldLayer';
 import { getBossAssetUrls } from '../boss/bossAssets';
+import { BOSS_SCORING } from '../boss/bossConfig';
+import { createRandom } from '../boss/fightSequence';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { BossRenderer } from '../boss/BossRenderer';
 import { BossPalette } from '../boss/bossConstants';
-import type { ArenaBounds } from '../boss/types';
+import type { ActiveAttack, ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { RhythmResult } from '../rhythm/types';
@@ -18,13 +21,24 @@ import type { EditorSavePayload } from '../systems/editableSceneContract';
 import { designPointFromLayout, layoutRatiosFromDesignPoint } from '../systems/designSpace';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import type { EditableObject } from '../systems/SceneEditor';
-import { buildSceneLayoutPayload, getSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
+import {
+  buildSceneLayoutPayload,
+  getSceneObjectLayout,
+  setSceneObjectLayout,
+} from '../systems/sceneLayout';
 
 /** Editable id for the boss's own presentation. */
 const BOSS_EDITABLE_ID = 'boss';
 
 /** Upper bound on a single simulated frame, in milliseconds. */
 const MAX_FRAME_DELTA_MS = 50;
+
+/**
+ * Spreads per-attack emerald seeds apart. Any odd stride works; this one is
+ * simply large enough that neighbouring attack ids cannot land on overlapping
+ * regions of the generator.
+ */
+const EMERALD_SEED_STRIDE = 7919;
 
 export interface BossSceneData {
   /** Everything Levels 1 and 2 produced, passed straight through to the result. */
@@ -51,6 +65,7 @@ export class BossScene extends Phaser.Scene {
   private player!: BossPlayer;
   private controls!: BossInput;
   private hud!: BossHud;
+  private emeralds!: EmeraldLayer;
   private bounds!: ArenaBounds;
   /** Canonical boss anchor before editor-authored presentation offsets. */
   private bossX = 0;
@@ -97,6 +112,7 @@ export class BossScene extends Phaser.Scene {
     // Demand-driven and idempotent, so a direct ?scene=boss works even
     // though Berlin was never entered.
     queueCharacterGameplay(this, getSelectedCharacter());
+    EmeraldLayer.queueAssets(this);
     for (const asset of getBossAssetUrls()) {
       if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
     }
@@ -119,6 +135,7 @@ export class BossScene extends Phaser.Scene {
     this.player = new BossPlayer(this, width / 2, getSelectedCharacter());
     this.controls = new BossInput(this, this.game.device.input.touch);
     this.hud = new BossHud(this);
+    this.emeralds = new EmeraldLayer(this);
 
     this.applyAuthoredPresentation();
 
@@ -226,9 +243,7 @@ export class BossScene extends Phaser.Scene {
 
   private showFightInstructions(): void {
     const { width, height } = this.cameras.main;
-    const hint = this.controls.isTouch
-      ? 'HOLD LEFT OR RIGHT TO MOVE'
-      : 'ARROWS OR A / D TO MOVE';
+    const hint = this.controls.isTouch ? 'HOLD LEFT OR RIGHT TO MOVE' : 'ARROWS OR A / D TO MOVE';
     this.introText = this.add
       .text(width / 2, height / 2 - 40, `DODGE THE BOSS\n\n${hint}\n\nSURVIVE THE FIGHT`, {
         fontFamily: 'Archivo Black',
@@ -284,6 +299,8 @@ export class BossScene extends Phaser.Scene {
     this.player.update(step, direction, now, this.bounds);
     const playerHitbox = this.player.damageHitbox;
 
+    this.collectEmeralds();
+
     const events = this.director.update(step, playerHitbox.centerX, playerHitbox.halfWidth);
     for (const event of events) this.handleFightEvent(event);
 
@@ -302,13 +319,20 @@ export class BossScene extends Phaser.Scene {
 
   private handleFightEvent(event: BossFightEvent): void {
     switch (event.kind) {
+      case 'telegraphStarted':
+        // The windup is the only time emeralds exist, so they are spawned by
+        // the same event that starts it rather than on a timer of their own.
+        this.spawnEmeraldsFor(event.attack);
+        break;
       case 'attackActivated':
+        // The laser is live: anything not already picked up is lost, now.
+        this.emeralds.clear();
         this.boss.pulse();
         break;
       case 'playerHit':
         this.player.onHit(this.time.now, event.beamCenterX);
         this.cameras.main.flash(120, 255, 71, 126).shake(180, 0.01);
-        this.hud.flash('-500', '#ff477e');
+        this.hud.flash(`-${BOSS_SCORING.hitPenalty}`, '#ff477e');
         break;
       case 'attackResolved':
         if (event.dodged && this.director.snapshot.score.combo >= 2) {
@@ -316,37 +340,58 @@ export class BossScene extends Phaser.Scene {
         }
         break;
       case 'phaseChanged':
-        this.boss.setPhaseTint(
-          BossPalette.phaseTints[
-            Math.min(BossPalette.phaseTints.length - 1, event.phase.index)
-          ],
-        );
         this.hud.flash(event.phase.label, '#ffdf57');
         break;
       case 'fightEnded':
-        this.endFight(event.survived);
+        this.endFight();
         break;
       default:
         break;
     }
   }
 
-  private endFight(survived: boolean): void {
+  /**
+   * Places this telegraph's emeralds.
+   *
+   * Seeded from the fight's own seed and the attack's id, so the same seed
+   * lays out the same emeralds — and does so independently of how many
+   * telegraphs have already fired, which keeps one attack's placement from
+   * depending on the order the others were drawn in.
+   */
+  private spawnEmeraldsFor(attack: ActiveAttack): void {
+    this.emeralds.spawn({
+      reachable: this.player.reachableCenterBounds(this.bounds),
+      playerCenterX: this.player.damageHitbox.centerX,
+      telegraphMs: attack.timing.telegraphMs,
+      random: createRandom(this.seed + attack.id * EMERALD_SEED_STRIDE),
+    });
+  }
+
+  private collectEmeralds(): void {
+    for (const emerald of this.emeralds.collect(this.player.collectibleBox)) {
+      this.director.collectEmerald();
+      this.hud.popScore(emerald.x, emerald.y, BOSS_SCORING.emeraldScore);
+    }
+  }
+
+  /**
+   * The fight only ever ends by running out of clock, so there is no losing
+   * branch here: the headline reports how cleanly it went, not whether it was
+   * survived.
+   */
+  private endFight(): void {
     if (this.finished) return;
     this.finished = true;
     this.running = false;
+    this.emeralds.clear();
     const { score } = this.director.result;
     const { width, height } = this.cameras.main;
-    const headline = survived
-      ? score.hits === 0
-        ? 'FLAWLESS'
-        : 'YOU SURVIVED'
-      : 'DOWNED';
+    const headline = score.hits === 0 ? 'FLAWLESS' : 'YOU SURVIVED';
     this.add
       .text(width / 2, height / 2 - 30, `${headline}\nBOSS SCORE  ${score.score}`, {
         fontFamily: 'Archivo Black',
         fontSize: '44px',
-        color: survived ? '#ffdf57' : '#ff477e',
+        color: '#ffdf57',
         align: 'center',
         stroke: '#55145e',
         strokeThickness: 8,
@@ -357,9 +402,10 @@ export class BossScene extends Phaser.Scene {
       this.scene.start('ResultScene', {
         ...this.rhythmResult,
         bossScore: score.score,
-        bossSurvived: survived,
         bossHits: score.hits,
         bossMaxCombo: score.maxCombo,
+        bossEmeralds: score.emeralds,
+        bossEmeraldScore: score.emeraldScore,
       });
     });
   }
@@ -367,6 +413,7 @@ export class BossScene extends Phaser.Scene {
   private cleanup(): void {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.controls?.destroy();
+    this.emeralds?.destroy();
     this.player?.destroy();
     this.boss?.destroy();
     this.attacks?.destroy();

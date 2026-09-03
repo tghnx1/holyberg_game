@@ -9,7 +9,13 @@ import {
   getAttackPhase,
   isPlayerHitByBeams,
 } from './attackRuntime';
-import { applyDodge, applyFightEnd, applyLaserHit, initialBossScoreState } from './BossScoreSystem';
+import {
+  applyDodge,
+  applyEmeraldPickup,
+  applyFightEnd,
+  applyLaserHit,
+  initialBossScoreState,
+} from './BossScoreSystem';
 import type { BossScoreState } from './BossScoreSystem';
 import { BOSS_PLAYER } from './bossConfig';
 import { buildFightPlan, getPhaseAt } from './fightSequence';
@@ -20,14 +26,13 @@ export type BossFightEvent =
   | { kind: 'telegraphStarted'; attack: ActiveAttack }
   | { kind: 'attackActivated'; attack: ActiveAttack }
   | { kind: 'attackResolved'; attack: ActiveAttack; dodged: boolean }
-  | { kind: 'playerHit'; attack: ActiveAttack; beamCenterX: number; hitPoints: number }
+  | { kind: 'playerHit'; attack: ActiveAttack; beamCenterX: number }
   | { kind: 'phaseChanged'; phase: BossPhaseDefinition }
-  | { kind: 'fightEnded'; survived: boolean };
+  | { kind: 'fightEnded' };
 
 export interface BossFightSnapshot {
   elapsedMs: number;
   remainingMs: number;
-  hitPoints: number;
   score: BossScoreState;
   phase: BossPhaseDefinition;
   finished: boolean;
@@ -39,12 +44,10 @@ export class BossFightDirector {
   private readonly live: ActiveAttack[] = [];
   private nextAttackIndex = 0;
   private scoreState = initialBossScoreState();
-  private hitPoints: number = BOSS_PLAYER.hitPoints;
   private invulnerableUntilMs = -Infinity;
   private elapsedMs = 0;
   private currentPhase: BossPhaseDefinition;
   private finished = false;
-  private survived = false;
 
   constructor(
     private readonly bounds: ArenaBounds,
@@ -58,7 +61,6 @@ export class BossFightDirector {
     return {
       elapsedMs: this.elapsedMs,
       remainingMs: Math.max(0, this.plan.totalDurationMs - this.elapsedMs),
-      hitPoints: this.hitPoints,
       score: this.scoreState,
       phase: this.currentPhase,
       finished: this.finished,
@@ -100,12 +102,10 @@ export class BossFightDirector {
     this.spawnDueAttacks(now, playerCenterX, events);
     this.advanceAttacks(now, playerCenterX, playerHalfWidth, events);
 
-    if (this.hitPoints <= 0) {
-      this.endFight(false, events);
-      return events;
-    }
+    // The only way a fight ends: its own clock runs out. There is no losing
+    // condition to check for, because the player cannot be downed.
     if (now >= this.plan.totalDurationMs && this.live.length === 0) {
-      this.endFight(true, events);
+      this.endFight(events);
     }
     return events;
   }
@@ -173,14 +173,13 @@ export class BossFightDirector {
     playerHalfWidth: number,
     events: BossFightEvent[],
   ): void {
-    // One hit per attack: a wall you are standing in should cost one HP, not
-    // one per frame.
+    // One hit per attack: a wall you are standing in should cost one penalty,
+    // not one per frame.
     if (attack.hitPlayer || this.isInvulnerable(now)) return;
     const beams = getAttackBeams(attack);
     if (!isPlayerHitByBeams(beams, playerCenterX, playerHalfWidth)) return;
 
     attack.hitPlayer = true;
-    this.hitPoints = Math.max(0, this.hitPoints - 1);
     this.scoreState = applyLaserHit(this.scoreState);
     this.invulnerableUntilMs = now + BOSS_PLAYER.invulnerabilityMs;
     const nearest = beams.reduce((closest, beam) =>
@@ -188,23 +187,29 @@ export class BossFightDirector {
         ? beam
         : closest,
     );
-    events.push({
-      kind: 'playerHit',
-      attack,
-      beamCenterX: nearest.centerX,
-      hitPoints: this.hitPoints,
-    });
+    events.push({ kind: 'playerHit', attack, beamCenterX: nearest.centerX });
   }
 
-  private endFight(survived: boolean, events: BossFightEvent[]): void {
+  private endFight(events: BossFightEvent[]): void {
     this.finished = true;
-    this.survived = survived;
-    this.scoreState = applyFightEnd(this.scoreState, survived);
-    events.push({ kind: 'fightEnded', survived });
+    this.scoreState = applyFightEnd(this.scoreState);
+    events.push({ kind: 'fightEnded' });
   }
 
-  get result(): { score: BossScoreState; survived: boolean } {
-    return { score: this.scoreState, survived: this.survived };
+  /**
+   * Banks one emerald.
+   *
+   * The scene owns where emeralds are and when the player touches one; the
+   * director owns the score, so pickups arrive here the same way dodges and
+   * hits are already accounted for rather than through a second score path.
+   */
+  collectEmerald(): void {
+    if (this.finished) return;
+    this.scoreState = applyEmeraldPickup(this.scoreState);
+  }
+
+  get result(): { score: BossScoreState } {
+    return { score: this.scoreState };
   }
 
   private clampToArena(x: number): number {

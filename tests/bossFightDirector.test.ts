@@ -59,8 +59,8 @@ describe('boss fight director', () => {
       guard += 1;
     }
     expect(elapsed).toBeGreaterThan(0);
-    const { score, survived } = director.result;
-    expect(survived).toBe(true);
+    const { score } = director.result;
+    expect(score.finished).toBe(true);
     expect(score.hits).toBe(0);
     expect(score.dodges).toBeGreaterThan(10);
     expect(score.score).toBeGreaterThan(
@@ -68,11 +68,14 @@ describe('boss fight director', () => {
     );
   });
 
-  it('a motionless player in the middle takes hits and can be downed', () => {
+  it('a motionless player takes hits and still reaches the end of the fight', () => {
     const director = simulate(() => 640);
-    const { score, survived } = director.result;
+    const { score } = director.result;
     expect(score.hits).toBeGreaterThan(0);
-    if (!survived) expect(director.snapshot.hitPoints).toBe(0);
+    // The whole point: no number of hits can cut the fight short.
+    expect(director.snapshot.finished).toBe(true);
+    expect(director.snapshot.elapsedMs).toBeGreaterThanOrEqual(director.totalDurationMs);
+    expect(score.finished).toBe(true);
   });
 
   it('uses the live visual hurtbox width supplied by the player renderer', () => {
@@ -95,15 +98,25 @@ describe('boss fight director', () => {
     expect(wideHits).toBe(1);
   });
 
-  it('ends the fight at zero HP without awarding survival bonuses', () => {
+  it('awards the survival bonus however many times the player was hit', () => {
     const director = simulate(() => 640);
-    if (director.snapshot.hitPoints === 0) {
-      expect(director.result.survived).toBe(false);
-      expect(director.snapshot.score.survived).toBe(false);
-    }
+    const { score } = director.result;
+    expect(score.hits).toBeGreaterThan(0);
+    // Hit repeatedly, so no flawless bonus — but the fight was still finished.
+    expect(score.score).toBeGreaterThanOrEqual(BOSS_SCORING.survivalBonus);
   });
 
-  it('grants invulnerability after a hit so one attack cannot drain all HP', () => {
+  it('banks emeralds through the same score state as dodges and hits', () => {
+    const director = new BossFightDirector(bounds, 1);
+    director.update(FRAME_MS, 640);
+    director.collectEmerald();
+    director.collectEmerald();
+    expect(director.snapshot.score.emeralds).toBe(2);
+    expect(director.snapshot.score.emeraldScore).toBe(BOSS_SCORING.emeraldScore * 2);
+    expect(director.snapshot.score.score).toBe(BOSS_SCORING.emeraldScore * 2);
+  });
+
+  it('grants invulnerability after a hit so one wall is not several penalties', () => {
     const director = new BossFightDirector(bounds, 1);
     let elapsed = 0;
     let firstHitAt = -1;

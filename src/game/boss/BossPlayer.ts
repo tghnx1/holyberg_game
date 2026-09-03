@@ -19,6 +19,7 @@ import {
   type BossPlayerMotion,
   type MoveDirection,
 } from './bossPlayerMovement';
+import type { CollectibleBox } from './emeraldField';
 import type { ArenaBounds } from './types';
 
 const ENTRANCE_FALL_DURATION_MS = 900;
@@ -112,6 +113,41 @@ export class BossPlayer {
    */
   motionBoundsWithin(arena: ArenaBounds): ArenaBounds {
     return resolvePlayerMotionBounds(arena, this.visibleHalfWidth, this.presentation);
+  }
+
+  /**
+   * Where the visible player's centre can actually get to, in world pixels.
+   *
+   * This — not the raw arena — is the band a collectible must sit inside to be
+   * reachable, since the drawn character stops short of both walls by its own
+   * half-width and rides the authored offset.
+   */
+  reachableCenterBounds(arena: ArenaBounds): ArenaBounds {
+    const motion = this.motionBoundsWithin(arena);
+    return {
+      minX: motion.minX + this.presentation.offsetX,
+      maxX: motion.maxX + this.presentation.offsetX,
+    };
+  }
+
+  /**
+   * The box a collectible is picked up with.
+   *
+   * Built from the drawn sprite rather than `BOSS_PLAYER.hitHalfWidth`: the
+   * laser hurtbox is a deliberately narrow torso strip, and running through an
+   * emerald should read as touching it with any part of the character. Width
+   * is the measured body, height the drawn sprite, so it follows every
+   * character, pose and editor-authored scale automatically.
+   */
+  get collectibleBox(): CollectibleBox {
+    const halfHeight = Math.abs(this.sprite.displayHeight) / 2;
+    return {
+      centerX: this.sprite.x,
+      // Origin is (0.5, 1): the sprite's y is at its feet.
+      centerY: this.sprite.y - halfHeight,
+      halfWidth: Math.max(this.visibleHalfWidth, 1),
+      halfHeight: Math.max(halfHeight, 1),
+    };
   }
 
   update(deltaMs: number, direction: MoveDirection, nowMs: number, arena: ArenaBounds): void {

@@ -1,13 +1,17 @@
 import Phaser from 'phaser';
 
 /**
- * Animated collectible art for Level 1.
+ * Animated collectible art, shared by every level that has pickups.
  *
- * Level 1 has exactly one collectible type — the Emerald — so this is a
- * single looping animation rather than a registry keyed by variant. It
- * mirrors obstacleAnimations.ts: the animation only swaps which texture
- * frame a Sprite shows and never touches physics, so the pickup zone
- * LevelBuilder creates from the level config is unaffected by frame count.
+ * The Emerald started as Level 1's only collectible and now also appears in
+ * the boss arena, so both the artwork and this loader live outside
+ * `level/berlin/`. There is still exactly one collectible type, so this is a
+ * single looping animation rather than a registry keyed by variant.
+ *
+ * The animation only swaps which texture frame a Sprite shows and never
+ * touches physics, so the pickup zones its callers build — LevelBuilder's from
+ * the Level 1 config, the boss arena's from its own placement rules — are
+ * unaffected by frame count.
  */
 
 export interface CollectibleAnimationDefinition {
@@ -39,7 +43,7 @@ export interface CollectibleAnimationAsset {
 export function getCollectibleAnimationAssetUrls(): CollectibleAnimationAsset[] {
   return EMERALD_ANIMATION.frameKeys.map((key, index) => ({
     key,
-    url: `assets/level_1/emerald ${index + 1}.png`,
+    url: `assets/collectibles/emerald/${String(index + 1).padStart(2, '0')}.png`,
   }));
 }
 

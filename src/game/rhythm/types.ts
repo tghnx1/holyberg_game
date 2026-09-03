@@ -72,7 +72,10 @@ export interface RhythmResult extends ScoreState {
   success: boolean;
   /** Level 3 boss fight. Absent when the result comes from an earlier level. */
   bossScore?: number;
-  bossSurvived?: boolean;
   bossHits?: number;
   bossMaxCombo?: number;
+  /** Emeralds collected during the boss fight's telegraphs. */
+  bossEmeralds?: number;
+  /** The part of `bossScore` those emeralds were worth. */
+  bossEmeraldScore?: number;
 }

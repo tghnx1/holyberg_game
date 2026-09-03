@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getActiveEndMs, getActiveStartMs, getAttackDurationMs } from '../src/game/boss/attackRuntime';
 import {
   ATTACK_SHAPES,
+  ATTACK_TIMINGS,
   BOSS_FIGHT_DURATION_MS,
   BOSS_PHASES,
   BOSS_PLAYER,
@@ -17,6 +18,47 @@ import {
 import type { ArenaBounds } from '../src/game/boss/types';
 
 const bounds: ArenaBounds = { minX: 70, maxX: 1210 };
+
+/**
+ * The fight was shortened by 30%. These pin *how*: less of the same fight,
+ * never a faster one, so a laser stays exactly as readable as it was.
+ */
+describe('fight length', () => {
+  /** Phase durations before the 30% cut, in schedule order. */
+  const PREVIOUS_PHASE_DURATIONS_MS = [22_000, 24_000, 26_000, 14_000];
+  const PREVIOUS_TOTAL_MS = PREVIOUS_PHASE_DURATIONS_MS.reduce((a, b) => a + b, 0);
+
+  it('runs for 70% of its previous total', () => {
+    expect(BOSS_FIGHT_DURATION_MS).toBe(Math.round(PREVIOUS_TOTAL_MS * 0.7));
+  });
+
+  it('takes the cut out of every phase, not one of them', () => {
+    BOSS_PHASES.forEach((phase, index) => {
+      expect(phase.durationMs).toBe(Math.round(PREVIOUS_PHASE_DURATIONS_MS[index] * 0.7));
+    });
+  });
+
+  it('shortens the fight by running fewer attacks, never faster ones', () => {
+    // The reaction window is the thing a player feels. None of it was spent
+    // buying the 30%: base timings, per-phase telegraph scales and the floor
+    // are all untouched.
+    expect(ATTACK_TIMINGS.aimedLaser.telegraphMs).toBe(820);
+    expect(ATTACK_TIMINGS.laserWall.telegraphMs).toBe(950);
+    expect(MINIMUM_TELEGRAPH_MS).toBe(520);
+    expect(BOSS_PHASES.map((phase) => phase.telegraphScale)).toEqual([1.35, 1.1, 0.95, 0.85]);
+    expect(BOSS_PHASES.map((phase) => phase.gapMs)).toEqual([900, 620, 480, 360]);
+  });
+
+  it('still gives every phase enough room for its whole pattern', () => {
+    const byPhase = new Map<number, number>();
+    for (const attack of buildFightPlan(bounds, 1).attacks) {
+      byPhase.set(attack.phaseIndex, (byPhase.get(attack.phaseIndex) ?? 0) + 1);
+    }
+    for (const phase of BOSS_PHASES) {
+      expect(byPhase.get(phase.index) ?? 0).toBeGreaterThanOrEqual(phase.pattern.length);
+    }
+  });
+});
 
 describe('fight plan', () => {
   it('is deterministic for a given seed', () => {

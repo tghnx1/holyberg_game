@@ -1,4 +1,4 @@
-import { COLLECTIBLE_ANIMATIONS } from './collectibleAnimations';
+import { COLLECTIBLE_ANIMATIONS } from '../../collectibles/collectibleAnimations';
 import { OBSTACLE_ANIMATIONS } from './obstacleAnimations';
 
 const ANIM_KEY_BY_SLOT: Record<string, string> = Object.fromEntries(

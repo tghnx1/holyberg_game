@@ -24,7 +24,6 @@ type EntranceState = 'buried' | 'spawning' | 'active';
  */
 export class BossRenderer {
   private readonly root: Phaser.GameObjects.Container;
-  private readonly phaseAura: Phaser.GameObjects.Arc;
   private readonly baby: Phaser.GameObjects.Sprite;
   private readonly energySphere: Phaser.GameObjects.Sprite;
   private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
@@ -39,20 +38,13 @@ export class BossRenderer {
     private readonly scene: Phaser.Scene,
     centerX: number,
   ) {
-    this.phaseAura = scene.add
-      .circle(0, BOSS_VISUAL.spriteOffsetY, 245)
-      .setStrokeStyle(8, 0x56ffff, 0.28);
     this.baby = scene.add.sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.baby.front[0].key);
     this.energySphere = scene.add
       .sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.energySphere[0].key)
       .setBlendMode(Phaser.BlendModes.ADD)
       .setVisible(false);
     this.root = scene.add
-      .container(centerX, BOSS_VISUAL.spawnStartY, [
-        this.phaseAura,
-        this.baby,
-        this.energySphere,
-      ])
+      .container(centerX, BOSS_VISUAL.spawnStartY, [this.baby, this.energySphere])
       .setScale(BOSS_VISUAL.scale)
       .setDepth(BossDepth.BOSS)
       .setVisible(false);
@@ -166,12 +158,6 @@ export class BossRenderer {
   /** Flash when an attack goes live, purely cosmetic. */
   pulse(): void {
     this.pulseUntilMs = this.scene.time.now + 220;
-  }
-
-  setPhaseTint(color: number): void {
-    // Keep the authored sprite colours intact; carry the existing phase cue
-    // on the aura that replaced the procedural boss ring.
-    this.phaseAura.setStrokeStyle(8, color, 0.34);
   }
 
   private showBabyFrame(facing: BossFacing, frameIndex: number): void {

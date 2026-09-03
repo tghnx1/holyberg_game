@@ -1,12 +1,17 @@
 import Phaser from 'phaser';
-import { BOSS_PLAYER } from './bossConfig';
 import { BossDepth, BossPalette } from './bossConstants';
 import type { BossFightSnapshot } from './BossFightDirector';
 
-/** HP pips, score, combo, phase label and the fight timer. */
+/**
+ * Score, emeralds, combo, phase label and the fight timer.
+ *
+ * No HP pips: the player cannot be downed here, and a life counter that never
+ * reaches zero is worse than none — it promises a failure state the fight does
+ * not have.
+ */
 export class BossHud {
-  private readonly hearts: Phaser.GameObjects.Arc[] = [];
   private readonly scoreText: Phaser.GameObjects.Text;
+  private readonly emeraldText: Phaser.GameObjects.Text;
   private readonly comboText: Phaser.GameObjects.Text;
   private readonly phaseText: Phaser.GameObjects.Text;
   private readonly timerBar: Phaser.GameObjects.Rectangle;
@@ -15,18 +20,13 @@ export class BossHud {
 
   constructor(private readonly scene: Phaser.Scene) {
     const width = scene.cameras.main.width;
-    for (let index = 0; index < BOSS_PLAYER.hitPoints; index += 1) {
-      this.hearts.push(
-        scene.add
-          .circle(30 + index * 34, 34, 13, BossPalette.laser)
-          .setStrokeStyle(3, 0xffffff, 0.85)
-          .setDepth(BossDepth.UI),
-      );
-    }
     const label = { fontFamily: 'Space Mono', fontSize: '18px', color: '#ffffff' } as const;
-    this.scoreText = scene.add.text(20, 60, 'SCORE  0', label).setDepth(BossDepth.UI);
+    this.scoreText = scene.add.text(20, 26, 'SCORE  0', label).setDepth(BossDepth.UI);
+    this.emeraldText = scene.add
+      .text(20, 50, 'EMERALDS  0', { ...label, color: '#56ffb0' })
+      .setDepth(BossDepth.UI);
     this.comboText = scene.add
-      .text(20, 84, '', { ...label, color: '#ffdf57' })
+      .text(20, 74, '', { ...label, color: '#ffdf57' })
       .setDepth(BossDepth.UI);
     this.phaseText = scene.add
       .text(width / 2, 22, 'PHASE 1', {
@@ -56,12 +56,8 @@ export class BossHud {
   }
 
   update(snapshot: BossFightSnapshot): void {
-    this.hearts.forEach((heart, index) => {
-      const alive = index < snapshot.hitPoints;
-      heart.setFillStyle(alive ? BossPalette.laser : 0x2a1440);
-      heart.setAlpha(alive ? 1 : 0.5);
-    });
     this.scoreText.setText(`SCORE  ${snapshot.score.score}`);
+    this.emeraldText.setText(`EMERALDS  ${snapshot.score.emeralds}`);
     this.comboText.setText(snapshot.score.combo >= 2 ? `DODGE x${snapshot.score.combo}` : '');
     this.phaseText.setText(snapshot.phase.label);
     const total = Math.max(1, snapshot.elapsedMs + snapshot.remainingMs);
@@ -76,6 +72,32 @@ export class BossHud {
       alpha: 0,
       duration: 700,
       delay: 260,
+    });
+  }
+
+  /**
+   * A small `+100` rising from where the emerald was.
+   *
+   * At the pickup rather than in the corner: the player's eyes are on their
+   * character mid-sprint, and a number in the HUD would be missed entirely.
+   */
+  popScore(x: number, y: number, amount: number): void {
+    const text = this.scene.add
+      .text(x, y, `+${amount}`, {
+        fontFamily: 'Archivo Black',
+        fontSize: '22px',
+        color: '#56ffb0',
+        stroke: '#0b2d1e',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5)
+      .setDepth(BossDepth.UI);
+    this.scene.tweens.add({
+      targets: text,
+      y: y - 52,
+      alpha: 0,
+      duration: 620,
+      onComplete: () => text.destroy(),
     });
   }
 

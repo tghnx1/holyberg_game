@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyDodge,
+  applyEmeraldPickup,
   applyFightEnd,
   applyLaserHit,
   getBossMultiplier,
@@ -45,18 +46,43 @@ describe('boss scoring', () => {
   });
 
   it('adds the survival bonus, and the flawless bonus only with zero hits', () => {
-    const clean = applyFightEnd(applyDodge(initialBossScoreState()), true);
+    const clean = applyFightEnd(applyDodge(initialBossScoreState()));
     expect(clean.score).toBe(100 + 2000 + 5000);
-    expect(clean.survived).toBe(true);
+    expect(clean.finished).toBe(true);
 
-    const hurt = applyFightEnd(applyLaserHit(applyDodge(initialBossScoreState())), true);
+    const hurt = applyFightEnd(applyLaserHit(applyDodge(initialBossScoreState())));
     expect(hurt.score).toBe(2000);
   });
 
-  it('awards no end bonuses when the player is downed', () => {
-    const downed = applyFightEnd(applyDodge(initialBossScoreState()), false);
-    expect(downed.score).toBe(100);
-    expect(downed.survived).toBe(false);
+  it('always reaches the end: being hit costs points, never the run', () => {
+    // There is no downed branch to award nothing, because there is no downing.
+    let state = initialBossScoreState();
+    for (let index = 0; index < 20; index += 1) state = applyLaserHit(state);
+    expect(state.hits).toBe(20);
+
+    const ended = applyFightEnd(state);
+    expect(ended.finished).toBe(true);
+    expect(ended.score).toBe(BOSS_SCORING.survivalBonus);
+  });
+
+  it('awards a flat emerald value and tracks it separately from the total', () => {
+    let state = applyDodge(initialBossScoreState());
+    state = applyEmeraldPickup(state);
+    state = applyEmeraldPickup(state);
+
+    expect(state.emeralds).toBe(2);
+    expect(state.emeraldScore).toBe(BOSS_SCORING.emeraldScore * 2);
+    expect(state.score).toBe(100 + BOSS_SCORING.emeraldScore * 2);
+    // Emeralds are outside the dodge economy: no combo, no multiplier.
+    expect(state.combo).toBe(1);
+  });
+
+  it('does not let a dodge combo multiply emerald value', () => {
+    let combo = initialBossScoreState();
+    for (let index = 0; index < 12; index += 1) combo = applyDodge(combo);
+    const before = combo.score;
+    expect(getBossMultiplier(combo.combo)).toBe(4);
+    expect(applyEmeraldPickup(combo).score).toBe(before + BOSS_SCORING.emeraldScore);
   });
 
   it('folds the boss score into the leaderboard total without changing levels 1-2', () => {

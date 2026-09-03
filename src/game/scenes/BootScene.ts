@@ -17,7 +17,7 @@ import {
 import {
   createCollectibleAnimations,
   getCollectibleAnimationAssetUrls,
-} from '../level/berlin/collectibleAnimations';
+} from '../collectibles/collectibleAnimations';
 import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/sceneryAssets';
 import { getLevel4AssetUrls } from '../level/level4/level4Assets';
 import { createEmptyRhythmResult } from '../level/level4/level4Flow';

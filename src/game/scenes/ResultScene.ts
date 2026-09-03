@@ -132,9 +132,10 @@ export class ResultScene extends Phaser.Scene {
     if (this.result.bossScore !== undefined) {
       lines.push(
         '',
-        `BOSS FIGHT         ${this.result.bossSurvived ? 'SURVIVED' : 'DOWNED'}`,
         `LASER HITS         ${this.result.bossHits ?? 0}`,
         `BOSS MAX COMBO     ${this.result.bossMaxCombo ?? 0}`,
+        `EMERALDS           ${this.result.bossEmeralds ?? 0}`,
+        `EMERALD SCORE      ${this.result.bossEmeraldScore ?? 0}`,
       );
     }
     return lines.join('\n');
