@@ -6,6 +6,7 @@ import {
   getOptimizedBerlinBackgroundUrl,
   type AssetQualityProfile,
 } from '../src/game/responsive/AssetQuality';
+import { getLevel4AssetUrls } from '../src/game/level/level4/level4Assets';
 
 describe('Berlin background asset quality', () => {
   it('selects mobile assets for an iPhone 13 landscape viewport', () => {
@@ -92,4 +93,17 @@ describe('Berlin background asset quality', () => {
       }
     },
   );
+});
+
+describe('Holyworld asset quality', () => {
+  it('uses generated backgrounds on touch profiles without changing the texture key', () => {
+    const desktop = getLevel4AssetUrls('desktop')[0];
+    const mobile = getLevel4AssetUrls('mobile')[0];
+    const medium = getLevel4AssetUrls('medium')[0];
+
+    expect(mobile.key).toBe(desktop.key);
+    expect(medium.key).toBe(desktop.key);
+    expect(mobile.url).toBe('assets/generated/level4/holyworld-background.mobile.webp');
+    expect(medium.url).toBe('assets/generated/level4/holyworld-background.medium.webp');
+  });
 });

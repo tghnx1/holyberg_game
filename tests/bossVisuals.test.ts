@@ -21,6 +21,14 @@ describe('boss visual assets', () => {
       expect(existsSync(join(process.cwd(), 'public', asset.url))).toBe(true);
     }
   });
+
+  it('keeps texture keys but selects generated WebP on mobile', () => {
+    const desktop = getBossAssetUrls('desktop');
+    const mobile = getBossAssetUrls('mobile');
+    expect(mobile.map((asset) => asset.key)).toEqual(desktop.map((asset) => asset.key));
+    expect(mobile.every((asset) => asset.url.endsWith('.mobile.webp'))).toBe(true);
+    expect(mobile.every((asset) => asset.url.startsWith('assets/generated/boss/'))).toBe(true);
+  });
 });
 
 describe('boss orientation', () => {
@@ -84,14 +92,18 @@ describe('boss orientation', () => {
 
 describe('boss-local effect anchors', () => {
   it('moves and scales a child anchor with the boss transform', () => {
-    expect(resolveAttachedBossPoint(
-      { x: 10, y: 20 },
-      { x: 300, y: 100, scaleX: 2, scaleY: 2, rotation: 0 },
-    )).toEqual({ x: 320, y: 140 });
+    expect(
+      resolveAttachedBossPoint(
+        { x: 10, y: 20 },
+        { x: 300, y: 100, scaleX: 2, scaleY: 2, rotation: 0 },
+      ),
+    ).toEqual({ x: 320, y: 140 });
 
-    expect(resolveAttachedBossPoint(
-      { x: 10, y: 20 },
-      { x: 500, y: 250, scaleX: 3, scaleY: 3, rotation: 0 },
-    )).toEqual({ x: 530, y: 310 });
+    expect(
+      resolveAttachedBossPoint(
+        { x: 10, y: 20 },
+        { x: 500, y: 250, scaleX: 3, scaleY: 3, rotation: 0 },
+      ),
+    ).toEqual({ x: 530, y: 310 });
   });
 });

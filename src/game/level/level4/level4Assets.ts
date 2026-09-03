@@ -1,3 +1,5 @@
+import type { AssetQualityProfile } from '../../responsive/AssetQuality';
+
 export const LEVEL4_ASSET_KEYS = {
   holyworldBackground: 'level4-holyworld-background',
   toiletStrip: 'level4-toilet-strip',
@@ -26,11 +28,14 @@ export interface Level4ImageAsset {
   url: string;
 }
 
-export function getLevel4AssetUrls(): Level4ImageAsset[] {
+export function getLevel4AssetUrls(profile: AssetQualityProfile = 'desktop'): Level4ImageAsset[] {
   return [
     {
       key: LEVEL4_ASSET_KEYS.holyworldBackground,
-      url: 'assets/level_4/holyworld-background.png',
+      url:
+        profile === 'desktop'
+          ? 'assets/level_4/holyworld-background.png'
+          : `assets/generated/level4/holyworld-background.${profile}.webp`,
     },
     // 2x nearest-neighbour upscale of the authored toilet-full.png, as WebP.
     // The renderer samples bilinearly (`pixelArt: false`) and Level 4 draws the

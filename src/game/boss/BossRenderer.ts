@@ -32,17 +32,21 @@ export class BossRenderer {
   private facing: BossFacing = 'front';
   private currentBabyKey?: string;
   private currentSphereKey?: string;
+  private energyVisualScale: number = BOSS_VISUAL.energyScale;
   private pulseUntilMs = -Infinity;
 
   constructor(
     private readonly scene: Phaser.Scene,
     centerX: number,
   ) {
-    this.baby = scene.add.sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.baby.front[0].key);
+    this.baby = scene.add
+      .sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.baby.front[0].key)
+      .setDisplaySize(BOSS_VISUAL.sourceWidth, BOSS_VISUAL.sourceHeight);
     this.energySphere = scene.add
       .sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.energySphere[0].key)
       .setBlendMode(Phaser.BlendModes.ADD)
       .setVisible(false);
+    this.setEnergyDisplayScale(this.energyVisualScale);
     this.root = scene.add
       .container(centerX, BOSS_VISUAL.spawnStartY, [this.baby, this.energySphere])
       .setScale(BOSS_VISUAL.scale)
@@ -76,10 +80,10 @@ export class BossRenderer {
    * pulse with no separately maintained absolute scene coordinate.
    */
   get energySphereWorldCenter(): { x: number; y: number } {
-    const localX = this.energySphere.x
-      + BOSS_VISUAL.energyArtworkCenterOffsetX * this.energySphere.scaleX;
-    const localY = this.energySphere.y
-      + BOSS_VISUAL.energyArtworkCenterOffsetY * this.energySphere.scaleY;
+    const localX =
+      this.energySphere.x + BOSS_VISUAL.energyArtworkCenterOffsetX * this.energyVisualScale;
+    const localY =
+      this.energySphere.y + BOSS_VISUAL.energyArtworkCenterOffsetY * this.energyVisualScale;
     return resolveAttachedBossPoint(
       { x: localX, y: localY },
       {
@@ -134,21 +138,12 @@ export class BossRenderer {
       x = anchor.x;
       y = anchor.y;
       // Fed its own current facing so the front zone is sticky at its edges.
-      this.facing = resolveBossFacing(
-        playerX,
-        centerX + this.presentation.offsetX,
-        this.facing,
-      );
-      this.showBabyFrame(
-        this.facing,
-        loopedBossFrameIndex(nowMs, BOSS_VISUAL.animationCycleMs),
-      );
+      this.facing = resolveBossFacing(playerX, centerX + this.presentation.offsetX, this.facing);
+      this.showBabyFrame(this.facing, loopedBossFrameIndex(nowMs, BOSS_VISUAL.animationCycleMs));
       this.updateEnergySphere(nowMs, charging);
     }
 
-    const pulse = nowMs < this.pulseUntilMs
-      ? 1 + 0.06 * ((this.pulseUntilMs - nowMs) / 220)
-      : 1;
+    const pulse = nowMs < this.pulseUntilMs ? 1 + 0.06 * ((this.pulseUntilMs - nowMs) / 220) : 1;
     this.root.x = x + this.presentation.offsetX;
     this.root.y = y + this.presentation.offsetY;
     this.root.rotation = rotation;
@@ -164,20 +159,29 @@ export class BossRenderer {
     const frame = getBossBabyFrames(facing)[frameIndex];
     if (frame.key === this.currentBabyKey) return;
     this.baby.setTexture(frame.key);
+    this.baby.setDisplaySize(BOSS_VISUAL.sourceWidth, BOSS_VISUAL.sourceHeight);
     this.currentBabyKey = frame.key;
   }
 
   private updateEnergySphere(nowMs: number, charging: boolean): void {
     this.energySphere.setVisible(charging);
     if (!charging) return;
-    const frame = BOSS_ART.energySphere[
-      loopedBossFrameIndex(nowMs, BOSS_VISUAL.energyCycleMs)
-    ];
+    const frame = BOSS_ART.energySphere[loopedBossFrameIndex(nowMs, BOSS_VISUAL.energyCycleMs)];
     if (frame.key !== this.currentSphereKey) {
       this.energySphere.setTexture(frame.key);
       this.currentSphereKey = frame.key;
     }
-    this.energySphere.setScale(BOSS_VISUAL.energyScale + Math.sin(nowMs / 80) * 0.035);
+    this.energyVisualScale = BOSS_VISUAL.energyScale + Math.sin(nowMs / 80) * 0.035;
+    this.setEnergyDisplayScale(this.energyVisualScale);
+  }
+
+  private setEnergyDisplayScale(scale: number): void {
+    const textureWidth = Math.max(1, this.energySphere.frame.realWidth);
+    const textureHeight = Math.max(1, this.energySphere.frame.realHeight);
+    this.energySphere.setScale(
+      (BOSS_VISUAL.sourceWidth / textureWidth) * scale,
+      (BOSS_VISUAL.sourceHeight / textureHeight) * scale,
+    );
   }
 
   destroy(): void {

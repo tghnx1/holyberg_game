@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import {
-  getAssetQualityProfile,
   getBerlinBackgroundAssetUrls,
+  getRuntimeAssetQualityProfile,
 } from '../responsive/AssetQuality';
 import {
   RHYTHM_DECK_TEXTURE_KEY,
@@ -24,25 +24,6 @@ import { createEmptyRhythmResult } from '../level/level4/level4Flow';
 import { CLUB_ROOMS } from '../level/club/clubRooms';
 import { selectFallbackCharacter } from '../characters/characterSelection';
 
-function getMaxTextureSize(game: Phaser.Game): number | undefined {
-  const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
-  const gl = renderer.gl;
-  if (!gl) return undefined;
-  const value: unknown = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  return typeof value === 'number' ? value : undefined;
-}
-
-function getViewportDimensions(scale: Phaser.Scale.ScaleManager): {
-  width: number;
-  height: number;
-} {
-  const viewport = window.visualViewport;
-  return {
-    width: viewport?.width ?? scale.parentSize.width ?? window.innerWidth,
-    height: viewport?.height ?? scale.parentSize.height ?? window.innerHeight,
-  };
-}
-
 export class BootScene extends Phaser.Scene {
   /** Preloader/router only; there is nothing here for a pause menu to freeze. */
   static readonly pausable = false;
@@ -52,14 +33,7 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    const viewport = getViewportDimensions(this.scale);
-    const qualityProfile = getAssetQualityProfile({
-      viewportWidth: viewport.width,
-      viewportHeight: viewport.height,
-      touchCapable: this.game.device.input.touch,
-      coarsePointer: window.matchMedia?.('(pointer: coarse)').matches ?? false,
-      maxTextureSize: getMaxTextureSize(this.game),
-    });
+    const qualityProfile = getRuntimeAssetQualityProfile(this.game, this.scale);
     for (const asset of getBerlinBackgroundAssetUrls(qualityProfile)) {
       this.load.image(asset.key, asset.url);
     }
@@ -90,7 +64,7 @@ export class BootScene extends Phaser.Scene {
     for (const asset of getSceneryAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
-    for (const asset of getLevel4AssetUrls()) {
+    for (const asset of getLevel4AssetUrls(qualityProfile)) {
       this.load.image(asset.key, asset.url);
     }
     // Room stills only, ~200 KB for all three. The videos themselves are

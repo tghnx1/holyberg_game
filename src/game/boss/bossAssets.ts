@@ -1,5 +1,7 @@
 /** Canonical, demand-loaded artwork for the existing boss fight. */
 
+import type { AssetQualityProfile } from '../responsive/AssetQuality';
+
 /**
  * Which way the boss is *looking*, from the fight's point of view.
  *
@@ -68,11 +70,12 @@ export const BOSS_VISUAL = {
 /** The platform's first non-transparent row, measured from the source PNG. */
 export const BOSS_PLATFORM = {
   sourceWidth: 1672,
+  sourceHeight: 941,
   visibleTopRow: 391,
 } as const;
 
-export function getBossAssetUrls(): BossImageAsset[] {
-  return [
+export function getBossAssetUrls(profile: AssetQualityProfile = 'desktop'): BossImageAsset[] {
+  const assets: BossImageAsset[] = [
     ...BOSS_ART.baby.left,
     ...BOSS_ART.baby.front,
     ...BOSS_ART.baby.right,
@@ -80,6 +83,13 @@ export function getBossAssetUrls(): BossImageAsset[] {
     ...BOSS_ART.laser,
     BOSS_ART.platform,
   ];
+  if (profile === 'desktop') return assets;
+  return assets.map((asset) => ({
+    key: asset.key,
+    url: asset.url
+      .replace(/^assets\/boss\//, 'assets/generated/boss/')
+      .replace(/\.png$/, `.${profile}.webp`),
+  }));
 }
 
 /** Screen-space facing to the artwork that actually looks that way. */

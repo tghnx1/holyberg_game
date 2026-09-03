@@ -1,4 +1,5 @@
 import berlinBackgroundAssets from '../assets/berlinBackgroundAssets.json';
+import type Phaser from 'phaser';
 
 export type AssetQualityProfile = 'mobile' | 'medium' | 'desktop';
 
@@ -56,6 +57,24 @@ export function getAssetQualityProfile({
   }
   if (touchOrCoarse) return 'medium';
   return textureCapProfile;
+}
+
+/** Reads runtime capabilities once before an asset group is queued. */
+export function getRuntimeAssetQualityProfile(
+  game: Phaser.Game,
+  scale: Phaser.Scale.ScaleManager,
+): AssetQualityProfile {
+  const renderer = game.renderer as unknown as { gl?: WebGLRenderingContext };
+  const gl = renderer.gl;
+  const rawTextureSize = gl?.getParameter(gl.MAX_TEXTURE_SIZE) as unknown;
+  const viewport = window.visualViewport;
+  return getAssetQualityProfile({
+    viewportWidth: viewport?.width ?? scale.parentSize.width ?? window.innerWidth,
+    viewportHeight: viewport?.height ?? scale.parentSize.height ?? window.innerHeight,
+    touchCapable: game.device.input.touch,
+    coarsePointer: window.matchMedia?.('(pointer: coarse)').matches ?? false,
+    maxTextureSize: typeof rawTextureSize === 'number' ? rawTextureSize : undefined,
+  });
 }
 
 /** Builds the generated URL without consulting browser or Phaser state. */

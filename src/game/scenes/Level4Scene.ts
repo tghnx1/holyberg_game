@@ -17,6 +17,7 @@ import { getSelectedCharacter } from '../characters/characterSelection';
 import { getCharacter } from '../characters/characterRegistry';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
 import type { RhythmResult } from '../rhythm/types';
@@ -393,7 +394,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.npcCharacter = this.npcId ? getCharacter(this.npcId) : chooseLevel4NpcCharacter(this.playerCharacter);
     queueCharacterGameplay(this, this.playerCharacter);
     queueCharacterGameplay(this, this.npcCharacter);
-    for (const asset of getLevel4AssetUrls()) this.load.image(asset.key, asset.url);
+    const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
+    for (const asset of getLevel4AssetUrls(profile)) {
+      if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
+    }
   }
 
   create(): void {
@@ -448,7 +452,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     // visible through that transparent/broken edge rather than dominating
     // the screen from the start. It is drawn at the toilet strip's own
     // native pixel scale so it tiles seamlessly to the end of the level.
-    const tileScale = DESIGN_HEIGHT / HOLYWORLD_BG_HEIGHT;
+    const textureSource = this.textures
+      .get(LEVEL4_ASSET_KEYS.holyworldBackground)
+      .getSourceImage() as { height?: number };
+    const tileScale = DESIGN_HEIGHT / (textureSource.height ?? HOLYWORLD_BG_HEIGHT);
     const width = LEVEL4_WORLD_WIDTH - DISSOLVE_START_X;
     this.holyworldBackground = this.add
       .tileSprite(DISSOLVE_START_X, 0, width, DESIGN_HEIGHT, LEVEL4_ASSET_KEYS.holyworldBackground)

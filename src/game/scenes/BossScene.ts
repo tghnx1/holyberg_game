@@ -15,6 +15,7 @@ import { BossDepth, BossPalette } from '../boss/bossConstants';
 import type { ActiveAttack, ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 import type { RhythmResult } from '../rhythm/types';
 import type { EditorSavePayload } from '../systems/editableSceneContract';
 import { designPointFromLayout, layoutRatiosFromDesignPoint } from '../systems/designSpace';
@@ -107,7 +108,8 @@ export class BossScene extends Phaser.Scene {
     // though Berlin was never entered.
     queueCharacterGameplay(this, getSelectedCharacter());
     EmeraldLayer.queueAssets(this);
-    for (const asset of getBossAssetUrls()) {
+    const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
+    for (const asset of getBossAssetUrls(profile)) {
       if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
     }
   }
