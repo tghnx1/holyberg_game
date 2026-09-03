@@ -24,8 +24,8 @@ export const BOSS_PLAYER = {
   moveSpeed: 430,
   /** Acceleration ramp keeps input responsive without feeling slippery. */
   accelerationPxPerSecond2: 4200,
-  /** Half-width of the damage box; narrower than the sprite so hits feel fair. */
-  hitHalfWidth: 22,
+  /** Half-width of the damage box; kept close to the visible character torso. */
+  hitHalfWidth: 14,
   knockbackSpeed: 300,
   knockbackDurationMs: 180,
   invulnerabilityMs: 1100,

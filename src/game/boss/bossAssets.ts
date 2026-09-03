@@ -43,8 +43,6 @@ export const BOSS_VISUAL = {
   sourceHeight: 864,
   scale: 0.36,
   spriteOffsetY: 38,
-  facingThresholdPx: 72,
-  facingHysteresisPx: 18,
   animationCycleMs: 480,
   spawnFrameMs: 90,
   spawnDurationMs: 1250,
@@ -71,23 +69,13 @@ export function getBossAssetUrls(): BossImageAsset[] {
   ];
 }
 
-/**
- * Resolves the boss pose with a small hysteresis band. Once it looks left or
- * right, the player must move back inside the inner threshold before the boss
- * returns to front, preventing one-pixel pose flicker at the boundary.
- */
+/** Resolves the ordinary battle pose directly from the player's position. */
 export function resolveBossFacing(
   playerX: number,
   bossX: number,
-  current: BossFacing,
-  threshold = BOSS_VISUAL.facingThresholdPx,
-  hysteresis = BOSS_VISUAL.facingHysteresisPx,
 ): BossFacing {
-  const delta = playerX - bossX;
-  if (current === 'left' && delta < -threshold + hysteresis) return 'left';
-  if (current === 'right' && delta > threshold - hysteresis) return 'right';
-  if (delta < -threshold) return 'left';
-  if (delta > threshold) return 'right';
+  if (playerX < bossX) return 'left';
+  if (playerX > bossX) return 'right';
   return 'front';
 }
 

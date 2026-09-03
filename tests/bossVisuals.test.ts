@@ -23,19 +23,15 @@ describe('boss orientation', () => {
   const bossX = 640;
 
   it('looks left, right or front from player position', () => {
-    expect(resolveBossFacing(500, bossX, 'front')).toBe('left');
-    expect(resolveBossFacing(780, bossX, 'front')).toBe('right');
-    expect(resolveBossFacing(640, bossX, 'left')).toBe('front');
+    expect(resolveBossFacing(500, bossX)).toBe('left');
+    expect(resolveBossFacing(780, bossX)).toBe('right');
+    expect(resolveBossFacing(640, bossX)).toBe('front');
   });
 
-  it('uses hysteresis so the pose cannot flicker at a threshold', () => {
-    expect(resolveBossFacing(bossX - 73, bossX, 'front')).toBe('left');
-    expect(resolveBossFacing(bossX - 60, bossX, 'left')).toBe('left');
-    expect(resolveBossFacing(bossX - 53, bossX, 'left')).toBe('front');
-
-    expect(resolveBossFacing(bossX + 73, bossX, 'front')).toBe('right');
-    expect(resolveBossFacing(bossX + 60, bossX, 'right')).toBe('right');
-    expect(resolveBossFacing(bossX + 53, bossX, 'right')).toBe('front');
+  it('always follows the current player side during ordinary combat', () => {
+    expect(resolveBossFacing(bossX - 1, bossX)).toBe('left');
+    expect(resolveBossFacing(bossX + 1, bossX)).toBe('right');
+    expect(resolveBossFacing(bossX, bossX)).toBe('front');
   });
 
   it('alternates left and right frames throughout the rise', () => {

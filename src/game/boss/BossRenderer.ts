@@ -118,7 +118,6 @@ export class BossRenderer {
       this.facing = resolveBossFacing(
         playerX,
         centerX + this.presentation.offsetX,
-        this.facing,
       );
       this.showBabyFrame(
         this.facing,

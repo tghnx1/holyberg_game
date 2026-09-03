@@ -113,7 +113,7 @@ export class BossScene extends Phaser.Scene {
     this.bossX = width / 2;
     this.director = new BossFightDirector(this.bounds, this.seed);
     this.arena = new BossArena(this);
-    this.arena.redraw(this.bounds);
+    this.arena.redraw();
     this.boss = new BossRenderer(this, width / 2);
     this.attacks = new AttackRenderer(this);
     this.player = new BossPlayer(this, width / 2, getSelectedCharacter());
@@ -255,7 +255,7 @@ export class BossScene extends Phaser.Scene {
    * walls the player is dodging between. Only the presentation reflows.
    */
   private handleResize(): void {
-    this.arena.redraw(this.bounds);
+    this.arena.redraw();
     this.hud.reposition(this.cameras.main.width);
   }
 

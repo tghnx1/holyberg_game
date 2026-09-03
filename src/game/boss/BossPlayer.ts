@@ -48,12 +48,12 @@ export class BossPlayer {
     private readonly character: CharacterDefinition,
   ) {
     this.motion = createBossPlayerMotion(startX);
-    const { idle, run } = character.gameplay;
-    const initial = idle ?? run[staticRunFrameIndex(run.length)];
+    const { damage, idle, run } = character.gameplay;
+    const initial = damage[0] ?? idle ?? run[staticRunFrameIndex(run.length)];
     this.sprite = scene.add
       .sprite(startX, BOSS_ARENA.floorY, initial.key)
       .setOrigin(0.5, 1)
-      .setScale(resolveGameplayScale(character, idle ? 'idle' : 'run'))
+      .setScale(resolveGameplayScale(character, damage[0] ? 'damage' : idle ? 'idle' : 'run'))
       .setDepth(BossDepth.PLAYER);
   }
 
@@ -148,6 +148,9 @@ export class BossPlayer {
     direction: MoveDirection,
   ): { frame: CharacterAssetRef; pose: BossPlayerPose } {
     const { idle, run, damage } = this.character.gameplay;
+    if (!this.isEntranceComplete(nowMs) && this.entranceStartedAtMs !== undefined && damage.length > 0) {
+      return { frame: damage[0], pose: 'damage' };
+    }
     if (nowMs < this.damageFrameUntilMs && damage.length > 0) {
       return { frame: damage[0], pose: 'damage' };
     }
