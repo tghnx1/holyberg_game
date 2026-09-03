@@ -13,7 +13,9 @@ import { BossDepth } from './bossConstants';
 import {
   applyKnockback,
   createBossPlayerMotion,
+  resolvePlayerMotionBounds,
   stepBossPlayer,
+  visiblePlayerHalfWidth,
   type BossPlayerMotion,
   type MoveDirection,
 } from './bossPlayerMovement';
@@ -38,6 +40,8 @@ export class BossPlayer {
   private readonly sprite: Phaser.GameObjects.Sprite;
   private currentFrameKey?: string;
   private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
+  /** Cached with the presentation; only those two inputs can change it. */
+  private visibleHalfWidth = 0;
   private damageFrameUntilMs = -Infinity;
   private currentPose: BossPlayerPose = 'idle';
   private entranceStartedAtMs?: number;
@@ -48,6 +52,7 @@ export class BossPlayer {
     private readonly character: CharacterDefinition,
   ) {
     this.motion = createBossPlayerMotion(startX);
+    this.visibleHalfWidth = visiblePlayerHalfWidth(character, 1);
     const { damage, idle, run } = character.gameplay;
     const initial = damage[0] ?? idle ?? run[staticRunFrameIndex(run.length)];
     this.sprite = scene.add
@@ -101,8 +106,22 @@ export class BossPlayer {
     });
   }
 
-  update(deltaMs: number, direction: MoveDirection, nowMs: number, bounds: ArenaBounds): void {
-    this.motion = stepBossPlayer(this.motion, deltaMs, direction, nowMs, bounds);
+  /**
+   * The arena walls the *drawn* character off, not its motion anchor, so the
+   * anchor's own limits are derived from the live presentation every frame.
+   */
+  motionBoundsWithin(arena: ArenaBounds): ArenaBounds {
+    return resolvePlayerMotionBounds(arena, this.visibleHalfWidth, this.presentation);
+  }
+
+  update(deltaMs: number, direction: MoveDirection, nowMs: number, arena: ArenaBounds): void {
+    this.motion = stepBossPlayer(
+      this.motion,
+      deltaMs,
+      direction,
+      nowMs,
+      this.motionBoundsWithin(arena),
+    );
     const resolved = this.resolveFrame(nowMs, direction);
     const { frame } = resolved;
     this.currentPose = resolved.pose;
@@ -152,6 +171,7 @@ export class BossPlayer {
   /** Applies the authored visual offset/scale; re-read on every update. */
   setPresentation(presentation: { offsetX: number; offsetY: number; scale: number }): void {
     this.presentation = presentation;
+    this.visibleHalfWidth = visiblePlayerHalfWidth(this.character, presentation.scale);
   }
 
   private resolveScale(pose: BossPlayerPose): number {

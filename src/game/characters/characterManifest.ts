@@ -41,6 +41,22 @@ export interface CharacterAssetRef {
    * bounding box unless the character overrides it.
    */
   footGap: number;
+  /**
+   * Half-width of the *drawn* artwork, measured from the frame's horizontal
+   * centre in source pixels.
+   *
+   * Frames carry a lot of transparent side padding — Atmos's idle is a 195px
+   * canvas around a 70px figure — so the canvas width is not where the
+   * character visually ends. Anything that has to line a character up with a
+   * wall, an edge or another body needs the drawn extent, and this is the
+   * horizontal counterpart to `footGap`: alpha-derived at scan time, in the
+   * same source-pixel space, so multiplying by the live visual scale gives
+   * world pixels.
+   *
+   * Symmetric about the frame centre (the larger of the two sides) so it is
+   * unaffected by `flipX`.
+   */
+  bodyHalfWidth: number;
 }
 
 export interface CharacterCapabilities {
@@ -129,6 +145,8 @@ export interface ScannedCharacter {
   files: readonly string[];
   /** Alpha-derived padding below the feet, keyed by the same relative paths. */
   footGaps: Readonly<Record<string, number>>;
+  /** Alpha-derived drawn half-width from the frame centre, same keys. */
+  bodyHalfWidths: Readonly<Record<string, number>>;
   overrides?: CharacterOverrides;
 }
 
@@ -230,6 +248,9 @@ export function buildCharacterDefinition(scanned: ScannedCharacter): CharacterDe
     key: characterTextureKey(id, relativePath),
     url: `${rootUrl}/${relativePath}`,
     footGap: overrideGaps[relativePath] ?? scanned.footGaps[relativePath] ?? 0,
+    // Purely measured: unlike `footGap` there is no artistic intent to honour
+    // here, so there is nothing for a character to override.
+    bodyHalfWidth: scanned.bodyHalfWidths[relativePath] ?? 0,
   });
 
   const single = (relativePath: string): CharacterAssetRef | undefined =>

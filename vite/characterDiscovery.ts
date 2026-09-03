@@ -12,6 +12,8 @@ import {
 } from '../src/game/characters/characterManifest';
 
 export const PLAYERS_DIRECTORY = 'public/assets/players';
+/** Alpha at or below this counts as empty; it ignores anti-aliased fringes. */
+const ALPHA_THRESHOLD = 8;
 /** Optional, and only ever visual alignment. See CharacterOverrides. */
 const OVERRIDE_FILENAME = 'character.json';
 
@@ -28,24 +30,48 @@ async function listFilesRecursively(root: string, current = root): Promise<strin
   return files;
 }
 
-/**
- * Transparent padding below the lowest drawn pixel, in source pixels.
- *
- * This is the derived default for every frame: it seats the artwork on the
- * floor line without anyone measuring anything by hand. A character only needs
- * an override where the artist deliberately lifts the figure off that line —
- * a run cycle's bounce being the case that actually occurs.
- */
-async function measureFootGap(file: string): Promise<number> {
+/** Alpha-derived geometry of one frame, in source pixels. */
+interface FrameGeometry {
+  /**
+   * Transparent padding below the lowest drawn pixel.
+   *
+   * This is the derived default for every frame: it seats the artwork on the
+   * floor line without anyone measuring anything by hand. A character only
+   * needs an override where the artist deliberately lifts the figure off that
+   * line — a run cycle's bounce being the case that actually occurs.
+   */
+  footGap: number;
+  /**
+   * How far the drawn figure reaches from the frame's horizontal centre, taking
+   * the wider of the two sides so the value survives `flipX`. Frames are padded
+   * canvases, so this — not the canvas width — is where the character visually
+   * ends.
+   */
+  bodyHalfWidth: number;
+}
+
+/** One alpha pass per frame yields both the vertical and horizontal extents. */
+async function measureFrameGeometry(file: string): Promise<FrameGeometry> {
   const image = sharp(file).ensureAlpha();
   const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
-  for (let y = info.height - 1; y >= 0; y -= 1) {
+  let lowestDrawnRow = -1;
+  let minX = info.width;
+  let maxX = -1;
+  for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
-      if (data[(y * info.width + x) * info.channels + 3] > 8) return info.height - 1 - y;
+      if (data[(y * info.width + x) * info.channels + 3] <= ALPHA_THRESHOLD) continue;
+      lowestDrawnRow = y;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
     }
   }
-  // Fully transparent frame: nothing to seat, so no adjustment.
-  return 0;
+  // Fully transparent frame: nothing to seat and nothing drawn to bound.
+  if (maxX < 0) return { footGap: 0, bodyHalfWidth: 0 };
+  const centre = info.width / 2;
+  return {
+    footGap: info.height - 1 - lowestDrawnRow,
+    bodyHalfWidth: Math.max(centre - minX, maxX + 1 - centre),
+  };
 }
 
 async function readOverrides(directory: string): Promise<CharacterOverrides | undefined> {
@@ -186,10 +212,19 @@ export async function discoverCharacters(root: string): Promise<DiscoveryResult>
       throw new CharacterManifestError(`"${folderName}" contains no PNG artwork`);
     }
     const footGaps: Record<string, number> = {};
+    const bodyHalfWidths: Record<string, number> = {};
     for (const file of files) {
-      footGaps[file] = await measureFootGap(join(directory, file));
+      const geometry = await measureFrameGeometry(join(directory, file));
+      footGaps[file] = geometry.footGap;
+      bodyHalfWidths[file] = geometry.bodyHalfWidth;
     }
-    scanned.push({ folderName, files, footGaps, overrides: await readOverrides(directory) });
+    scanned.push({
+      folderName,
+      files,
+      footGaps,
+      bodyHalfWidths,
+      overrides: await readOverrides(directory),
+    });
   }
 
   const definitions = buildCharacterManifest(scanned);

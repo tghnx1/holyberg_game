@@ -217,7 +217,9 @@ describe('character data carries no gameplay values', () => {
     // dialogue zoom of its own and all of them fit identically.
     expect(atmos.presentation.dialogueScale).toBe(1);
     for (const frame of atmos.gameplay.run) {
-      expect(Object.keys(frame).sort()).toEqual(['footGap', 'key', 'url']);
+      // `footGap` and `bodyHalfWidth` are both alpha measurements of the
+      // artwork itself — where it is drawn on its canvas — not gameplay values.
+      expect(Object.keys(frame).sort()).toEqual(['bodyHalfWidth', 'footGap', 'key', 'url']);
     }
   });
 

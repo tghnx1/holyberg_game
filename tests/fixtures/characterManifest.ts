@@ -11,6 +11,9 @@ import {
  * Built through the real manifest builder rather than hand-written, so the
  * fixtures cannot drift from the shape production actually produces.
  */
+/** Source-pixel half-width of the drawn body in every fixture frame. */
+export const FIXTURE_BODY_HALF_WIDTH = 40;
+
 const frames = (dir: string, n: number): string[] =>
   Array.from({ length: n }, (_, i) => `${dir}/${String(i + 1).padStart(2, '0')}.png`);
 
@@ -22,6 +25,8 @@ const scan = (
   folderName,
   files,
   footGaps: Object.fromEntries(files.map((file) => [file, 0])),
+  // A drawn figure narrower than its padded canvas, as the real artwork is.
+  bodyHalfWidths: Object.fromEntries(files.map((file) => [file, FIXTURE_BODY_HALF_WIDTH])),
   ...extra,
 });
 
