@@ -19,7 +19,7 @@ import {
   type BossPlayerMotion,
   type MoveDirection,
 } from './bossPlayerMovement';
-import type { CollectibleBox } from './emeraldField';
+import { playerPickupBox, type CollectibleBox } from './emeraldField';
 import type { ArenaBounds } from './types';
 
 const ENTRANCE_FALL_DURATION_MS = 900;
@@ -131,23 +131,21 @@ export class BossPlayer {
   }
 
   /**
-   * The box a collectible is picked up with.
+   * The box an emerald is collected with.
    *
-   * Built from the drawn sprite rather than `BOSS_PLAYER.hitHalfWidth`: the
-   * laser hurtbox is a deliberately narrow torso strip, and running through an
-   * emerald should read as touching it with any part of the character. Width
-   * is the measured body, height the drawn sprite, so it follows every
-   * character, pose and editor-authored scale automatically.
+   * Its own geometry — see `playerPickupBox`. It used to borrow
+   * `visibleHalfWidth`, which is the widest pose the character has because
+   * that is what the arena walls have to accommodate; on every character here
+   * that is the damage frame, three to four times wider than the standing
+   * body, so emeralds were being collected from a visible step away. Only the
+   * centre comes from the live sprite, so the box tracks the drawn character
+   * including the editor's authored offset and scale.
    */
   get collectibleBox(): CollectibleBox {
-    const halfHeight = Math.abs(this.sprite.displayHeight) / 2;
-    return {
+    return playerPickupBox(this.character, {
       centerX: this.sprite.x,
-      // Origin is (0.5, 1): the sprite's y is at its feet.
-      centerY: this.sprite.y - halfHeight,
-      halfWidth: Math.max(this.visibleHalfWidth, 1),
-      halfHeight: Math.max(halfHeight, 1),
-    };
+      presentationScale: this.presentation.scale,
+    });
   }
 
   update(deltaMs: number, direction: MoveDirection, nowMs: number, arena: ArenaBounds): void {

@@ -48,29 +48,34 @@ interface FrameGeometry {
    * ends.
    */
   bodyHalfWidth: number;
+  /** How tall the drawn figure is, ignoring the padding above and below it. */
+  bodyHeight: number;
 }
 
 /** One alpha pass per frame yields both the vertical and horizontal extents. */
 async function measureFrameGeometry(file: string): Promise<FrameGeometry> {
   const image = sharp(file).ensureAlpha();
   const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
+  let highestDrawnRow = -1;
   let lowestDrawnRow = -1;
   let minX = info.width;
   let maxX = -1;
   for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
       if (data[(y * info.width + x) * info.channels + 3] <= ALPHA_THRESHOLD) continue;
+      if (highestDrawnRow < 0) highestDrawnRow = y;
       lowestDrawnRow = y;
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
     }
   }
   // Fully transparent frame: nothing to seat and nothing drawn to bound.
-  if (maxX < 0) return { footGap: 0, bodyHalfWidth: 0 };
+  if (maxX < 0) return { footGap: 0, bodyHalfWidth: 0, bodyHeight: 0 };
   const centre = info.width / 2;
   return {
     footGap: info.height - 1 - lowestDrawnRow,
     bodyHalfWidth: Math.max(centre - minX, maxX + 1 - centre),
+    bodyHeight: lowestDrawnRow - highestDrawnRow + 1,
   };
 }
 
@@ -213,16 +218,19 @@ export async function discoverCharacters(root: string): Promise<DiscoveryResult>
     }
     const footGaps: Record<string, number> = {};
     const bodyHalfWidths: Record<string, number> = {};
+    const bodyHeights: Record<string, number> = {};
     for (const file of files) {
       const geometry = await measureFrameGeometry(join(directory, file));
       footGaps[file] = geometry.footGap;
       bodyHalfWidths[file] = geometry.bodyHalfWidth;
+      bodyHeights[file] = geometry.bodyHeight;
     }
     scanned.push({
       folderName,
       files,
       footGaps,
       bodyHalfWidths,
+      bodyHeights,
       overrides: await readOverrides(directory),
     });
   }

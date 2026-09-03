@@ -52,6 +52,19 @@ export const BOSS_EMERALDS = {
   minPlayerDistancePx: 90,
   /** Half-extent of the pickup box at scale 1, and the drawn size to match. */
   halfSizePx: 26,
+  /**
+   * Narrows the player's standing silhouette to the body you actually run
+   * into. Below 1 on purpose: even a still character's outline includes hands
+   * held away from the torso, and collecting with those reads as picking an
+   * emerald up from a step away.
+   */
+  pickupWidthFactor: 0.62,
+  /**
+   * Trims the same silhouette's height. Just under 1, so an emerald level with
+   * the very top of the head is not swept up, while anything at body height
+   * is.
+   */
+  pickupHeightFactor: 0.9,
   /** Default height above the floor for a newly placed spot: leg height. */
   floorOffsetPx: 62,
 } as const;

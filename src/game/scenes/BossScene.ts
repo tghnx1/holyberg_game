@@ -11,7 +11,7 @@ import { BOSS_EMERALDS, BOSS_SCORING } from '../boss/bossConfig';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { BossRenderer } from '../boss/BossRenderer';
-import { BossPalette } from '../boss/bossConstants';
+import { BossDepth, BossPalette } from '../boss/bossConstants';
 import type { ActiveAttack, ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
@@ -58,6 +58,8 @@ export class BossScene extends Phaser.Scene {
   private controls!: BossInput;
   private hud!: BossHud;
   private emeralds!: EmeraldLayer;
+  /** Editor-only outline of the pickup box; never created outside the editor. */
+  private pickupOutline?: Phaser.GameObjects.Graphics;
   private bounds!: ArenaBounds;
   /** Canonical boss anchor before editor-authored presentation offsets. */
   private bossX = 0;
@@ -229,11 +231,34 @@ export class BossScene extends Phaser.Scene {
     // Every spot, not just the offered ones: emeralds cannot be arranged
     // while the fight is hiding most of them.
     this.emeralds.setAuthoringVisible(true);
+    // The pickup box is the one piece of this scene's geometry with no
+    // artwork of its own, so spacing two emeralds by eye means guessing at it.
+    // Created here rather than in `create`, so it exists only while editing —
+    // and the editor itself is dev-only, so it cannot reach a shipped build.
+    this.pickupOutline ??= this.add.graphics().setDepth(BossDepth.UI);
   }
 
   onEditorDisable(): void {
     this.running = this.runningBeforeEditor;
     this.emeralds.setAuthoringVisible(false);
+    this.pickupOutline?.destroy();
+    this.pickupOutline = undefined;
+  }
+
+  /** Outlines what an emerald is actually collected with, to scale. */
+  private drawPickupOutline(): void {
+    const outline = this.pickupOutline;
+    if (!outline) return;
+    const box = this.player.collectibleBox;
+    outline
+      .clear()
+      .lineStyle(2, 0x56ffb0, 0.9)
+      .strokeRect(
+        box.centerX - box.halfWidth,
+        box.centerY - box.halfHeight,
+        box.halfWidth * 2,
+        box.halfHeight * 2,
+      );
   }
 
   private showIntro(): void {
@@ -280,6 +305,7 @@ export class BossScene extends Phaser.Scene {
     // A backgrounded tab can hand back a huge delta; letting it through would
     // teleport the fight clock past a whole telegraph.
     const step = Math.min(delta, MAX_FRAME_DELTA_MS);
+    this.drawPickupOutline();
     if (!this.running) {
       // The previous level drops the player into this arena. The boss only
       // erupts after that landing, then the unchanged timed fight begins.
@@ -414,6 +440,8 @@ export class BossScene extends Phaser.Scene {
   private cleanup(): void {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.controls?.destroy();
+    this.pickupOutline?.destroy();
+    this.pickupOutline = undefined;
     this.emeralds?.destroy();
     this.player?.destroy();
     this.boss?.destroy();

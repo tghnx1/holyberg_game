@@ -219,7 +219,13 @@ describe('character data carries no gameplay values', () => {
     for (const frame of atmos.gameplay.run) {
       // `footGap` and `bodyHalfWidth` are both alpha measurements of the
       // artwork itself — where it is drawn on its canvas — not gameplay values.
-      expect(Object.keys(frame).sort()).toEqual(['bodyHalfWidth', 'footGap', 'key', 'url']);
+      expect(Object.keys(frame).sort()).toEqual([
+        'bodyHalfWidth',
+        'bodyHeight',
+        'footGap',
+        'key',
+        'url',
+      ]);
     }
   });
 

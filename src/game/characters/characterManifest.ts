@@ -57,6 +57,15 @@ export interface CharacterAssetRef {
    * unaffected by `flipX`.
    */
   bodyHalfWidth: number;
+  /**
+   * Height of the *drawn* artwork, in source pixels — the vertical companion
+   * to `bodyHalfWidth`, measured from the same alpha bounding box.
+   *
+   * A frame's canvas is taller than the figure on it, so anything that needs
+   * to know how tall the character actually looks — a pickup area around the
+   * body, say — must not use the canvas height.
+   */
+  bodyHeight: number;
 }
 
 export interface CharacterCapabilities {
@@ -147,6 +156,8 @@ export interface ScannedCharacter {
   footGaps: Readonly<Record<string, number>>;
   /** Alpha-derived drawn half-width from the frame centre, same keys. */
   bodyHalfWidths: Readonly<Record<string, number>>;
+  /** Alpha-derived drawn height, same keys. */
+  bodyHeights: Readonly<Record<string, number>>;
   overrides?: CharacterOverrides;
 }
 
@@ -251,6 +262,7 @@ export function buildCharacterDefinition(scanned: ScannedCharacter): CharacterDe
     // Purely measured: unlike `footGap` there is no artistic intent to honour
     // here, so there is nothing for a character to override.
     bodyHalfWidth: scanned.bodyHalfWidths[relativePath] ?? 0,
+    bodyHeight: scanned.bodyHeights[relativePath] ?? 0,
   });
 
   const single = (relativePath: string): CharacterAssetRef | undefined =>

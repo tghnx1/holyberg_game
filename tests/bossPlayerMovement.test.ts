@@ -10,7 +10,7 @@ import {
 import { resolveGameplayScale } from '../src/game/characters/characterManifest';
 import { getCharacter } from '../src/game/characters/characterRegistry';
 import type { ArenaBounds } from '../src/game/boss/types';
-import { FIXTURE_BODY_HALF_WIDTH } from './fixtures/characterManifest';
+import { FIXTURE_DAMAGE_BODY_HALF_WIDTH } from './fixtures/characterManifest';
 
 const bounds: ArenaBounds = { minX: 70, maxX: 1210 };
 
@@ -71,10 +71,11 @@ describe('visible arena bounds', () => {
 
   const visibleX = (motionX: number): number => motionX + presentation.offsetX;
 
-  it('measures the drawn body, not the padded frame or a hardcoded width', () => {
+  it('measures the widest drawn pose, not the padded frame or a hardcoded width', () => {
     const halfWidth = visiblePlayerHalfWidth(atmos, presentation.scale);
+    // The widest pose is what the walls must accommodate, so no pose clips one.
     expect(halfWidth).toBeCloseTo(
-      FIXTURE_BODY_HALF_WIDTH * resolveGameplayScale(atmos, 'run') * presentation.scale,
+      FIXTURE_DAMAGE_BODY_HALF_WIDTH * resolveGameplayScale(atmos, 'damage') * presentation.scale,
     );
     // Every scale in the chain is live: doubling the editor scale doubles it.
     expect(visiblePlayerHalfWidth(atmos, presentation.scale * 2)).toBeCloseTo(halfWidth * 2);

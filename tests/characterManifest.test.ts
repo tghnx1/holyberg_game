@@ -33,6 +33,7 @@ function scan(folderName: string, files: string[], extra: Partial<ScannedCharact
     files,
     footGaps: Object.fromEntries(files.map((file) => [file, 0])),
     bodyHalfWidths: Object.fromEntries(files.map((file) => [file, 0])),
+    bodyHeights: Object.fromEntries(files.map((file) => [file, 0])),
     ...extra,
   };
 }
@@ -157,6 +158,7 @@ describe('foot gaps', () => {
       files,
       footGaps: { ...Object.fromEntries(files.map((f) => [f, 0])), 'gameplay/run/02.png': 13 },
       bodyHalfWidths: Object.fromEntries(files.map((f) => [f, 0])),
+      bodyHeights: Object.fromEntries(files.map((f) => [f, 0])),
     };
     const run = buildCharacterDefinition(scanned).gameplay.run;
     expect(run[1].footGap).toBe(13);
@@ -169,6 +171,7 @@ describe('foot gaps', () => {
       files,
       footGaps: { ...Object.fromEntries(files.map((f) => [f, 0])), 'gameplay/run/02.png': 13 },
       bodyHalfWidths: Object.fromEntries(files.map((f) => [f, 0])),
+      bodyHeights: Object.fromEntries(files.map((f) => [f, 0])),
       overrides: { footGaps: { 'gameplay/run/02.png': 4 } },
     };
     expect(buildCharacterDefinition(scanned).gameplay.run[1].footGap).toBe(4);

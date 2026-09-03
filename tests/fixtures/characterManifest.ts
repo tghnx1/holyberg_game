@@ -11,8 +11,27 @@ import {
  * Built through the real manifest builder rather than hand-written, so the
  * fixtures cannot drift from the shape production actually produces.
  */
-/** Source-pixel half-width of the drawn body in every fixture frame. */
+/**
+ * Source-pixel half-widths of the drawn body, per pose.
+ *
+ * Deliberately different per pose, in the proportions the real artwork has:
+ * measured across every character in `public/assets/players`, a damage frame
+ * is three to four times wider than the same character standing still, because
+ * it throws its arms out. A fixture where every pose was the same width could
+ * not tell a "widest pose" rule from a "resting pose" one, which is exactly
+ * the distinction the arena bounds and the emerald pickup box now draw.
+ */
 export const FIXTURE_BODY_HALF_WIDTH = 40;
+export const FIXTURE_RUN_BODY_HALF_WIDTH = 75;
+export const FIXTURE_DAMAGE_BODY_HALF_WIDTH = 120;
+/** Source-pixel height of the drawn body in every fixture frame. */
+export const FIXTURE_BODY_HEIGHT = 170;
+
+const bodyHalfWidthFor = (file: string): number => {
+  if (file.startsWith('gameplay/run/')) return FIXTURE_RUN_BODY_HALF_WIDTH;
+  if (file.startsWith('gameplay/damage/')) return FIXTURE_DAMAGE_BODY_HALF_WIDTH;
+  return FIXTURE_BODY_HALF_WIDTH;
+};
 
 const frames = (dir: string, n: number): string[] =>
   Array.from({ length: n }, (_, i) => `${dir}/${String(i + 1).padStart(2, '0')}.png`);
@@ -26,7 +45,8 @@ const scan = (
   files,
   footGaps: Object.fromEntries(files.map((file) => [file, 0])),
   // A drawn figure narrower than its padded canvas, as the real artwork is.
-  bodyHalfWidths: Object.fromEntries(files.map((file) => [file, FIXTURE_BODY_HALF_WIDTH])),
+  bodyHalfWidths: Object.fromEntries(files.map((file) => [file, bodyHalfWidthFor(file)])),
+  bodyHeights: Object.fromEntries(files.map((file) => [file, FIXTURE_BODY_HEIGHT])),
   ...extra,
 });
 

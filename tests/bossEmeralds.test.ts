@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { BossFightDirector } from '../src/game/boss/BossFightDirector';
 import {
   ATTACK_TIMINGS,
@@ -11,6 +11,7 @@ import {
 } from '../src/game/boss/bossConfig';
 import {
   emeraldSpotId,
+  emeraldSpotLayout,
   getAuthoredEmeraldSpots,
   isEmeraldId,
   nextEmeraldSpotId,
@@ -20,10 +21,14 @@ import {
   boxesOverlap,
   collectEmeralds,
   emeraldBox,
+  playerPickupBox,
   reachableDistancePx,
   selectTelegraphEmeralds,
+  stableBodyMetrics,
   type CollectibleBox,
 } from '../src/game/boss/emeraldField';
+import { visiblePlayerHalfWidth } from '../src/game/boss/bossPlayerMovement';
+import { getCharacter, getPlayableCharacters } from '../src/game/characters/characterRegistry';
 import type { ArenaBounds } from '../src/game/boss/types';
 import { layoutRatiosFromDesignPoint } from '../src/game/systems/designSpace';
 import {
@@ -47,6 +52,24 @@ const SHORTEST_TELEGRAPH_MS = telegraphMsFor(Math.min(...BOSS_PHASES.map((p) => 
 
 const authored = (): EmeraldSpot[] => getAuthoredEmeraldSpots('BossScene');
 
+const SPOT_Y = BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx;
+
+/**
+ * A controlled row of spots, for testing the selection rules.
+ *
+ * Deliberately not the shipped layout: those positions are authored in the
+ * editor and are expected to change, so a rule pinned to them would fail the
+ * moment someone rearranged the arena — which is the whole point of them being
+ * editable.
+ */
+const grid = (count: number, first = 120, last = 1160): EmeraldSpot[] =>
+  Array.from({ length: count }, (_, index) => ({
+    id: emeraldSpotId(index + 1),
+    x: first + ((last - first) * index) / (count - 1),
+    y: SPOT_Y,
+    scale: 1,
+  }));
+
 const offer = (
   spots: readonly EmeraldSpot[],
   playerCenterX: number,
@@ -60,9 +83,11 @@ const offer = (
   });
 
 describe('authored emerald spots', () => {
-  it('ships a set of spots the arena starts with', () => {
+  it('ships an arena with emeralds in it', () => {
+    // A count, not a layout: how many there are and where they sit is authored
+    // in the editor and expected to change.
     const spots = authored();
-    expect(spots.length).toBeGreaterThanOrEqual(8);
+    expect(spots.length).toBeGreaterThan(0);
     expect(new Set(spots.map((spot) => spot.id)).size).toBe(spots.length);
     for (const spot of spots) expect(isEmeraldId(spot.id)).toBe(true);
   });
@@ -96,7 +121,7 @@ describe('authored emerald spots', () => {
 describe('what a telegraph offers', () => {
   it('offers only spots the player could run to and still leave', () => {
     for (let playerCenterX = 110; playerCenterX <= 1170; playerCenterX += 7) {
-      for (const spot of offer(authored(), playerCenterX)) {
+      for (const spot of offer(grid(12), playerCenterX)) {
         const distance = Math.max(0, Math.abs(spot.x - playerCenterX) - PICKUP_REACH);
         expect(distance).toBeLessThanOrEqual(reachableDistancePx(LONGEST_TELEGRAPH_MS) + 1e-9);
         const travelMs = (distance / BOSS_PLAYER.moveSpeed) * 1000;
@@ -107,7 +132,7 @@ describe('what a telegraph offers', () => {
 
   it('never offers one the player is already standing on', () => {
     for (let playerCenterX = 110; playerCenterX <= 1170; playerCenterX += 7) {
-      for (const spot of offer(authored(), playerCenterX)) {
+      for (const spot of offer(grid(12), playerCenterX)) {
         expect(Math.abs(spot.x - playerCenterX)).toBeGreaterThanOrEqual(
           BOSS_EMERALDS.minPlayerDistancePx,
         );
@@ -116,7 +141,7 @@ describe('what a telegraph offers', () => {
   });
 
   it('leaves nobody empty-handed: every position gets an offer, on any telegraph', () => {
-    const spots = authored();
+    const spots = grid(12);
     for (const telegraphMs of [LONGEST_TELEGRAPH_MS, SHORTEST_TELEGRAPH_MS]) {
       for (let playerCenterX = 107; playerCenterX <= 1173; playerCenterX += 3) {
         expect(offer(spots, playerCenterX, telegraphMs).length).toBeGreaterThan(0);
@@ -125,7 +150,7 @@ describe('what a telegraph offers', () => {
   });
 
   it('offers a bigger spread on a generous telegraph than a tight one', () => {
-    const spots = authored();
+    const spots = grid(12);
     const generous = offer(spots, 640, LONGEST_TELEGRAPH_MS).length;
     const tight = offer(spots, 640, SHORTEST_TELEGRAPH_MS).length;
     expect(generous).toBeGreaterThan(tight);
@@ -139,15 +164,15 @@ describe('what a telegraph offers', () => {
   });
 
   it('is the same offer every run: nothing about it is random', () => {
-    const spots = authored();
+    const spots = grid(12);
     expect(offer(spots, 500)).toEqual(offer(spots, 500));
     expect(offer(spots, 500)).not.toEqual(offer(spots, 900));
   });
 
   it('offers nothing rather than cheating when there is no time or no room', () => {
-    expect(offer(authored(), 640, 0)).toEqual([]);
+    expect(offer(grid(12), 640, 0)).toEqual([]);
     expect(
-      selectTelegraphEmeralds(authored(), {
+      selectTelegraphEmeralds(grid(12), {
         reachable: { minX: 640, maxX: 640 },
         playerCenterX: 640,
         telegraphMs: LONGEST_TELEGRAPH_MS,
@@ -213,7 +238,7 @@ describe('emerald lifecycle against the fight', () => {
    */
   function runFight(): { maxOffered: number; offers: number; liveDuringActive: number[] } {
     const director = new BossFightDirector(bounds, 1);
-    const spots = authored();
+    const spots = grid(12);
     let offered = 0;
     let offers = 0;
     let maxOffered = 0;
@@ -251,18 +276,29 @@ describe('emerald lifecycle against the fight', () => {
 });
 
 describe('authoring emeralds in the editor', () => {
+  // A scene of its own, so these never depend on — or disturb — the arena
+  // someone has actually laid out in `sceneLayout.json`.
+  const SCENE = 'EmeraldAuthoringTest';
+
+  beforeEach(() => {
+    for (const spot of grid(4)) {
+      setSceneObjectLayout(SCENE, spot.id, emeraldSpotLayout({ x: spot.x, y: spot.y }, spot.scale));
+    }
+    setSceneObjectLayout(SCENE, 'player', { xRatio: 0.1, yRatio: 0.01, scale: 1 });
+  });
   afterEach(() => resetSceneLayout());
 
+  const authoredIn = (): EmeraldSpot[] => getAuthoredEmeraldSpots(SCENE);
   const spotsInPayload = (): string[] =>
-    Object.keys(buildSceneLayoutPayload('BossScene').BossScene ?? {}).filter(isEmeraldId);
+    Object.keys(buildSceneLayoutPayload(SCENE)[SCENE] ?? {}).filter(isEmeraldId);
 
   it('saves a moved emerald as a world point, not a screen fraction', () => {
     const moved = { x: 812, y: 590 };
-    setSceneObjectLayout('BossScene', 'emerald-01', {
+    setSceneObjectLayout(SCENE, 'emerald-01', {
       ...layoutRatiosFromDesignPoint(moved),
       scale: 1,
     });
-    const reloaded = authored().find((spot) => spot.id === 'emerald-01');
+    const reloaded = authoredIn().find((spot) => spot.id === 'emerald-01');
     expect(reloaded?.x).toBeCloseTo(moved.x);
     expect(reloaded?.y).toBeCloseTo(moved.y);
   });
@@ -275,8 +311,8 @@ describe('authoring emeralds in the editor', () => {
     // A copy is just another emerald, and must survive a reload as one.
     expect(isEmeraldId(copyId)).toBe(true);
 
-    setSceneObjectLayout('BossScene', copyId, {
-      ...layoutRatiosFromDesignPoint({ x: 400, y: 578 }),
+    setSceneObjectLayout(SCENE, copyId, {
+      ...layoutRatiosFromDesignPoint({ x: 400, y: SPOT_Y }),
       scale: 1,
     });
     const after = spotsInPayload();
@@ -289,34 +325,160 @@ describe('authoring emeralds in the editor', () => {
 
   it('forgets a deleted emerald, so it stays gone across a reload', () => {
     expect(spotsInPayload()).toContain('emerald-03');
-    removeSceneObjectLayout('BossScene', 'emerald-03');
+    removeSceneObjectLayout(SCENE, 'emerald-03');
     expect(spotsInPayload()).not.toContain('emerald-03');
-    expect(authored().map((spot) => spot.id)).not.toContain('emerald-03');
+    expect(authoredIn().map((spot) => spot.id)).not.toContain('emerald-03');
     // The rest of the arena is untouched by one deletion.
-    expect(spotsInPayload().length).toBeGreaterThan(5);
+    expect(spotsInPayload()).toContain('emerald-02');
+    expect(spotsInPayload()).toContain('emerald-04');
   });
 
   it('leaves the player and boss entries alone, which have no delete at all', () => {
-    removeSceneObjectLayout('BossScene', 'emerald-01');
-    const saved = buildSceneLayoutPayload('BossScene').BossScene ?? {};
-    expect(saved.player).toBeDefined();
+    removeSceneObjectLayout(SCENE, 'emerald-01');
+    expect(buildSceneLayoutPayload(SCENE)[SCENE]?.player).toBeDefined();
   });
 
   it('writes a payload the save route will accept', () => {
-    setSceneObjectLayout('BossScene', 'emerald-01', {
-      ...layoutRatiosFromDesignPoint({ x: 1160, y: 578 }),
+    setSceneObjectLayout(SCENE, 'emerald-01', {
+      ...layoutRatiosFromDesignPoint({ x: 1160, y: SPOT_Y }),
       scale: 2.5,
     });
-    expect(() => validateSceneLayout(buildSceneLayoutPayload('BossScene'))).not.toThrow();
+    expect(() => validateSceneLayout(buildSceneLayoutPayload(SCENE))).not.toThrow();
   });
 
   it('honours an authored scale when the emerald is read back', () => {
-    setSceneObjectLayout('BossScene', 'emerald-02', {
-      ...layoutRatiosFromDesignPoint({ x: 300, y: 578 }),
+    setSceneObjectLayout(SCENE, 'emerald-02', {
+      ...layoutRatiosFromDesignPoint({ x: 300, y: SPOT_Y }),
       scale: 1.8,
     });
-    const spot = authored().find((entry) => entry.id === 'emerald-02');
+    const spot = authoredIn().find((entry) => entry.id === 'emerald-02');
     expect(spot?.scale).toBe(1.8);
     expect(emeraldBox(spot!).halfWidth).toBeCloseTo(BOSS_EMERALDS.halfSizePx * 1.8);
+  });
+});
+
+describe('the pickup box around the player', () => {
+  const atmos = getCharacter('atmos');
+  const boxAt = (centerX: number, presentationScale = 1) =>
+    playerPickupBox(atmos, { centerX, presentationScale });
+  const spotAt = (x: number, y = BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx): EmeraldSpot => ({
+    id: 'emerald-01',
+    x,
+    y,
+    scale: 1,
+  });
+  /** How far an emerald's centre can be from the player's and still count. */
+  const reach = (presentationScale = 1): number =>
+    boxAt(0, presentationScale).halfWidth + BOSS_EMERALDS.halfSizePx;
+
+  it('is far narrower than the width the arena walls the player in with', () => {
+    // The bug: this *was* the movement width, which is the widest pose a
+    // character has, because no pose may clip a wall. On every character that
+    // is the damage frame, arms flung out.
+    const movement = visiblePlayerHalfWidth(atmos, 1);
+    expect(boxAt(0).halfWidth).toBeLessThan(movement / 2);
+  });
+
+  it('sits inside the drawn body, so an emerald has to overlap the character', () => {
+    const idle = stableBodyMetrics(atmos);
+    const drawnHalfWidth = idle.halfWidth * idle.poseScale;
+    expect(boxAt(0).halfWidth).toBeLessThan(drawnHalfWidth);
+    expect(boxAt(0).halfWidth).toBeGreaterThan(drawnHalfWidth * 0.4);
+  });
+
+  it('does not collect an emerald standing clearly beside the player', () => {
+    const idle = stableBodyMetrics(atmos);
+    const drawnHalfWidth = idle.halfWidth * idle.poseScale;
+    // A clear gap between the drawn bodies: the emerald's own edge is 20px
+    // past where the character's silhouette ends.
+    const clearlyBeside = drawnHalfWidth + BOSS_EMERALDS.halfSizePx + 20;
+    expect(boxesOverlap(emeraldBox(spotAt(clearlyBeside)), boxAt(0))).toBe(false);
+  });
+
+  it('still collects one the player is running through', () => {
+    expect(boxesOverlap(emeraldBox(spotAt(0)), boxAt(0))).toBe(true);
+    // Touching at the edges of the two drawn shapes still counts.
+    expect(boxesOverlap(emeraldBox(spotAt(reach() - 2)), boxAt(0))).toBe(true);
+  });
+
+  it('does not sweep up two emeralds the player is standing between', () => {
+    // Two placed a body's width apart, the player parked exactly between them.
+    const separation = 120;
+    const left = spotAt(-separation / 2);
+    const right = spotAt(separation / 2);
+    const player = boxAt(0);
+    expect(boxesOverlap(emeraldBox(left), player)).toBe(false);
+    expect(boxesOverlap(emeraldBox(right), player)).toBe(false);
+    // Each is collected by actually moving onto it.
+    expect(boxesOverlap(emeraldBox(left), boxAt(left.x))).toBe(true);
+    expect(boxesOverlap(emeraldBox(right), boxAt(right.x))).toBe(true);
+  });
+
+  it('would have swept up both before this, from a step away', () => {
+    // Guards the regression rather than just the fix: the old box reached
+    // 117px from an emerald's centre, so a 120px gap was a double pickup.
+    const oldHalfWidth = visiblePlayerHalfWidth(atmos, 1);
+    const oldReach = oldHalfWidth + BOSS_EMERALDS.halfSizePx;
+    expect(oldReach).toBeGreaterThan(60);
+    expect(reach()).toBeLessThan(oldReach / 2);
+  });
+
+  it('follows the visible sprite, authored offset and all', () => {
+    // The centre is passed in from the drawn sprite, which already carries the
+    // editor's offset, so the box cannot drift away from the character.
+    expect(boxAt(812).centerX).toBe(812);
+    expect(boxAt(-40).centerX).toBe(-40);
+  });
+
+  it('grows and shrinks with the editor-authored player scale', () => {
+    expect(boxAt(0, 2).halfWidth).toBeCloseTo(boxAt(0, 1).halfWidth * 2);
+    expect(boxAt(0, 0.5).halfHeight).toBeCloseTo(boxAt(0, 1).halfHeight / 2);
+    // A mirrored character is not a negative-width one.
+    expect(boxAt(0, -1.5).halfWidth).toBeCloseTo(boxAt(0, 1.5).halfWidth);
+  });
+
+  it('stands on the floor and reaches roughly head height, never the tall frame', () => {
+    const box = boxAt(0);
+    const feet = box.centerY + box.halfHeight;
+    expect(feet).toBeCloseTo(BOSS_ARENA.floorY);
+    const head = box.centerY - box.halfHeight;
+    // Tall enough to cover an emerald at leg height...
+    expect(head).toBeLessThan(BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx);
+    // ...and shorter than the padded canvas the sprite is drawn on.
+    const idle = stableBodyMetrics(atmos);
+    expect(box.halfHeight * 2).toBeLessThan(idle.height * idle.poseScale);
+  });
+
+  it('ignores an emerald hanging above the character', () => {
+    const box = boxAt(0);
+    const overhead = spotAt(0, box.centerY - box.halfHeight - BOSS_EMERALDS.halfSizePx - 10);
+    expect(boxesOverlap(emeraldBox(overhead), box)).toBe(false);
+  });
+
+  it('is the same box whichever animation frame is showing', () => {
+    // Nothing about it reads the live frame, so a run cycle's wide arm frame
+    // and a damage pose cannot change it.
+    const first = boxAt(500);
+    const second = boxAt(500);
+    expect(first).toEqual(second);
+  });
+
+  it('gives every playable character a sensible pickup width', () => {
+    for (const character of getPlayableCharacters()) {
+      const box = playerPickupBox(character, { centerX: 0, presentationScale: 1 });
+      const metrics = stableBodyMetrics(character);
+      expect(box.halfWidth).toBeGreaterThan(0);
+      expect(box.halfWidth).toBeLessThan(metrics.halfWidth * metrics.poseScale);
+      expect(box.halfWidth).toBeLessThan(visiblePlayerHalfWidth(character, 1));
+      expect(box.halfHeight).toBeGreaterThan(BOSS_EMERALDS.floorOffsetPx / 2);
+    }
+  });
+
+  it('reads a resting pose, not the widest one, for every character', () => {
+    for (const character of getPlayableCharacters()) {
+      const widestPose = visiblePlayerHalfWidth(character, 1);
+      const resting = stableBodyMetrics(character);
+      expect(resting.halfWidth * resting.poseScale).toBeLessThan(widestPose);
+    }
   });
 });
