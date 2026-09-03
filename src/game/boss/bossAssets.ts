@@ -1,5 +1,15 @@
 /** Canonical, demand-loaded artwork for the existing boss fight. */
 
+/**
+ * Which way the boss is *looking*, from the fight's point of view.
+ *
+ * Deliberately not the name of an asset folder. The `baby/left` artwork is a
+ * body turned to its own right, and `baby/right` the mirror of that, so the
+ * folder names read as the doll's own left and right rather than the screen's
+ * — following them literally had the boss stare away from the player. The
+ * folders are the delivered artwork and stay as they are; `BABY_FACING_FOLDER`
+ * is where the two spaces are reconciled, once.
+ */
 export type BossFacing = 'left' | 'front' | 'right';
 
 export interface BossImageAsset {
@@ -72,14 +82,53 @@ export function getBossAssetUrls(): BossImageAsset[] {
   ];
 }
 
-/** Resolves the ordinary battle pose directly from the player's position. */
+/** Screen-space facing to the artwork that actually looks that way. */
+const BABY_FACING_FOLDER: Record<BossFacing, keyof typeof BOSS_ART.baby> = {
+  left: 'right',
+  front: 'front',
+  right: 'left',
+};
+
+/** The four frames that visually face `facing`, whatever they are filed under. */
+export function getBossBabyFrames(facing: BossFacing): readonly BossImageAsset[] {
+  return BOSS_ART.baby[BABY_FACING_FOLDER[facing]];
+}
+
+/**
+ * How the boss decides where to look.
+ *
+ * `frontZonePx` is a real band, not the vanishing case of an exact match: the
+ * boss is about 280px wide on screen, so a player anywhere within ~110px of
+ * its centre is genuinely underneath it and a turned pose would read as
+ * looking past them.
+ *
+ * `hysteresisPx` is what stops the pose stuttering. Walking slowly across a
+ * bare threshold re-decides the facing every frame; requiring a little more
+ * distance to leave a zone than to enter it means the boss commits to a pose
+ * and holds it until the player has clearly moved on.
+ */
+export const BOSS_FACING = {
+  frontZonePx: 110,
+  hysteresisPx: 26,
+} as const;
+
+/**
+ * The ordinary battle pose, from the player's position and the pose already
+ * held. `previous` is what makes this sticky; passing the boss's own current
+ * facing back in is the intended use.
+ */
 export function resolveBossFacing(
   playerX: number,
   bossX: number,
+  previous: BossFacing = 'front',
 ): BossFacing {
-  if (playerX < bossX) return 'left';
-  if (playerX > bossX) return 'right';
-  return 'front';
+  const offset = playerX - bossX;
+  const zone =
+    previous === 'front'
+      ? BOSS_FACING.frontZonePx + BOSS_FACING.hysteresisPx
+      : BOSS_FACING.frontZonePx;
+  if (Math.abs(offset) <= zone) return 'front';
+  return offset < 0 ? 'left' : 'right';
 }
 
 /** Applies the boss container transform to a child-local visual anchor. */

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   BOSS_ART,
   BOSS_VISUAL,
+  getBossBabyFrames,
   getBossSpawnFrame,
   loopedBossFrameIndex,
   resolveAttachedBossPoint,
@@ -140,9 +141,11 @@ export class BossRenderer {
       const anchor = this.anchorAt(nowMs, centerX);
       x = anchor.x;
       y = anchor.y;
+      // Fed its own current facing so the front zone is sticky at its edges.
       this.facing = resolveBossFacing(
         playerX,
         centerX + this.presentation.offsetX,
+        this.facing,
       );
       this.showBabyFrame(
         this.facing,
@@ -172,7 +175,7 @@ export class BossRenderer {
   }
 
   private showBabyFrame(facing: BossFacing, frameIndex: number): void {
-    const frame = BOSS_ART.baby[facing][frameIndex];
+    const frame = getBossBabyFrames(facing)[frameIndex];
     if (frame.key === this.currentBabyKey) return;
     this.baby.setTexture(frame.key);
     this.currentBabyKey = frame.key;
