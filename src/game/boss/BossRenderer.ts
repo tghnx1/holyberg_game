@@ -4,6 +4,7 @@ import {
   BOSS_VISUAL,
   getBossSpawnFrame,
   loopedBossFrameIndex,
+  resolveAttachedBossPoint,
   resolveBossFacing,
   type BossFacing,
 } from './bossAssets';
@@ -72,6 +73,30 @@ export class BossRenderer {
 
   get spawnComplete(): boolean {
     return this.entranceState === 'active';
+  }
+
+  /**
+   * Current world-space centre of the visible energy sphere.
+   *
+   * The sphere is a child of `root`; transforming this authored local point
+   * makes the attack origin follow boss movement, editor placement, scale and
+   * pulse with no separately maintained absolute scene coordinate.
+   */
+  get energySphereWorldCenter(): { x: number; y: number } {
+    const localX = this.energySphere.x
+      + BOSS_VISUAL.energyArtworkCenterOffsetX * this.energySphere.scaleX;
+    const localY = this.energySphere.y
+      + BOSS_VISUAL.energyArtworkCenterOffsetY * this.energySphere.scaleY;
+    return resolveAttachedBossPoint(
+      { x: localX, y: localY },
+      {
+        x: this.root.x,
+        y: this.root.y,
+        scaleX: this.root.scaleX,
+        scaleY: this.root.scaleY,
+        rotation: this.root.rotation,
+      },
+    );
   }
 
   startSpawn(nowMs: number): void {

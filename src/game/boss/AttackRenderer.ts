@@ -24,7 +24,11 @@ export class AttackRenderer {
     this.lasers = scene.add.graphics().setDepth(BossDepth.LASER);
   }
 
-  redraw(attacks: readonly ActiveAttack[], nowMs: number, bossX: number): void {
+  redraw(
+    attacks: readonly ActiveAttack[],
+    nowMs: number,
+    sphereCenter: { x: number; y: number },
+  ): void {
     this.telegraphs.clear();
     this.lasers.clear();
     for (const sprite of this.laserSprites) sprite.setVisible(false);
@@ -34,12 +38,16 @@ export class AttackRenderer {
     for (const attack of attacks) {
       const beams = getAttackBeams(attack);
       if (attack.phase === 'telegraph') {
-        this.drawTelegraph(attack, beams, bossX, getTelegraphProgress(attack, nowMs));
+        this.drawTelegraph(attack, beams, sphereCenter, getTelegraphProgress(attack, nowMs));
         continue;
       }
       if (attack.phase !== 'active') continue;
       for (const beam of beams) {
-        this.drawLaser(getBeamPolygon(beam, bossX), liveLaserCount, nowMs);
+        this.drawLaser(
+          getBeamPolygon(beam, sphereCenter),
+          liveLaserCount,
+          nowMs,
+        );
         liveLaserCount += 1;
       }
     }
@@ -53,7 +61,7 @@ export class AttackRenderer {
   private drawTelegraph(
     attack: ActiveAttack,
     beams: readonly LaserBeam[],
-    bossX: number,
+    sphereCenter: { x: number; y: number },
     progress: number,
   ): void {
     const alpha = 0.16 + progress * 0.5;
@@ -61,19 +69,19 @@ export class AttackRenderer {
       // Grow from a sliver at the muzzle to the full footprint.
       const charging = getBeamPolygon(
         { centerX: beam.centerX, halfWidth: beam.halfWidth * (0.3 + progress * 0.7) },
-        bossX,
+        sphereCenter,
       );
       this.telegraphs.fillStyle(BossPalette.telegraph, alpha);
       this.telegraphs.fillPoints(this.toPoints(charging), true);
 
-      const outline = getBeamPolygon(beam, bossX);
+      const outline = getBeamPolygon(beam, sphereCenter);
       this.telegraphs.lineStyle(2, BossPalette.telegraph, 0.35 + progress * 0.5);
       this.telegraphs.strokePoints(this.toPoints(outline), true);
 
       this.telegraphs.lineStyle(2, BossPalette.telegraph, 0.5 + progress * 0.4);
       this.telegraphs.lineBetween(
-        bossX,
-        BOSS_ARENA.laserOriginY,
+        sphereCenter.x,
+        sphereCenter.y,
         beam.centerX,
         BOSS_ARENA.floorY,
       );

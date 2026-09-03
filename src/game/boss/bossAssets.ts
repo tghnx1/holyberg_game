@@ -50,6 +50,9 @@ export const BOSS_VISUAL = {
   spawnRotations: 1,
   energyCycleMs: 360,
   energyScale: 0.5,
+  /** Visible energy core centre within its shared 859x864 authored canvas. */
+  energyArtworkCenterOffsetX: 2.5,
+  energyArtworkCenterOffsetY: -7,
 } as const;
 
 /** The platform's first non-transparent row, measured from the source PNG. */
@@ -77,6 +80,27 @@ export function resolveBossFacing(
   if (playerX < bossX) return 'left';
   if (playerX > bossX) return 'right';
   return 'front';
+}
+
+/** Applies the boss container transform to a child-local visual anchor. */
+export function resolveAttachedBossPoint(
+  local: { x: number; y: number },
+  transform: {
+    x: number;
+    y: number;
+    scaleX: number;
+    scaleY: number;
+    rotation: number;
+  },
+): { x: number; y: number } {
+  const scaledX = local.x * transform.scaleX;
+  const scaledY = local.y * transform.scaleY;
+  const cosine = Math.cos(transform.rotation);
+  const sine = Math.sin(transform.rotation);
+  return {
+    x: transform.x + scaledX * cosine - scaledY * sine,
+    y: transform.y + scaledX * sine + scaledY * cosine,
+  };
 }
 
 export function loopedBossFrameIndex(elapsedMs: number, cycleMs: number): number {

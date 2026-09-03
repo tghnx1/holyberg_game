@@ -67,12 +67,13 @@ describe('laser collision', () => {
 
 describe('beam origin', () => {
   const bossX = 640;
+  const origin = { x: bossX, y: 260 };
 
   it('starts every beam at the boss muzzle, not in mid-air', () => {
-    const polygon = getBeamPolygon({ centerX: 200, halfWidth: 30 }, bossX);
+    const polygon = getBeamPolygon({ centerX: 200, halfWidth: 30 }, origin);
     const [leftX, leftY, rightX, rightY] = polygon.points;
-    expect(leftY).toBe(BOSS_ARENA.laserOriginY);
-    expect(rightY).toBe(BOSS_ARENA.laserOriginY);
+    expect(leftY).toBe(origin.y);
+    expect(rightY).toBe(origin.y);
     expect(leftX).toBe(bossX - BOSS_ARENA.laserOriginHalfWidth);
     expect(rightX).toBe(bossX + BOSS_ARENA.laserOriginHalfWidth);
     expect(polygon.originX).toBe(bossX);
@@ -80,7 +81,7 @@ describe('beam origin', () => {
 
   it('lands on the footprint the collision test uses', () => {
     const beam = { centerX: 200, halfWidth: 30 };
-    const [, , , , farRightX, farRightY, farLeftX, farLeftY] = getBeamPolygon(beam, bossX).points;
+    const [, , , , farRightX, farRightY, farLeftX, farLeftY] = getBeamPolygon(beam, origin).points;
     expect(farRightX).toBe(beam.centerX + beam.halfWidth);
     expect(farLeftX).toBe(beam.centerX - beam.halfWidth);
     expect(farRightY).toBe(BOSS_ARENA.floorY);
@@ -90,7 +91,7 @@ describe('beam origin', () => {
   it('fans out: narrow at the boss, full width at the floor', () => {
     const beam = { centerX: 1000, halfWidth: 30 };
     expect(BOSS_ARENA.laserOriginHalfWidth).toBeLessThan(beam.halfWidth);
-    const polygon = getBeamPolygon(beam, bossX);
+    const polygon = getBeamPolygon(beam, origin);
     const muzzleWidth = polygon.points[2] - polygon.points[0];
     const floorWidth = polygon.points[4] - polygon.points[6];
     expect(muzzleWidth).toBeLessThan(floorWidth);
@@ -111,11 +112,11 @@ describe('beam origin', () => {
         safeGapHalfWidth: 78,
       },
     };
-    const polygons = getAttackBeams(wall).map((beam) => getBeamPolygon(beam, bossX));
+    const polygons = getAttackBeams(wall).map((beam) => getBeamPolygon(beam, origin));
     expect(polygons).toHaveLength(3);
     for (const polygon of polygons) {
       expect(polygon.originX).toBe(bossX);
-      expect(polygon.points[1]).toBe(BOSS_ARENA.laserOriginY);
+      expect(polygon.points[1]).toBe(origin.y);
     }
     // They fan to different places on the floor.
     expect(polygons.map((polygon) => polygon.footprintCenterX)).toEqual([200, 500, 900]);

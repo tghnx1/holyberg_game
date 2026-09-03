@@ -75,6 +75,26 @@ describe('boss fight director', () => {
     if (!survived) expect(director.snapshot.hitPoints).toBe(0);
   });
 
+  it('uses the live visual hurtbox width supplied by the player renderer', () => {
+    const narrow = new BossFightDirector(bounds, 1);
+    const wide = new BossFightDirector(bounds, 1);
+    let narrowHits = 0;
+    let wideHits = 0;
+
+    for (let frame = 0; frame < 500 && narrowHits === 0 && wideHits === 0; frame += 1) {
+      const telegraph = wide.snapshot.activeAttacks[0];
+      const beam = telegraph ? getAttackBeams(telegraph)[0] : undefined;
+      const edgeX = beam ? beam.centerX + beam.halfWidth + 10 : bounds.minX;
+      narrowHits += narrow.update(FRAME_MS, edgeX, 5)
+        .filter((event) => event.kind === 'playerHit').length;
+      wideHits += wide.update(FRAME_MS, edgeX, 20)
+        .filter((event) => event.kind === 'playerHit').length;
+    }
+
+    expect(narrowHits).toBe(0);
+    expect(wideHits).toBe(1);
+  });
+
   it('ends the fight at zero HP without awarding survival bonuses', () => {
     const director = simulate(() => 640);
     if (director.snapshot.hitPoints === 0) {

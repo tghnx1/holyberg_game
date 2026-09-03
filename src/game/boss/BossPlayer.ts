@@ -61,6 +61,21 @@ export class BossPlayer {
     return this.motion.x;
   }
 
+  /**
+   * Live damage geometry in world space.
+   *
+   * The editor-authored presentation may move or scale the visible character
+   * without touching locomotion. Damage must follow that visible body rather
+   * than the underlying motion anchor, otherwise a visually clear laser can
+   * still hit the player's old logical position.
+   */
+  get damageHitbox(): { centerX: number; halfWidth: number } {
+    return {
+      centerX: this.sprite.x,
+      halfWidth: BOSS_PLAYER.hitHalfWidth * Math.abs(this.presentation.scale),
+    };
+  }
+
   startEntrance(nowMs: number): void {
     this.entranceStartedAtMs = nowMs;
   }

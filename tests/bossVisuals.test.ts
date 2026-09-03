@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getBossAssetUrls,
   getBossSpawnFrame,
+  resolveAttachedBossPoint,
   resolveBossFacing,
 } from '../src/game/boss/bossAssets';
 
@@ -39,5 +40,19 @@ describe('boss orientation', () => {
     expect(getBossSpawnFrame(90)).toEqual({ facing: 'right', frameIndex: 1 });
     expect(getBossSpawnFrame(180)).toEqual({ facing: 'left', frameIndex: 2 });
     expect(getBossSpawnFrame(270)).toEqual({ facing: 'right', frameIndex: 3 });
+  });
+});
+
+describe('boss-local effect anchors', () => {
+  it('moves and scales a child anchor with the boss transform', () => {
+    expect(resolveAttachedBossPoint(
+      { x: 10, y: 20 },
+      { x: 300, y: 100, scaleX: 2, scaleY: 2, rotation: 0 },
+    )).toEqual({ x: 320, y: 140 });
+
+    expect(resolveAttachedBossPoint(
+      { x: 10, y: 20 },
+      { x: 500, y: 250, scaleX: 3, scaleY: 3, rotation: 0 },
+    )).toEqual({ x: 530, y: 310 });
   });
 });

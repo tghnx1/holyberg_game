@@ -52,7 +52,7 @@ export class BossScene extends Phaser.Scene {
   private controls!: BossInput;
   private hud!: BossHud;
   private bounds!: ArenaBounds;
-  /** Boss stays at the top centre; every laser is emitted from here. */
+  /** Canonical boss anchor before editor-authored presentation offsets. */
   private bossX = 0;
   private running = false;
   private finished = false;
@@ -269,7 +269,7 @@ export class BossScene extends Phaser.Scene {
       // The previous level drops the player into this arena. The boss only
       // erupts after that landing, then the unchanged timed fight begins.
       this.player.update(0, 0, now, this.bounds);
-      this.boss.update(now, this.bossX, this.player.x, false);
+      this.boss.update(now, this.bossX, this.player.damageHitbox.centerX, false);
       if (this.introPhase === 'playerFall' && this.player.isEntranceComplete(now)) {
         this.introPhase = 'bossSpawn';
         this.boss.startSpawn(now);
@@ -282,15 +282,21 @@ export class BossScene extends Phaser.Scene {
 
     const direction = this.controls.direction;
     this.player.update(step, direction, now, this.bounds);
+    const playerHitbox = this.player.damageHitbox;
 
-    const events = this.director.update(step, this.player.x);
+    const events = this.director.update(step, playerHitbox.centerX, playerHitbox.halfWidth);
     for (const event of events) this.handleFightEvent(event);
 
     const snapshot = this.director.snapshot;
-    // Lasers are drawn from the boss itself, so the renderer needs its X.
-    this.attacks.redraw(snapshot.activeAttacks, snapshot.elapsedMs, this.bossX);
     const charging = snapshot.activeAttacks.some((attack) => attack.phase === 'telegraph');
-    this.boss.update(now, this.bossX, this.player.x, charging);
+    this.boss.update(now, this.bossX, playerHitbox.centerX, charging);
+    // The live sphere centre comes from the boss container after its movement,
+    // authored editor offset and scale have all been applied this frame.
+    this.attacks.redraw(
+      snapshot.activeAttacks,
+      snapshot.elapsedMs,
+      this.boss.energySphereWorldCenter,
+    );
     this.hud.update(snapshot);
   }
 

@@ -72,24 +72,23 @@ export function getAttackBeams(attack: ScheduledAttack): LaserBeam[] {
  */
 export function getBeamPolygon(
   beam: LaserBeam,
-  bossX: number,
-  originY: number = BOSS_ARENA.laserOriginY,
+  origin: { x: number; y: number },
   floorY: number = BOSS_ARENA.floorY,
   originHalfWidth: number = BOSS_ARENA.laserOriginHalfWidth,
 ): LaserPolygon {
   return {
     points: [
-      bossX - originHalfWidth,
-      originY,
-      bossX + originHalfWidth,
-      originY,
+      origin.x - originHalfWidth,
+      origin.y,
+      origin.x + originHalfWidth,
+      origin.y,
       beam.centerX + beam.halfWidth,
       floorY,
       beam.centerX - beam.halfWidth,
       floorY,
     ],
-    originX: bossX,
-    originY,
+    originX: origin.x,
+    originY: origin.y,
     footprintCenterX: beam.centerX,
   };
 }

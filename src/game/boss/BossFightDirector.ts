@@ -80,7 +80,11 @@ export class BossFightDirector {
    * `playerCenterX` is sampled once per frame and used both to aim telegraphs
    * and to resolve collisions, so what the player sees is what they are hit by.
    */
-  update(deltaMs: number, playerCenterX: number): BossFightEvent[] {
+  update(
+    deltaMs: number,
+    playerCenterX: number,
+    playerHalfWidth: number = BOSS_PLAYER.hitHalfWidth,
+  ): BossFightEvent[] {
     const events: BossFightEvent[] = [];
     if (this.finished) return events;
 
@@ -94,7 +98,7 @@ export class BossFightDirector {
     }
 
     this.spawnDueAttacks(now, playerCenterX, events);
-    this.advanceAttacks(now, playerCenterX, events);
+    this.advanceAttacks(now, playerCenterX, playerHalfWidth, events);
 
     if (this.hitPoints <= 0) {
       this.endFight(false, events);
@@ -134,6 +138,7 @@ export class BossFightDirector {
   private advanceAttacks(
     now: number,
     playerCenterX: number,
+    playerHalfWidth: number,
     events: BossFightEvent[],
   ): void {
     for (let index = this.live.length - 1; index >= 0; index -= 1) {
@@ -144,7 +149,9 @@ export class BossFightDirector {
         if (nextPhase === 'active') events.push({ kind: 'attackActivated', attack });
       }
 
-      if (nextPhase === 'active') this.resolveDamage(attack, now, playerCenterX, events);
+      if (nextPhase === 'active') {
+        this.resolveDamage(attack, now, playerCenterX, playerHalfWidth, events);
+      }
 
       // Score the attack the instant its damage window shuts, not when the
       // recovery ends, so feedback lands while the moment is still readable.
@@ -163,13 +170,14 @@ export class BossFightDirector {
     attack: ActiveAttack,
     now: number,
     playerCenterX: number,
+    playerHalfWidth: number,
     events: BossFightEvent[],
   ): void {
     // One hit per attack: a wall you are standing in should cost one HP, not
     // one per frame.
     if (attack.hitPlayer || this.isInvulnerable(now)) return;
     const beams = getAttackBeams(attack);
-    if (!isPlayerHitByBeams(beams, playerCenterX, BOSS_PLAYER.hitHalfWidth)) return;
+    if (!isPlayerHitByBeams(beams, playerCenterX, playerHalfWidth)) return;
 
     attack.hitPlayer = true;
     this.hitPoints = Math.max(0, this.hitPoints - 1);
