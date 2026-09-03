@@ -9,12 +9,6 @@ import type { CharacterAssetRef, CharacterDefinition } from '../characters/chara
 import { resolveGameplayScale } from '../characters/characterManifest';
 import { BOSS_ARENA, BOSS_PLAYER } from './bossConfig';
 
-/**
- * Standing-still cadence, the arena's own presentation choice rather than
- * character data. Preserves the previous 220ms-per-frame idle across the
- * six run frames, expressed as a cycle so any frame count keeps the tempo.
- */
-const BOSS_IDLE_CYCLE_MS = 1320;
 import { BossDepth } from './bossConstants';
 import {
   applyKnockback,
@@ -24,6 +18,11 @@ import {
   type MoveDirection,
 } from './bossPlayerMovement';
 import type { ArenaBounds } from './types';
+
+const ENTRANCE_FALL_DURATION_MS = 900;
+const ENTRANCE_FALL_START_OFFSET_Y = -800;
+
+type BossPlayerPose = 'idle' | 'run' | 'damage';
 
 /**
  * The selected character in the boss arena.
@@ -40,6 +39,8 @@ export class BossPlayer {
   private currentFrameKey?: string;
   private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
   private damageFrameUntilMs = -Infinity;
+  private currentPose: BossPlayerPose = 'idle';
+  private entranceStartedAtMs?: number;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -47,16 +48,26 @@ export class BossPlayer {
     private readonly character: CharacterDefinition,
   ) {
     this.motion = createBossPlayerMotion(startX);
-    const { run } = character.gameplay;
+    const { idle, run } = character.gameplay;
+    const initial = idle ?? run[staticRunFrameIndex(run.length)];
     this.sprite = scene.add
-      .sprite(startX, BOSS_ARENA.floorY, run[staticRunFrameIndex(run.length)].key)
+      .sprite(startX, BOSS_ARENA.floorY, initial.key)
       .setOrigin(0.5, 1)
-      .setScale(resolveGameplayScale(character, 'run'))
+      .setScale(resolveGameplayScale(character, idle ? 'idle' : 'run'))
       .setDepth(BossDepth.PLAYER);
   }
 
   get x(): number {
     return this.motion.x;
+  }
+
+  startEntrance(nowMs: number): void {
+    this.entranceStartedAtMs = nowMs;
+  }
+
+  isEntranceComplete(nowMs: number): boolean {
+    return this.entranceStartedAtMs !== undefined
+      && nowMs - this.entranceStartedAtMs >= ENTRANCE_FALL_DURATION_MS;
   }
 
   /** Plays the damage pose, knocks the player away from the beam and blinks. */
@@ -77,12 +88,14 @@ export class BossPlayer {
 
   update(deltaMs: number, direction: MoveDirection, nowMs: number, bounds: ArenaBounds): void {
     this.motion = stepBossPlayer(this.motion, deltaMs, direction, nowMs, bounds);
-    const frame = this.resolveFrame(nowMs, direction);
+    const resolved = this.resolveFrame(nowMs, direction);
+    const { frame } = resolved;
+    this.currentPose = resolved.pose;
     if (frame.key !== this.currentFrameKey) {
       this.sprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;
     }
-    const scale = this.resolveScale(nowMs);
+    const scale = this.resolveScale(this.currentPose);
     // The authored presentation offset rides on top of wherever the fight put
     // the character; `motion` itself is never touched, so dodging, collision
     // and the arena bounds are exactly as before.
@@ -100,7 +113,10 @@ export class BossPlayer {
   anchorAt(nowMs: number, footGap: number): { x: number; y: number } {
     return {
       x: this.motion.x,
-      y: BOSS_ARENA.floorY + footOffset(footGap, this.resolveScale(nowMs)),
+      y:
+        BOSS_ARENA.floorY
+        + footOffset(footGap, this.resolveScale(this.currentPose))
+        + this.entranceOffsetY(nowMs),
     };
   }
 
@@ -110,11 +126,12 @@ export class BossPlayer {
   }
 
   baseScaleAt(nowMs: number): number {
-    return this.resolveScale(nowMs);
+    void nowMs;
+    return this.resolveScale(this.currentPose);
   }
 
   currentFootGap(nowMs: number, direction: MoveDirection = 0): number {
-    return this.resolveFrame(nowMs, direction).footGap;
+    return this.resolveFrame(nowMs, direction).frame.footGap;
   }
 
   /** Applies the authored visual offset/scale; re-read on every update. */
@@ -122,17 +139,39 @@ export class BossPlayer {
     this.presentation = presentation;
   }
 
-  private resolveScale(nowMs: number): number {
-    if (nowMs < this.damageFrameUntilMs) return resolveGameplayScale(this.character, 'damage');
-    return resolveGameplayScale(this.character, 'run');
+  private resolveScale(pose: BossPlayerPose): number {
+    return resolveGameplayScale(this.character, pose);
   }
 
-  private resolveFrame(nowMs: number, direction: MoveDirection): CharacterAssetRef {
-    const { run, damage } = this.character.gameplay;
-    if (nowMs < this.damageFrameUntilMs && damage.length > 0) return damage[0];
-    // Idle breathes on a slower cadence rather than freezing on one frame.
-    const cycle = direction === 0 && this.motion.velocityX === 0 ? BOSS_IDLE_CYCLE_MS : RUN_CYCLE_MS;
-    return run[loopedFrameIndex(nowMs, run.length, cycle)];
+  private resolveFrame(
+    nowMs: number,
+    direction: MoveDirection,
+  ): { frame: CharacterAssetRef; pose: BossPlayerPose } {
+    const { idle, run, damage } = this.character.gameplay;
+    if (nowMs < this.damageFrameUntilMs && damage.length > 0) {
+      return { frame: damage[0], pose: 'damage' };
+    }
+    if (direction === 0 && this.motion.velocityX === 0 && idle) {
+      return { frame: idle, pose: 'idle' };
+    }
+    return {
+      frame: run[loopedFrameIndex(nowMs, run.length, RUN_CYCLE_MS)],
+      pose: 'run',
+    };
+  }
+
+  private entranceOffsetY(nowMs: number): number {
+    if (this.entranceStartedAtMs === undefined) return 0;
+    const progress = Phaser.Math.Clamp(
+      (nowMs - this.entranceStartedAtMs) / ENTRANCE_FALL_DURATION_MS,
+      0,
+      1,
+    );
+    return Phaser.Math.Linear(
+      ENTRANCE_FALL_START_OFFSET_Y,
+      0,
+      Phaser.Math.Easing.Bounce.Out(progress),
+    );
   }
 
   destroy(): void {

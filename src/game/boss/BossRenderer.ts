@@ -1,36 +1,63 @@
 import Phaser from 'phaser';
+import {
+  BOSS_ART,
+  BOSS_VISUAL,
+  getBossSpawnFrame,
+  loopedBossFrameIndex,
+  resolveBossFacing,
+  type BossFacing,
+} from './bossAssets';
 import { BOSS_ARENA } from './bossConfig';
 import { BossDepth } from './bossConstants';
+
+type EntranceState = 'buried' | 'spawning' | 'active';
 
 /**
  * The boss's visual, and nothing else.
  *
- * Gameplay never reads from this class — attacks come from the fight plan and
- * damage from the collision geometry — so replacing the placeholder with a real
- * sprite means changing only `build()` and `update()` here.
+ * Fight timing, attack scheduling and collision remain entirely outside this
+ * class. The authored baby and energy frames share one transparent canvas, so
+ * the sphere can be parented to the boss at (0, 0) and stay registered between
+ * its hands through every animation frame.
  */
 export class BossRenderer {
   private readonly root: Phaser.GameObjects.Container;
+  private readonly phaseAura: Phaser.GameObjects.Arc;
+  private readonly baby: Phaser.GameObjects.Sprite;
+  private readonly energySphere: Phaser.GameObjects.Sprite;
   private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
-  private readonly core: Phaser.GameObjects.Arc;
-  private readonly ring: Phaser.GameObjects.Arc;
-  private readonly eye: Phaser.GameObjects.Arc;
-  private readonly wings: Phaser.GameObjects.Triangle[];
+  private entranceState: EntranceState = 'buried';
+  private spawnStartedAtMs = 0;
+  private facing: BossFacing = 'front';
+  private currentBabyKey?: string;
+  private currentSphereKey?: string;
+  private pulseUntilMs = -Infinity;
 
   constructor(
     private readonly scene: Phaser.Scene,
     centerX: number,
   ) {
-    this.core = scene.add.circle(0, 0, 58, 0x2a1140).setStrokeStyle(5, 0xff477e, 0.95);
-    this.ring = scene.add.circle(0, 0, 78).setStrokeStyle(3, 0x56ffff, 0.45);
-    this.eye = scene.add.circle(0, 4, 20, 0xffdf57);
-    this.wings = [
-      scene.add.triangle(-96, 6, 0, 0, 74, -26, 74, 30, 0x3a1750).setStrokeStyle(3, 0xff477e, 0.8),
-      scene.add.triangle(96, 6, 0, 0, -74, -26, -74, 30, 0x3a1750).setStrokeStyle(3, 0xff477e, 0.8),
-    ];
+    this.phaseAura = scene.add
+      .circle(0, BOSS_VISUAL.spriteOffsetY, 245)
+      .setStrokeStyle(8, 0x56ffff, 0.28);
+    this.baby = scene.add.sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.baby.front[0].key);
+    this.energySphere = scene.add
+      .sprite(0, BOSS_VISUAL.spriteOffsetY, BOSS_ART.energySphere[0].key)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(false);
     this.root = scene.add
-      .container(centerX, BOSS_ARENA.bossCenterY, [...this.wings, this.ring, this.core, this.eye])
-      .setDepth(BossDepth.BOSS);
+      .container(centerX, BOSS_VISUAL.spawnStartY, [
+        this.phaseAura,
+        this.baby,
+        this.energySphere,
+      ])
+      .setScale(BOSS_VISUAL.scale)
+      .setDepth(BossDepth.BOSS)
+      .setVisible(false);
+  }
+
+  get baseScale(): number {
+    return BOSS_VISUAL.scale;
   }
 
   /** Where the fight wants the boss drawn, before any authored offset. */
@@ -43,39 +70,101 @@ export class BossRenderer {
     return this.root;
   }
 
-  /**
-   * Authored visual offset and scale, re-applied on every update because the
-   * hover rewrites the container's position each frame — editing the container
-   * alone would be overwritten immediately.
-   */
+  get spawnComplete(): boolean {
+    return this.entranceState === 'active';
+  }
+
+  startSpawn(nowMs: number): void {
+    if (this.entranceState !== 'buried') return;
+    this.entranceState = 'spawning';
+    this.spawnStartedAtMs = nowMs;
+    this.root.setVisible(true);
+  }
+
+  /** Authored visual offset/scale layered on top of the canonical boss size. */
   setPresentation(presentation: { offsetX: number; offsetY: number; scale: number }): void {
     this.presentation = presentation;
   }
 
-  /** Idle hover plus a pupil that tracks the player, so aim reads as intent. */
-  update(nowMs: number, centerX: number, playerX: number): void {
-    const anchor = this.anchorAt(nowMs, centerX);
-    this.root.x = anchor.x + this.presentation.offsetX;
-    this.root.y = anchor.y + this.presentation.offsetY;
-    this.root.setScale(this.presentation.scale);
-    this.ring.setScale(1 + Math.sin(nowMs / 340) * 0.04);
-    const offset = Phaser.Math.Clamp((playerX - centerX) / 14, -22, 22);
-    this.eye.x = offset;
+  /**
+   * Spawn rise, idle orientation and charge are presentation states only. The
+   * director continues to own the exact moment a telegraph/attack is active.
+   */
+  update(nowMs: number, centerX: number, playerX: number, charging = false): void {
+    if (this.entranceState === 'buried') return;
+
+    let x = centerX;
+    let y: number;
+    let rotation = 0;
+
+    if (this.entranceState === 'spawning') {
+      const elapsed = Math.max(0, nowMs - this.spawnStartedAtMs);
+      const progress = Phaser.Math.Clamp(elapsed / BOSS_VISUAL.spawnDurationMs, 0, 1);
+      const eased = Phaser.Math.Easing.Cubic.Out(progress);
+      y = Phaser.Math.Linear(BOSS_VISUAL.spawnStartY, BOSS_ARENA.bossCenterY, eased);
+      rotation = progress * Math.PI * 2 * BOSS_VISUAL.spawnRotations;
+      const spawnFrame = getBossSpawnFrame(elapsed);
+      this.showBabyFrame(spawnFrame.facing, spawnFrame.frameIndex);
+      this.energySphere.setVisible(false);
+      if (progress >= 1) {
+        this.entranceState = 'active';
+        this.facing = 'front';
+        rotation = 0;
+      }
+    } else {
+      const anchor = this.anchorAt(nowMs, centerX);
+      x = anchor.x;
+      y = anchor.y;
+      this.facing = resolveBossFacing(
+        playerX,
+        centerX + this.presentation.offsetX,
+        this.facing,
+      );
+      this.showBabyFrame(
+        this.facing,
+        loopedBossFrameIndex(nowMs, BOSS_VISUAL.animationCycleMs),
+      );
+      this.updateEnergySphere(nowMs, charging);
+    }
+
+    const pulse = nowMs < this.pulseUntilMs
+      ? 1 + 0.06 * ((this.pulseUntilMs - nowMs) / 220)
+      : 1;
+    this.root.x = x + this.presentation.offsetX;
+    this.root.y = y + this.presentation.offsetY;
+    this.root.rotation = rotation;
+    this.root.setScale(BOSS_VISUAL.scale * this.presentation.scale * pulse);
   }
 
   /** Flash when an attack goes live, purely cosmetic. */
-  pulse(color = 0xff477e): void {
-    this.core.setStrokeStyle(5, color, 1);
-    this.scene.tweens.add({
-      targets: this.root,
-      scale: { from: 1.06, to: 1 },
-      duration: 220,
-      ease: 'Quad.easeOut',
-    });
+  pulse(): void {
+    this.pulseUntilMs = this.scene.time.now + 220;
   }
 
   setPhaseTint(color: number): void {
-    this.core.setFillStyle(color);
+    // Keep the authored sprite colours intact; carry the existing phase cue
+    // on the aura that replaced the procedural boss ring.
+    this.phaseAura.setStrokeStyle(8, color, 0.34);
+  }
+
+  private showBabyFrame(facing: BossFacing, frameIndex: number): void {
+    const frame = BOSS_ART.baby[facing][frameIndex];
+    if (frame.key === this.currentBabyKey) return;
+    this.baby.setTexture(frame.key);
+    this.currentBabyKey = frame.key;
+  }
+
+  private updateEnergySphere(nowMs: number, charging: boolean): void {
+    this.energySphere.setVisible(charging);
+    if (!charging) return;
+    const frame = BOSS_ART.energySphere[
+      loopedBossFrameIndex(nowMs, BOSS_VISUAL.energyCycleMs)
+    ];
+    if (frame.key !== this.currentSphereKey) {
+      this.energySphere.setTexture(frame.key);
+      this.currentSphereKey = frame.key;
+    }
+    this.energySphere.setScale(BOSS_VISUAL.energyScale + Math.sin(nowMs / 80) * 0.035);
   }
 
   destroy(): void {

@@ -5,6 +5,7 @@ import { BossFightDirector, type BossFightEvent } from '../boss/BossFightDirecto
 import { BossHud } from '../boss/BossHud';
 import { BossInput } from '../boss/BossInput';
 import { BossPlayer } from '../boss/BossPlayer';
+import { getBossAssetUrls } from '../boss/bossAssets';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { BossRenderer } from '../boss/BossRenderer';
@@ -56,6 +57,7 @@ export class BossScene extends Phaser.Scene {
   private running = false;
   private finished = false;
   private introText?: Phaser.GameObjects.Text;
+  private introPhase: 'playerFall' | 'bossSpawn' | 'instructions' = 'playerFall';
   /** Restored when the dev editor closes, so the fight resumes as it was. */
   private runningBeforeEditor = false;
 
@@ -68,6 +70,7 @@ export class BossScene extends Phaser.Scene {
     this.seed = data.seed ?? 1;
     this.running = false;
     this.finished = false;
+    this.introPhase = 'playerFall';
   }
 
   /** Lets the scene be launched standalone in dev without Levels 1 and 2. */
@@ -94,6 +97,9 @@ export class BossScene extends Phaser.Scene {
     // Demand-driven and idempotent, so a direct ?scene=boss works even
     // though Berlin was never entered.
     queueCharacterGameplay(this, getSelectedCharacter());
+    for (const asset of getBossAssetUrls()) {
+      if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
+    }
   }
 
   create(): void {
@@ -174,7 +180,7 @@ export class BossScene extends Phaser.Scene {
               x: transform.x - anchor.x,
               y: transform.y - anchor.y,
             }),
-            scale: transform.scaleY,
+            scale: transform.scaleY / this.boss.baseScale,
           });
           this.applyAuthoredPresentation();
         },
@@ -214,6 +220,11 @@ export class BossScene extends Phaser.Scene {
   }
 
   private showIntro(): void {
+    this.introPhase = 'playerFall';
+    this.player.startEntrance(this.time.now);
+  }
+
+  private showFightInstructions(): void {
     const { width, height } = this.cameras.main;
     const hint = this.controls.isTouch
       ? 'HOLD LEFT OR RIGHT TO MOVE'
@@ -231,7 +242,7 @@ export class BossScene extends Phaser.Scene {
       .setDepth(2000);
     // Fixed delay rather than a keypress: the fight is on a timer, so everyone
     // gets the same read time before the first telegraph.
-    this.time.delayedCall(2600, () => {
+    this.time.delayedCall(1600, () => {
       this.introText?.destroy();
       this.introText = undefined;
       this.running = true;
@@ -255,9 +266,17 @@ export class BossScene extends Phaser.Scene {
     // teleport the fight clock past a whole telegraph.
     const step = Math.min(delta, MAX_FRAME_DELTA_MS);
     if (!this.running) {
-      // Still let the player idle and the boss hover during the intro.
+      // The previous level drops the player into this arena. The boss only
+      // erupts after that landing, then the unchanged timed fight begins.
       this.player.update(0, 0, now, this.bounds);
-      this.boss.update(now, this.bossX, this.player.x);
+      this.boss.update(now, this.bossX, this.player.x, false);
+      if (this.introPhase === 'playerFall' && this.player.isEntranceComplete(now)) {
+        this.introPhase = 'bossSpawn';
+        this.boss.startSpawn(now);
+      } else if (this.introPhase === 'bossSpawn' && this.boss.spawnComplete) {
+        this.introPhase = 'instructions';
+        this.showFightInstructions();
+      }
       return;
     }
 
@@ -270,7 +289,8 @@ export class BossScene extends Phaser.Scene {
     const snapshot = this.director.snapshot;
     // Lasers are drawn from the boss itself, so the renderer needs its X.
     this.attacks.redraw(snapshot.activeAttacks, snapshot.elapsedMs, this.bossX);
-    this.boss.update(now, this.bossX, this.player.x);
+    const charging = snapshot.activeAttacks.some((attack) => attack.phase === 'telegraph');
+    this.boss.update(now, this.bossX, this.player.x, charging);
     this.hud.update(snapshot);
   }
 

@@ -11,9 +11,9 @@ export const BOSS_ARENA = {
   /** Feet line for the player; the arena floor. */
   floorY: 640,
   /** Boss sits above this, the player below it. */
-  bossCenterY: 130,
+  bossCenterY: 200,
   /** Every laser is emitted from this point on the boss, never from mid-air. */
-  laserOriginY: 186,
+  laserOriginY: 260,
   /** Half-width of the beam where it leaves the boss, before it fans out. */
   laserOriginHalfWidth: 11,
 } as const;

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { getAttackBeams, getBeamPolygon, getTelegraphProgress } from './attackRuntime';
+import { BOSS_ART } from './bossAssets';
 import { BOSS_ARENA } from './bossConfig';
 import { BossDepth, BossPalette } from './bossConstants';
 import type { ActiveAttack, LaserBeam, LaserPolygon } from './types';
@@ -16,8 +17,9 @@ import type { ActiveAttack, LaserBeam, LaserPolygon } from './types';
 export class AttackRenderer {
   private readonly telegraphs: Phaser.GameObjects.Graphics;
   private readonly lasers: Phaser.GameObjects.Graphics;
+  private readonly laserSprites: Phaser.GameObjects.Image[] = [];
 
-  constructor(scene: Phaser.Scene) {
+  constructor(private readonly scene: Phaser.Scene) {
     this.telegraphs = scene.add.graphics().setDepth(BossDepth.TELEGRAPH);
     this.lasers = scene.add.graphics().setDepth(BossDepth.LASER);
   }
@@ -25,6 +27,9 @@ export class AttackRenderer {
   redraw(attacks: readonly ActiveAttack[], nowMs: number, bossX: number): void {
     this.telegraphs.clear();
     this.lasers.clear();
+    for (const sprite of this.laserSprites) sprite.setVisible(false);
+
+    let liveLaserCount = 0;
 
     for (const attack of attacks) {
       const beams = getAttackBeams(attack);
@@ -33,7 +38,10 @@ export class AttackRenderer {
         continue;
       }
       if (attack.phase !== 'active') continue;
-      for (const beam of beams) this.drawLaser(getBeamPolygon(beam, bossX));
+      for (const beam of beams) {
+        this.drawLaser(getBeamPolygon(beam, bossX), liveLaserCount, nowMs);
+        liveLaserCount += 1;
+      }
     }
   }
 
@@ -81,29 +89,39 @@ export class AttackRenderer {
     if (attack.params.type === 'laserWall') this.drawSafeGap(attack);
   }
 
-  private drawLaser(polygon: LaserPolygon): void {
-    const points = this.toPoints(polygon);
-    this.lasers.fillStyle(BossPalette.laser, 0.82);
-    this.lasers.fillPoints(points, true);
-    // Bright core along the same axis, so the beam reads as a single shot.
-    const core = getBeamPolygon(
-      { centerX: polygon.footprintCenterX, halfWidth: this.coreHalfWidth(polygon) },
-      polygon.originX,
-      polygon.originY,
-      BOSS_ARENA.floorY,
-      BOSS_ARENA.laserOriginHalfWidth * 0.4,
-    );
-    this.lasers.fillStyle(BossPalette.laserCore, 0.9);
-    this.lasers.fillPoints(this.toPoints(core), true);
-    // Muzzle flare anchors the shot to the boss.
+  private drawLaser(polygon: LaserPolygon, index: number, nowMs: number): void {
+    const sprite = this.getLaserSprite(index);
+    const deltaX = polygon.footprintCenterX - polygon.originX;
+    const deltaY = BOSS_ARENA.floorY - polygon.originY;
+    const length = Math.hypot(deltaX, deltaY);
+    const footprintWidth = Math.abs(polygon.points[4] - polygon.points[6]);
+    const frame = BOSS_ART.laser[Math.floor(nowMs / 90) % BOSS_ART.laser.length];
+    sprite
+      .setTexture(frame.key)
+      .setPosition(polygon.originX, polygon.originY)
+      // Source artwork points down. Rotate that axis toward the live footprint.
+      .setRotation(Math.atan2(deltaY, deltaX) - Math.PI / 2)
+      // Transparent side padding occupies roughly half the source canvas.
+      .setDisplaySize(Math.max(74, footprintWidth * 1.8), length)
+      .setVisible(true);
+
+    // Keep the small muzzle flash from the existing renderer. The beam itself
+    // is now entirely the authored two-frame animation.
     this.lasers.fillStyle(BossPalette.laserCore, 0.7);
     this.lasers.fillCircle(polygon.originX, polygon.originY, 14);
   }
 
-  /** Half-width of the bright core at the floor end of a beam. */
-  private coreHalfWidth(polygon: LaserPolygon): number {
-    const footprintHalfWidth = Math.abs(polygon.points[4] - polygon.footprintCenterX);
-    return footprintHalfWidth * 0.32;
+  private getLaserSprite(index: number): Phaser.GameObjects.Image {
+    const existing = this.laserSprites[index];
+    if (existing) return existing;
+    const sprite = this.scene.add
+      .image(0, 0, BOSS_ART.laser[0].key)
+      .setOrigin(0.5, 0)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(BossDepth.LASER)
+      .setVisible(false);
+    this.laserSprites.push(sprite);
+    return sprite;
   }
 
   /** Marks the opening so a wall reads as "go there", not "guess". */
@@ -130,5 +148,7 @@ export class AttackRenderer {
   destroy(): void {
     this.telegraphs.destroy();
     this.lasers.destroy();
+    for (const sprite of this.laserSprites) sprite.destroy();
+    this.laserSprites.length = 0;
   }
 }
