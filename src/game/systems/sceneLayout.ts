@@ -80,6 +80,23 @@ export function setSceneObjectLayout(
 }
 
 /** Just this scene's slice, which is all a save is allowed to overwrite. */
+/**
+ * Forgets one object entirely, rather than storing an emptied entry.
+ *
+ * Deleting an object in the editor has to be expressible in the saved file:
+ * `setSceneObjectLayout` can only add or update, so without this a removed
+ * object would keep its authored entry and reappear on the next reload. Only
+ * needed by scenes whose editable objects can genuinely be deleted — a scene's
+ * player or backdrop is a singleton and has no `remove`.
+ */
+export function removeSceneObjectLayout(sceneKey: string, objectId: string): void {
+  const scene = current[sceneKey];
+  if (!scene || !(objectId in scene)) return;
+  const rest = { ...scene };
+  delete rest[objectId];
+  current = { ...current, [sceneKey]: rest };
+}
+
 export function buildSceneLayoutPayload(sceneKey: string): SceneLayoutConfig {
   return { [sceneKey]: current[sceneKey] ?? {} };
 }

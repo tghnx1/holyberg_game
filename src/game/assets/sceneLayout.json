@@ -60,6 +60,66 @@
       "xRatio": 0.09343292582733578,
       "yRatio": 0.01036247037501757,
       "scale": 1.3365951121051773
+    },
+    "emerald-01": {
+      "xRatio": 0.09375,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-02": {
+      "xRatio": 0.1676136364,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-03": {
+      "xRatio": 0.2414772727,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-04": {
+      "xRatio": 0.3153409091,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-05": {
+      "xRatio": 0.3892045455,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-06": {
+      "xRatio": 0.4630681818,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-07": {
+      "xRatio": 0.5369318182,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-08": {
+      "xRatio": 0.6107954545,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-09": {
+      "xRatio": 0.6846590909,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-10": {
+      "xRatio": 0.7585227273,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-11": {
+      "xRatio": 0.8323863636,
+      "yRatio": 0.8027777778,
+      "scale": 1
+    },
+    "emerald-12": {
+      "xRatio": 0.90625,
+      "yRatio": 0.8027777778,
+      "scale": 1
     }
   },
   "DialogueScene": {

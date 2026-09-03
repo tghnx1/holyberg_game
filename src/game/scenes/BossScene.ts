@@ -7,8 +7,7 @@ import { BossInput } from '../boss/BossInput';
 import { BossPlayer } from '../boss/BossPlayer';
 import { EmeraldLayer } from '../boss/EmeraldLayer';
 import { getBossAssetUrls } from '../boss/bossAssets';
-import { BOSS_SCORING } from '../boss/bossConfig';
-import { createRandom } from '../boss/fightSequence';
+import { BOSS_EMERALDS, BOSS_SCORING } from '../boss/bossConfig';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { BossRenderer } from '../boss/BossRenderer';
@@ -32,13 +31,6 @@ const BOSS_EDITABLE_ID = 'boss';
 
 /** Upper bound on a single simulated frame, in milliseconds. */
 const MAX_FRAME_DELTA_MS = 50;
-
-/**
- * Spreads per-attack emerald seeds apart. Any odd stride works; this one is
- * simply large enough that neighbouring attack ids cannot land on overlapping
- * regions of the generator.
- */
-const EMERALD_SEED_STRIDE = 7919;
 
 export interface BossSceneData {
   /** Everything Levels 1 and 2 produced, passed straight through to the result. */
@@ -135,7 +127,7 @@ export class BossScene extends Phaser.Scene {
     this.player = new BossPlayer(this, width / 2, getSelectedCharacter());
     this.controls = new BossInput(this, this.game.device.input.touch);
     this.hud = new BossHud(this);
-    this.emeralds = new EmeraldLayer(this);
+    this.emeralds = new EmeraldLayer(this, this.scene.key);
 
     this.applyAuthoredPresentation();
 
@@ -209,6 +201,10 @@ export class BossScene extends Phaser.Scene {
         getBaseScale: () => this.player.baseScaleAt(this.time.now),
         refresh: () => this.applyAuthoredPresentation(),
       }),
+      // The arena's collectibles, laid out by hand the way Level 1's are.
+      // Unlike the two above these are a set rather than a singleton, so they
+      // are the only objects here that can be copied and deleted.
+      ...this.emeralds.getEditableObjects(),
     ];
   }
 
@@ -230,10 +226,14 @@ export class BossScene extends Phaser.Scene {
     // advancing, so the timer, the telegraphs and the live attacks hold.
     this.runningBeforeEditor = this.running;
     this.running = false;
+    // Every spot, not just the offered ones: emeralds cannot be arranged
+    // while the fight is hiding most of them.
+    this.emeralds.setAuthoringVisible(true);
   }
 
   onEditorDisable(): void {
     this.running = this.runningBeforeEditor;
+    this.emeralds.setAuthoringVisible(false);
   }
 
   private showIntro(): void {
@@ -320,13 +320,13 @@ export class BossScene extends Phaser.Scene {
   private handleFightEvent(event: BossFightEvent): void {
     switch (event.kind) {
       case 'telegraphStarted':
-        // The windup is the only time emeralds exist, so they are spawned by
-        // the same event that starts it rather than on a timer of their own.
-        this.spawnEmeraldsFor(event.attack);
+        // The windup is the only time emeralds are collectable, so they are
+        // offered by the event that starts it rather than on a timer.
+        this.offerEmeraldsFor(event.attack);
         break;
       case 'attackActivated':
         // The laser is live: anything not already picked up is lost, now.
-        this.emeralds.clear();
+        this.emeralds.hideAll();
         this.boss.pulse();
         break;
       case 'playerHit':
@@ -351,19 +351,20 @@ export class BossScene extends Phaser.Scene {
   }
 
   /**
-   * Places this telegraph's emeralds.
+   * Offers the authored emeralds this telegraph puts within reach.
    *
-   * Seeded from the fight's own seed and the attack's id, so the same seed
-   * lays out the same emeralds — and does so independently of how many
-   * telegraphs have already fired, which keeps one attack's placement from
-   * depending on the order the others were drawn in.
+   * Nothing is generated: the spots are wherever they were placed in the
+   * editor, so the same arena offers the same emeralds every run. Which of
+   * them a given telegraph shows still depends on where the player is
+   * standing and how long the windup grants them.
    */
-  private spawnEmeraldsFor(attack: ActiveAttack): void {
-    this.emeralds.spawn({
+  private offerEmeraldsFor(attack: ActiveAttack): void {
+    const playerBox = this.player.collectibleBox;
+    this.emeralds.offer({
       reachable: this.player.reachableCenterBounds(this.bounds),
-      playerCenterX: this.player.damageHitbox.centerX,
+      playerCenterX: playerBox.centerX,
       telegraphMs: attack.timing.telegraphMs,
-      random: createRandom(this.seed + attack.id * EMERALD_SEED_STRIDE),
+      pickupReachPx: playerBox.halfWidth + BOSS_EMERALDS.halfSizePx,
     });
   }
 
@@ -383,7 +384,7 @@ export class BossScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished = true;
     this.running = false;
-    this.emeralds.clear();
+    this.emeralds.hideAll();
     const { score } = this.director.result;
     const { width, height } = this.cameras.main;
     const headline = score.hits === 0 ? 'FLAWLESS' : 'YOU SURVIVED';

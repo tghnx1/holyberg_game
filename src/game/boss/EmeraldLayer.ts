@@ -4,35 +4,60 @@ import {
   EMERALD_ANIMATION,
   getCollectibleAnimationAssetUrls,
 } from '../collectibles/collectibleAnimations';
+import { removeSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
+import type { EditableObject } from '../systems/SceneEditor';
 import { BOSS_EMERALDS } from './bossConfig';
 import { BossDepth } from './bossConstants';
 import {
+  emeraldSpotLayout,
+  getAuthoredEmeraldSpots,
+  nextEmeraldSpotId,
+  type EmeraldSpot,
+} from './bossEmeraldSpots';
+import {
   collectEmeralds,
-  planEmeraldSpawn,
+  selectTelegraphEmeralds,
   type CollectibleBox,
-  type Emerald,
-  type EmeraldSpawnRequest,
+  type EmeraldSelectionRequest,
 } from './emeraldField';
 
+interface LiveEmerald {
+  spot: EmeraldSpot;
+  sprite: Phaser.GameObjects.Sprite;
+}
+
 /**
- * The emeralds of the current telegraph, drawn and picked up.
+ * The arena's authored emeralds: drawn, picked up, and editable.
  *
- * Owns no timers of its own. A set exists for exactly as long as one attack's
- * windup does: `spawn` is called when a telegraph starts and `clear` when the
- * laser goes live, both driven by the director's existing events. That is what
- * keeps a set from outliving its attack — there is no clock that could drift
- * out of step with the fight, and nothing to leak into the next telegraph.
+ * Every authored spot owns a sprite for the whole life of the scene, and the
+ * fight only changes which of them are *visible*. That is what lets the same
+ * objects be dragged, copied and deleted in SceneEditor — an emerald that only
+ * existed during a telegraph would vanish the moment the editor paused the
+ * fight, which is exactly when you want to arrange it.
  *
- * Placement and pickup geometry live in `emeraldField`; this class is only the
- * Phaser sprites and their pooling.
+ * The lifecycle is still the attack's and owns no timer of its own: `offer` is
+ * called when a telegraph starts and `hideAll` when the laser goes live, both
+ * driven by the director's existing events. Collecting hides a spot until the
+ * next telegraph rather than destroying it — a spot is a place an emerald
+ * appears, not a single pickup, so it comes back for the next attack.
+ *
+ * Selection and pickup geometry live in `emeraldField`; the authored data in
+ * `bossEmeraldSpots`. This class is only the sprites and the editor bindings.
  */
 export class EmeraldLayer {
-  private readonly sprites = new Map<number, Phaser.GameObjects.Sprite>();
-  private emeralds: Emerald[] = [];
-  private nextId = 0;
+  private readonly emeralds: LiveEmerald[] = [];
+  /** The subset the current telegraph is offering; empty between attacks. */
+  private offered: EmeraldSpot[] = [];
+  /** Mid-pickup animation: visible, but no longer offered and not to be reset. */
+  private readonly popping = new Set<string>();
+  private authoring = false;
 
-  constructor(private readonly scene: Phaser.Scene) {
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly sceneKey: string,
+  ) {
     createCollectibleAnimations(scene);
+    for (const spot of getAuthoredEmeraldSpots(sceneKey)) this.add(spot);
   }
 
   /** Demand-driven, idempotent: a direct `?scene=boss` still gets the art. */
@@ -42,76 +67,209 @@ export class EmeraldLayer {
     }
   }
 
-  get count(): number {
-    return this.emeralds.length;
+  /** How many are collectable right now; 0 between attacks. */
+  get offeredCount(): number {
+    return this.offered.length;
   }
 
-  /** Replaces any previous set, so an attack can never inherit stale emeralds. */
-  spawn(request: Omit<EmeraldSpawnRequest, 'nextId'>): void {
-    this.clear();
-    this.emeralds = planEmeraldSpawn({ ...request, nextId: this.nextId });
-    this.nextId += this.emeralds.length;
-    for (const emerald of this.emeralds) this.showSprite(emerald);
+  /** Shows the authored spots this telegraph puts within reach. */
+  offer(request: EmeraldSelectionRequest): void {
+    this.offered = selectTelegraphEmeralds(
+      this.emeralds.map((emerald) => emerald.spot),
+      request,
+    );
+    this.syncVisibility();
   }
 
   /**
-   * Collects everything the player is touching and reports how many, so the
-   * scene can score and celebrate each one without reaching in here.
+   * Collects everything the player is touching and reports it, so the scene
+   * can score and celebrate each one without reaching in here.
    */
-  collect(playerBox: CollectibleBox): Emerald[] {
-    if (this.emeralds.length === 0) return [];
-    const { collected, remaining } = collectEmeralds(this.emeralds, playerBox);
-    for (const emerald of collected) this.popSprite(emerald);
-    this.emeralds = remaining;
+  collect(playerBox: CollectibleBox): EmeraldSpot[] {
+    if (this.offered.length === 0) return [];
+    const { collected, remaining } = collectEmeralds(this.offered, playerBox);
+    this.offered = remaining;
+    for (const spot of collected) this.pop(spot.id);
+    this.syncVisibility();
     return collected;
   }
 
-  /** Everything uncollected is gone at once; this is the laser going live. */
-  clear(): void {
-    for (const emerald of this.emeralds) this.releaseSprite(emerald.id);
-    this.emeralds = [];
+  /** The laser is live: whatever was not collected is gone, now. */
+  hideAll(): void {
+    this.offered = [];
+    this.stopPops();
+    this.syncVisibility();
   }
 
-  private showSprite(emerald: Emerald): void {
+  /**
+   * While the editor is open every spot is shown, offered or not: you cannot
+   * arrange emeralds you cannot see, and the fight is paused anyway.
+   */
+  setAuthoringVisible(visible: boolean): void {
+    this.authoring = visible;
+    if (!visible) this.offered = [];
+    this.stopPops();
+    this.syncVisibility();
+  }
+
+  // ------------------------------------------------------------- editing
+
+  getEditableObjects(): EditableObject[] {
+    return this.emeralds.map((emerald) => this.toEditableObject(emerald));
+  }
+
+  /**
+   * An emerald is one of the things duplicating genuinely makes sense for: an
+   * arena is tuned by scattering the same pickup along it, so copy/paste beats
+   * hand-editing another JSON entry. Declaring `clone` and `remove` is the
+   * whole opt-in — the shared editor core offers each to exactly the objects
+   * that have it, which is why the boss and the player (singletons, both) get
+   * neither.
+   */
+  private toEditableObject(emerald: LiveEmerald): EditableObject {
+    return {
+      id: emerald.spot.id,
+      label: 'EMERALD',
+      target: emerald.sprite,
+      resizable: true,
+      getNativeSize: () => ({
+        width: emerald.sprite.frame.realWidth,
+        height: emerald.sprite.frame.realHeight,
+      }),
+      onChange: (transform) => {
+        emerald.spot = {
+          ...emerald.spot,
+          x: transform.x,
+          y: transform.y,
+          scale: this.scaleFromDisplay(emerald.sprite, transform.scaleY),
+        };
+        this.persist(emerald.spot);
+      },
+      clone: () => this.toEditableObject(this.duplicate(emerald)),
+      // Dropping it from `emeralds` is what omits it from the next save, and
+      // forgetting its layout entry is what keeps it gone across a reload —
+      // `setSceneObjectLayout` can only add or update.
+      remove: () => this.removeEmerald(emerald),
+    };
+  }
+
+  private duplicate(source: LiveEmerald): LiveEmerald {
+    const taken = new Set(this.emeralds.map((emerald) => emerald.spot.id));
+    const spot: EmeraldSpot = {
+      id: nextEmeraldSpotId(taken),
+      x: source.spot.x,
+      y: source.spot.y,
+      scale: source.spot.scale,
+    };
+    const created = this.add(spot);
+    this.persist(spot);
+    return created;
+  }
+
+  private removeEmerald(emerald: LiveEmerald): void {
+    const index = this.emeralds.indexOf(emerald);
+    if (index < 0) return;
+    this.emeralds.splice(index, 1);
+    this.offered = this.offered.filter((spot) => spot.id !== emerald.spot.id);
+    this.scene.tweens.killTweensOf(emerald.sprite);
+    emerald.sprite.destroy();
+    removeSceneObjectLayout(this.sceneKey, emerald.spot.id);
+  }
+
+  private persist(spot: EmeraldSpot): void {
+    setSceneObjectLayout(
+      this.sceneKey,
+      spot.id,
+      emeraldSpotLayout({ x: spot.x, y: spot.y }, spot.scale),
+    );
+  }
+
+  // ------------------------------------------------------------- sprites
+
+  private add(spot: EmeraldSpot): LiveEmerald {
     const sprite = this.scene.add
-      .sprite(emerald.x, emerald.y, EMERALD_ANIMATION.frameKeys[0])
-      .setDepth(BossDepth.COLLECTIBLE);
-    // Fit the pickup box by width and let height follow the artwork's own
-    // aspect, so the emerald is never stretched to match a square hit area.
-    sprite.setScale((BOSS_EMERALDS.halfSizePx * 2) / Math.max(1, sprite.frame.realWidth));
+      .sprite(spot.x, spot.y, EMERALD_ANIMATION.frameKeys[0])
+      .setDepth(BossDepth.COLLECTIBLE)
+      .setVisible(false);
+    sprite.setScale(this.displayScale(sprite) * spot.scale);
     sprite.play(EMERALD_ANIMATION.animKey);
-    this.sprites.set(emerald.id, sprite);
+    const emerald: LiveEmerald = { spot, sprite };
+    this.emeralds.push(emerald);
+    return emerald;
   }
 
-  /** A short pop so a pickup reads even mid-sprint, then the sprite is gone. */
-  private popSprite(emerald: Emerald): void {
-    const sprite = this.sprites.get(emerald.id);
-    if (!sprite) return;
-    this.sprites.delete(emerald.id);
+  /**
+   * Fits the pickup box by width and lets height follow the artwork's own
+   * aspect, so an emerald is never stretched to match a square hit area.
+   */
+  private displayScale(sprite: Phaser.GameObjects.Sprite): number {
+    return (BOSS_EMERALDS.halfSizePx * 2) / Math.max(1, sprite.frame.realWidth);
+  }
+
+  /** Inverse of `displayScale`: the authored multiplier a drag just produced. */
+  private scaleFromDisplay(sprite: Phaser.GameObjects.Sprite, displayed: number): number {
+    return Math.abs(displayed / this.displayScale(sprite)) || 1;
+  }
+
+  /**
+   * Shows exactly what should be showing, and restores anything a pickup
+   * animation left shrunk or faded. Positions are not touched: the sprite is
+   * where the editor put it, and `onChange` is what keeps the spot in step.
+   */
+  private syncVisibility(): void {
+    const offeredIds = new Set(this.offered.map((spot) => spot.id));
+    for (const emerald of this.emeralds) {
+      // A sprite mid-pop owns its own alpha and scale until the tween ends.
+      if (this.popping.has(emerald.spot.id)) continue;
+      const visible = this.authoring || offeredIds.has(emerald.spot.id);
+      emerald.sprite.setVisible(visible);
+      if (visible) this.resetAppearance(emerald);
+    }
+  }
+
+  private resetAppearance(emerald: LiveEmerald): void {
+    emerald.sprite
+      .setAlpha(1)
+      .setScale(this.displayScale(emerald.sprite) * emerald.spot.scale);
+  }
+
+  /** A short pop so a pickup reads even mid-sprint; the spot itself stays. */
+  private pop(id: string): void {
+    const emerald = this.emeralds.find((entry) => entry.spot.id === id);
+    if (!emerald) return;
+    const { sprite } = emerald;
+    this.popping.add(id);
+    this.scene.tweens.killTweensOf(sprite);
     this.scene.tweens.add({
       targets: sprite,
       scale: sprite.scale * 1.6,
       alpha: 0,
       duration: 180,
-      onComplete: () => sprite.destroy(),
+      onComplete: () => {
+        this.popping.delete(id);
+        sprite.setVisible(false);
+        this.resetAppearance(emerald);
+      },
     });
   }
 
-  private releaseSprite(id: number): void {
-    const sprite = this.sprites.get(id);
-    if (!sprite) return;
-    this.sprites.delete(id);
-    this.scene.tweens.killTweensOf(sprite);
-    sprite.destroy();
+  /** Cuts every pickup animation short, so nothing lingers into a laser. */
+  private stopPops(): void {
+    for (const emerald of this.emeralds) {
+      if (!this.popping.delete(emerald.spot.id)) continue;
+      this.scene.tweens.killTweensOf(emerald.sprite);
+      emerald.sprite.setVisible(false);
+      this.resetAppearance(emerald);
+    }
   }
 
   destroy(): void {
-    this.clear();
-    // Anything still mid-pop when the scene goes away.
-    for (const sprite of this.sprites.values()) {
-      this.scene.tweens.killTweensOf(sprite);
-      sprite.destroy();
+    for (const emerald of this.emeralds) {
+      this.scene.tweens.killTweensOf(emerald.sprite);
+      emerald.sprite.destroy();
     }
-    this.sprites.clear();
+    this.emeralds.length = 0;
+    this.offered = [];
+    this.popping.clear();
   }
 }

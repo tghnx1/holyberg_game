@@ -1,175 +1,205 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { BossFightDirector } from '../src/game/boss/BossFightDirector';
 import {
+  ATTACK_TIMINGS,
   BOSS_ARENA,
   BOSS_EMERALDS,
   BOSS_PHASES,
   BOSS_PLAYER,
   BOSS_SCORING,
+  MINIMUM_TELEGRAPH_MS,
 } from '../src/game/boss/bossConfig';
+import {
+  emeraldSpotId,
+  getAuthoredEmeraldSpots,
+  isEmeraldId,
+  nextEmeraldSpotId,
+  type EmeraldSpot,
+} from '../src/game/boss/bossEmeraldSpots';
 import {
   boxesOverlap,
   collectEmeralds,
   emeraldBox,
-  planEmeraldSpawn,
   reachableDistancePx,
+  selectTelegraphEmeralds,
   type CollectibleBox,
 } from '../src/game/boss/emeraldField';
-import { createRandom } from '../src/game/boss/fightSequence';
 import type { ArenaBounds } from '../src/game/boss/types';
+import { layoutRatiosFromDesignPoint } from '../src/game/systems/designSpace';
+import {
+  buildSceneLayoutPayload,
+  removeSceneObjectLayout,
+  resetSceneLayout,
+  setSceneObjectLayout,
+} from '../src/game/systems/sceneLayout';
+import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
 
 const arena: ArenaBounds = { minX: 70, maxX: 1210 };
-/** A typical phase-1 telegraph: 820ms of base windup at 1.35 scale. */
-const TELEGRAPH_MS = 1107;
+/** Where the visible player's centre can actually stand, for a typical build. */
+const reachable: ArenaBounds = { minX: 107, maxX: 1173 };
+const PLAYER_HALF_WIDTH = 37;
+const PICKUP_REACH = PLAYER_HALF_WIDTH + BOSS_EMERALDS.halfSizePx;
 
-const spawn = (overrides: Partial<Parameters<typeof planEmeraldSpawn>[0]> = {}) =>
-  planEmeraldSpawn({
-    reachable: arena,
-    playerCenterX: 640,
-    telegraphMs: TELEGRAPH_MS,
-    random: createRandom(1),
-    nextId: 0,
-    ...overrides,
+const telegraphMsFor = (scale: number): number =>
+  Math.max(MINIMUM_TELEGRAPH_MS, Math.round(ATTACK_TIMINGS.aimedLaser.telegraphMs * scale));
+const LONGEST_TELEGRAPH_MS = telegraphMsFor(Math.max(...BOSS_PHASES.map((p) => p.telegraphScale)));
+const SHORTEST_TELEGRAPH_MS = telegraphMsFor(Math.min(...BOSS_PHASES.map((p) => p.telegraphScale)));
+
+const authored = (): EmeraldSpot[] => getAuthoredEmeraldSpots('BossScene');
+
+const offer = (
+  spots: readonly EmeraldSpot[],
+  playerCenterX: number,
+  telegraphMs = LONGEST_TELEGRAPH_MS,
+): EmeraldSpot[] =>
+  selectTelegraphEmeralds(spots, {
+    reachable,
+    playerCenterX,
+    telegraphMs,
+    pickupReachPx: PICKUP_REACH,
   });
 
-describe('emerald placement', () => {
-  it('spawns a set inside the reachable arena, at leg height', () => {
-    const emeralds = spawn();
-    expect(emeralds.length).toBeGreaterThanOrEqual(BOSS_EMERALDS.minPerAttack);
-    expect(emeralds.length).toBeLessThanOrEqual(BOSS_EMERALDS.maxPerAttack);
-    for (const emerald of emeralds) {
-      expect(emerald.x).toBeGreaterThanOrEqual(arena.minX);
-      expect(emerald.x).toBeLessThanOrEqual(arena.maxX);
+describe('authored emerald spots', () => {
+  it('ships a set of spots the arena starts with', () => {
+    const spots = authored();
+    expect(spots.length).toBeGreaterThanOrEqual(8);
+    expect(new Set(spots.map((spot) => spot.id)).size).toBe(spots.length);
+    for (const spot of spots) expect(isEmeraldId(spot.id)).toBe(true);
+  });
+
+  it('reads them left to right, whatever order the file is in', () => {
+    const xs = authored().map((spot) => spot.x);
+    expect([...xs].sort((a, b) => a - b)).toEqual(xs);
+  });
+
+  it('places every shipped spot inside the arena, at leg height', () => {
+    for (const spot of authored()) {
+      expect(spot.x).toBeGreaterThanOrEqual(arena.minX);
+      expect(spot.x).toBeLessThanOrEqual(arena.maxX);
       // Above the floor but well below the player's head: no jump exists here.
-      expect(emerald.y).toBeLessThan(BOSS_ARENA.floorY);
-      expect(BOSS_ARENA.floorY - emerald.y).toBeLessThan(140);
+      expect(spot.y).toBeLessThan(BOSS_ARENA.floorY);
+      expect(BOSS_ARENA.floorY - spot.y).toBeLessThan(140);
     }
   });
 
-  it('never places one outside the movement bounds it is given', () => {
-    // A narrow band stands in for a large authored offset or a scaled-up
-    // character, both of which shrink where the visible player can go.
-    const narrow: ArenaBounds = { minX: 400, maxX: 700 };
-    for (let seed = 1; seed <= 60; seed += 1) {
-      for (const emerald of spawn({ reachable: narrow, random: createRandom(seed) })) {
-        expect(emerald.x).toBeGreaterThanOrEqual(narrow.minX);
-        expect(emerald.x).toBeLessThanOrEqual(narrow.maxX);
+  it('only claims ids that belong to emeralds', () => {
+    expect(isEmeraldId('emerald-01')).toBe(true);
+    expect(isEmeraldId(emeraldSpotId(7))).toBe(true);
+    // Hand-written ids are as valid as generated ones.
+    expect(isEmeraldId('emerald-left-wall')).toBe(true);
+    for (const other of ['player', 'boss', 'toilet', 'emerald', 'emeralds', 'stall-door']) {
+      expect(isEmeraldId(other)).toBe(false);
+    }
+  });
+});
+
+describe('what a telegraph offers', () => {
+  it('offers only spots the player could run to and still leave', () => {
+    for (let playerCenterX = 110; playerCenterX <= 1170; playerCenterX += 7) {
+      for (const spot of offer(authored(), playerCenterX)) {
+        const distance = Math.max(0, Math.abs(spot.x - playerCenterX) - PICKUP_REACH);
+        expect(distance).toBeLessThanOrEqual(reachableDistancePx(LONGEST_TELEGRAPH_MS) + 1e-9);
+        const travelMs = (distance / BOSS_PLAYER.moveSpeed) * 1000;
+        expect(travelMs).toBeLessThan(LONGEST_TELEGRAPH_MS);
       }
     }
   });
 
-  it('stays inside the distance the player can actually run in the telegraph', () => {
-    for (let seed = 1; seed <= 60; seed += 1) {
-      const playerCenterX = 200 + (seed % 9) * 100;
-      const emeralds = spawn({ playerCenterX, random: createRandom(seed) });
-      for (const emerald of emeralds) {
-        const distance = Math.abs(emerald.x - playerCenterX);
-        expect(distance).toBeLessThanOrEqual(reachableDistancePx(TELEGRAPH_MS) + 1e-9);
-        // Reachable with room to spare, so there is time to get out again.
-        const travelTimeMs = (distance / BOSS_PLAYER.moveSpeed) * 1000;
-        expect(travelTimeMs).toBeLessThan(TELEGRAPH_MS);
-      }
-    }
-  });
-
-  it('is reachable for every telegraph the real fight ever issues', () => {
-    // The shortest telegraph in the fight is the fairness floor: if an emerald
-    // is reachable within that, it is reachable in every phase.
-    const shortest = Math.min(...BOSS_PHASES.map((phase) => 820 * phase.telegraphScale));
-    for (let seed = 1; seed <= 40; seed += 1) {
-      const emeralds = spawn({ telegraphMs: shortest, random: createRandom(seed) });
-      for (const emerald of emeralds) {
-        const travelMs = (Math.abs(emerald.x - 640) / BOSS_PLAYER.moveSpeed) * 1000;
-        expect(travelMs).toBeLessThan(shortest);
-      }
-    }
-  });
-
-  it('never drops one in the player’s lap, or on top of another', () => {
-    for (let seed = 1; seed <= 80; seed += 1) {
-      const emeralds = spawn({ random: createRandom(seed) });
-      for (const emerald of emeralds) {
-        expect(Math.abs(emerald.x - 640)).toBeGreaterThanOrEqual(
+  it('never offers one the player is already standing on', () => {
+    for (let playerCenterX = 110; playerCenterX <= 1170; playerCenterX += 7) {
+      for (const spot of offer(authored(), playerCenterX)) {
+        expect(Math.abs(spot.x - playerCenterX)).toBeGreaterThanOrEqual(
           BOSS_EMERALDS.minPlayerDistancePx,
         );
       }
-      for (let i = 0; i < emeralds.length; i += 1) {
-        for (let j = i + 1; j < emeralds.length; j += 1) {
-          expect(Math.abs(emeralds[i].x - emeralds[j].x)).toBeGreaterThanOrEqual(
-            BOSS_EMERALDS.minSeparationPx,
-          );
-        }
+    }
+  });
+
+  it('leaves nobody empty-handed: every position gets an offer, on any telegraph', () => {
+    const spots = authored();
+    for (const telegraphMs of [LONGEST_TELEGRAPH_MS, SHORTEST_TELEGRAPH_MS]) {
+      for (let playerCenterX = 107; playerCenterX <= 1173; playerCenterX += 3) {
+        expect(offer(spots, playerCenterX, telegraphMs).length).toBeGreaterThan(0);
       }
     }
   });
 
-  it('varies placement across attacks rather than reusing one spot', () => {
-    const positions = new Set<number>();
-    for (let seed = 1; seed <= 20; seed += 1) {
-      for (const emerald of spawn({ random: createRandom(seed) })) {
-        positions.add(Math.round(emerald.x));
-      }
-    }
-    expect(positions.size).toBeGreaterThan(20);
+  it('offers a bigger spread on a generous telegraph than a tight one', () => {
+    const spots = authored();
+    const generous = offer(spots, 640, LONGEST_TELEGRAPH_MS).length;
+    const tight = offer(spots, 640, SHORTEST_TELEGRAPH_MS).length;
+    expect(generous).toBeGreaterThan(tight);
   });
 
-  it('is deterministic: the same seed lays out the same emeralds', () => {
-    const first = spawn({ random: createRandom(4242) });
-    const second = spawn({ random: createRandom(4242) });
-    expect(first).toEqual(second);
-    expect(spawn({ random: createRandom(99) })).not.toEqual(first);
+  it('counts a spot beside a wall, which no player centre can stand on', () => {
+    // The whole point of pickupReachPx: the player collects it by running
+    // into the wall, so ruling it unreachable would be wrong.
+    const atWall: EmeraldSpot[] = [{ id: 'emerald-01', x: reachable.minX - 20, y: 578, scale: 1 }];
+    expect(offer(atWall, reachable.minX + BOSS_EMERALDS.minPlayerDistancePx)).toHaveLength(1);
   });
 
-  it('yields nothing rather than cheating when there is no room', () => {
-    const pinned: ArenaBounds = { minX: 640, maxX: 640 };
-    expect(spawn({ reachable: pinned })).toEqual([]);
-    expect(spawn({ telegraphMs: 0 })).toEqual([]);
+  it('is the same offer every run: nothing about it is random', () => {
+    const spots = authored();
+    expect(offer(spots, 500)).toEqual(offer(spots, 500));
+    expect(offer(spots, 500)).not.toEqual(offer(spots, 900));
   });
 
-  it('hands out ids that stay unique across attacks', () => {
-    const first = spawn({ nextId: 0 });
-    const second = spawn({ nextId: first.length, random: createRandom(2) });
-    const ids = [...first, ...second].map((emerald) => emerald.id);
-    expect(new Set(ids).size).toBe(ids.length);
+  it('offers nothing rather than cheating when there is no time or no room', () => {
+    expect(offer(authored(), 640, 0)).toEqual([]);
+    expect(
+      selectTelegraphEmeralds(authored(), {
+        reachable: { minX: 640, maxX: 640 },
+        playerCenterX: 640,
+        telegraphMs: LONGEST_TELEGRAPH_MS,
+        pickupReachPx: 0,
+      }),
+    ).toEqual([]);
   });
 });
 
 describe('emerald collection', () => {
-  const playerAt = (centerX: number, halfWidth = 34): CollectibleBox => ({
+  const playerAt = (centerX: number, halfWidth = PLAYER_HALF_WIDTH): CollectibleBox => ({
     centerX,
     centerY: BOSS_ARENA.floorY - 80,
     halfWidth,
     halfHeight: 80,
   });
+  const spotAt = (id: string, x: number, scale = 1): EmeraldSpot => ({
+    id,
+    x,
+    y: BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx,
+    scale,
+  });
 
-  it('collects an emerald the visible player is standing on, and only that one', () => {
-    const emeralds = [
-      { id: 1, x: 300, y: BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx },
-      { id: 2, x: 900, y: BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx },
-    ];
-    const { collected, remaining } = collectEmeralds(emeralds, playerAt(300));
-    expect(collected.map((emerald) => emerald.id)).toEqual([1]);
-    expect(remaining.map((emerald) => emerald.id)).toEqual([2]);
+  it('collects the one the player is standing on, and only that one', () => {
+    const { collected, remaining } = collectEmeralds(
+      [spotAt('emerald-01', 300), spotAt('emerald-02', 900)],
+      playerAt(300),
+    );
+    expect(collected.map((spot) => spot.id)).toEqual(['emerald-01']);
+    expect(remaining.map((spot) => spot.id)).toEqual(['emerald-02']);
   });
 
   it('uses a collectible box wider than the narrow laser hurtbox', () => {
-    const emerald = { id: 1, x: 300, y: BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx };
-    // Just outside the torso strip a laser tests against, but plainly touching
-    // the character on screen.
     const grazeX = 300 + BOSS_PLAYER.hitHalfWidth + 12;
-    expect(boxesOverlap(emeraldBox(emerald), playerAt(grazeX))).toBe(true);
+    expect(boxesOverlap(emeraldBox(spotAt('emerald-01', 300)), playerAt(grazeX))).toBe(true);
   });
 
   it('scales its reach with the player box it is given, not a constant', () => {
-    const emerald = { id: 1, x: 500, y: BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx };
+    const spot = spotAt('emerald-01', 500);
     const far = 500 + BOSS_EMERALDS.halfSizePx + 60;
-    expect(boxesOverlap(emeraldBox(emerald), playerAt(far, 30))).toBe(false);
-    // A character authored twice as wide reaches it; nothing is hardcoded.
-    expect(boxesOverlap(emeraldBox(emerald), playerAt(far, 70))).toBe(true);
+    expect(boxesOverlap(emeraldBox(spot), playerAt(far, 30))).toBe(false);
+    expect(boxesOverlap(emeraldBox(spot), playerAt(far, 70))).toBe(true);
+  });
+
+  it('grows the pickup box with an emerald authored larger', () => {
+    const far = 500 + BOSS_EMERALDS.halfSizePx + 30;
+    expect(boxesOverlap(emeraldBox(spotAt('emerald-01', 500, 1)), playerAt(far, 20))).toBe(false);
+    expect(boxesOverlap(emeraldBox(spotAt('emerald-01', 500, 2.5)), playerAt(far, 20))).toBe(true);
   });
 
   it('ignores an emerald at a height the player never occupies', () => {
-    const overhead = { id: 1, x: 300, y: BOSS_ARENA.floorY - 400 };
+    const overhead: EmeraldSpot = { id: 'emerald-01', x: 300, y: BOSS_ARENA.floorY - 400, scale: 1 };
     expect(boxesOverlap(emeraldBox(overhead), playerAt(300))).toBe(false);
   });
 });
@@ -179,54 +209,114 @@ describe('emerald lifecycle against the fight', () => {
 
   /**
    * Mirrors what BossScene does with the director's events, so the rule under
-   * test is the real wiring: spawn on telegraph, clear on active.
+   * test is the real wiring: offer on telegraph, hide on active.
    */
-  function runFight(): { maxLive: number; spawns: number; liveDuringActive: number[] } {
+  function runFight(): { maxOffered: number; offers: number; liveDuringActive: number[] } {
     const director = new BossFightDirector(bounds, 1);
-    let live = 0;
-    let spawns = 0;
-    let maxLive = 0;
+    const spots = authored();
+    let offered = 0;
+    let offers = 0;
+    let maxOffered = 0;
     const liveDuringActive: number[] = [];
     let guard = 0;
 
     while (!director.snapshot.finished && guard < 100_000) {
       for (const event of director.update(16, 640)) {
         if (event.kind === 'telegraphStarted') {
-          live = planEmeraldSpawn({
-            reachable: bounds,
-            playerCenterX: 640,
-            telegraphMs: event.attack.timing.telegraphMs,
-            random: createRandom(1 + event.attack.id * 7919),
-            nextId: 0,
-          }).length;
-          spawns += 1;
-          maxLive = Math.max(maxLive, live);
+          offered = offer(spots, 640, event.attack.timing.telegraphMs).length;
+          offers += 1;
+          maxOffered = Math.max(maxOffered, offered);
         }
-        if (event.kind === 'attackActivated') live = 0;
+        if (event.kind === 'attackActivated') offered = 0;
       }
-      // Nothing may be alive while a laser is firing.
       if (director.snapshot.activeAttacks.some((attack) => attack.phase === 'active')) {
-        liveDuringActive.push(live);
+        liveDuringActive.push(offered);
       }
       guard += 1;
     }
-    return { maxLive, spawns, liveDuringActive };
+    return { maxOffered, offers, liveDuringActive };
   }
 
-  it('spawns a set for every telegraph and clears it the instant the laser fires', () => {
-    const { maxLive, spawns, liveDuringActive } = runFight();
-    expect(spawns).toBeGreaterThan(10);
-    expect(maxLive).toBeGreaterThan(0);
-    // No emerald survives into an active laser, a recovery, or the next attack.
+  it('offers a set for every telegraph and clears it the instant the laser fires', () => {
+    const { maxOffered, offers, liveDuringActive } = runFight();
+    expect(offers).toBeGreaterThan(10);
+    expect(maxOffered).toBeGreaterThan(0);
+    // Nothing survives into an active laser, a recovery, or the next attack.
     expect(liveDuringActive.every((count) => count === 0)).toBe(true);
-  });
-
-  it('never leaves more than one attack’s worth of emeralds alive', () => {
-    const { maxLive } = runFight();
-    expect(maxLive).toBeLessThanOrEqual(BOSS_EMERALDS.maxPerAttack);
   });
 
   it('keeps one named constant as the emerald value', () => {
     expect(BOSS_SCORING.emeraldScore).toBe(100);
+  });
+});
+
+describe('authoring emeralds in the editor', () => {
+  afterEach(() => resetSceneLayout());
+
+  const spotsInPayload = (): string[] =>
+    Object.keys(buildSceneLayoutPayload('BossScene').BossScene ?? {}).filter(isEmeraldId);
+
+  it('saves a moved emerald as a world point, not a screen fraction', () => {
+    const moved = { x: 812, y: 590 };
+    setSceneObjectLayout('BossScene', 'emerald-01', {
+      ...layoutRatiosFromDesignPoint(moved),
+      scale: 1,
+    });
+    const reloaded = authored().find((spot) => spot.id === 'emerald-01');
+    expect(reloaded?.x).toBeCloseTo(moved.x);
+    expect(reloaded?.y).toBeCloseTo(moved.y);
+  });
+
+  it('keeps a pasted copy alongside the original rather than replacing it', () => {
+    const before = spotsInPayload();
+    const copyId = nextEmeraldSpotId(new Set(before));
+    expect(before).toContain('emerald-01');
+    expect(before).not.toContain(copyId);
+    // A copy is just another emerald, and must survive a reload as one.
+    expect(isEmeraldId(copyId)).toBe(true);
+
+    setSceneObjectLayout('BossScene', copyId, {
+      ...layoutRatiosFromDesignPoint({ x: 400, y: 578 }),
+      scale: 1,
+    });
+    const after = spotsInPayload();
+    expect(after).toContain('emerald-01');
+    expect(after).toContain(copyId);
+    expect(after).toHaveLength(before.length + 1);
+    // And a paste of the paste collides with neither.
+    expect(nextEmeraldSpotId(new Set(after))).not.toBe(copyId);
+  });
+
+  it('forgets a deleted emerald, so it stays gone across a reload', () => {
+    expect(spotsInPayload()).toContain('emerald-03');
+    removeSceneObjectLayout('BossScene', 'emerald-03');
+    expect(spotsInPayload()).not.toContain('emerald-03');
+    expect(authored().map((spot) => spot.id)).not.toContain('emerald-03');
+    // The rest of the arena is untouched by one deletion.
+    expect(spotsInPayload().length).toBeGreaterThan(5);
+  });
+
+  it('leaves the player and boss entries alone, which have no delete at all', () => {
+    removeSceneObjectLayout('BossScene', 'emerald-01');
+    const saved = buildSceneLayoutPayload('BossScene').BossScene ?? {};
+    expect(saved.player).toBeDefined();
+  });
+
+  it('writes a payload the save route will accept', () => {
+    setSceneObjectLayout('BossScene', 'emerald-01', {
+      ...layoutRatiosFromDesignPoint({ x: 1160, y: 578 }),
+      scale: 2.5,
+    });
+    expect(() => validateSceneLayout(buildSceneLayoutPayload('BossScene'))).not.toThrow();
+  });
+
+  it('honours an authored scale when the emerald is read back', () => {
+    setSceneObjectLayout('BossScene', 'emerald-02', {
+      ...layoutRatiosFromDesignPoint({ x: 300, y: 578 }),
+      scale: 1.8,
+    });
+    const spot = authored().find((entry) => entry.id === 'emerald-02');
+    expect(spot?.scale).toBe(1.8);
+    expect(emeraldBox(spot!).halfWidth).toBeCloseTo(BOSS_EMERALDS.halfSizePx * 1.8);
   });
 });

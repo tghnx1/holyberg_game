@@ -35,27 +35,24 @@ export const BOSS_PLAYER = {
 /**
  * Emerald collectibles.
  *
- * A set appears with every telegraph and is gone the moment the laser fires,
- * which turns the windup from "wait somewhere safe" into "how much can you
- * grab and still get out".
+ * *Where* they are is authored, not tuned: the spots are objects placed in
+ * SceneEditor and saved to `sceneLayout.json`, exactly like Level 1's
+ * collectibles. What is left here is which of those spots a given telegraph
+ * offers, and how big the pickup box is.
  *
- * `reachableFraction` is what keeps that fair. The furthest an emerald may be
- * placed is the distance the player could cover in the telegraph they have,
- * times this — well under 1, so there is time to reach it *and* leave again,
- * and the acceleration ramp is comfortably absorbed.
+ * `reachableFraction` is what keeps an offer fair. The furthest spot a
+ * telegraph will show is the distance the player could cover in the time it
+ * grants, times this — well under 1, so there is time to reach it *and* leave
+ * again, and the acceleration ramp is comfortably absorbed.
  */
 export const BOSS_EMERALDS = {
-  minPerAttack: 2,
-  maxPerAttack: 3,
   /** Fraction of the telegraph's travel distance an emerald may sit within. */
   reachableFraction: 0.55,
-  /** Never spawn one in the player's lap; it should always be worth running to. */
+  /** Never offer one the player is already standing on; it must be worth running to. */
   minPlayerDistancePx: 90,
-  /** Keeps two emeralds of one set from overlapping into a single blob. */
-  minSeparationPx: 96,
-  /** Half-extent of the pickup box, and the drawn size, in world pixels. */
+  /** Half-extent of the pickup box at scale 1, and the drawn size to match. */
   halfSizePx: 26,
-  /** Centre height above the floor line: leg height, so no jump is needed. */
+  /** Default height above the floor for a newly placed spot: leg height. */
   floorOffsetPx: 62,
 } as const;
 
