@@ -41,13 +41,13 @@ import {
   resolveClubStoryCast,
   type ClubStoryCast,
 } from '../level/club/clubStory';
-import { captureCurrentSceneSnapshot } from '../dialogue/currentSceneSnapshot';
+import type { CurrentSceneSnapshot } from '../dialogue/currentSceneSnapshot';
 
 export class RhythmScene extends Phaser.Scene implements PausableScene {
   private berlinScore = 0;
   private clubStoryCast!: ClubStoryCast;
-  /** Development route only: opens the post-set DJ line once the stage exists. */
-  private devPostDialogue = false;
+  /** The actual final Club room, retained before this scene was entered. */
+  private clubStageSnapshot?: CurrentSceneSnapshot;
   private unsubscribeSoundManager?: () => void;
   private chart!: RhythmChart;
   private playbackWindow!: RhythmPlaybackWindow;
@@ -111,11 +111,11 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   init(data: {
     score?: number;
     clubStoryCast?: ClubStoryCast;
-    devPostDialogue?: boolean;
+    clubStageSnapshot?: CurrentSceneSnapshot;
   }): void {
     this.berlinScore = data.score ?? 0;
     this.clubStoryCast = data.clubStoryCast ?? resolveClubStoryCast();
-    this.devPostDialogue = data.devPostDialogue === true;
+    this.clubStageSnapshot = data.clubStageSnapshot;
     this.resetForNewRun();
   }
 
@@ -275,34 +275,6 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       },
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
-    if (this.devPostDialogue) {
-      this.time.delayedCall(350, () => void this.openPostRhythmDialogueForDevelopment());
-    }
-  }
-
-  /** `?scene=rhythm&dialogue=post`: inspect this dialogue without playing the chart. */
-  private async openPostRhythmDialogueForDevelopment(): Promise<void> {
-    if (!import.meta.env.DEV || !this.scene.isActive()) return;
-    try {
-      const stageSnapshot = await captureCurrentSceneSnapshot(
-        this,
-        'current-scene-club-post-rhythm-dj',
-      );
-      this.scene.start('DialogueScene', {
-        script: buildPostRhythmDialogue(this.clubStoryCast.dj3Id),
-        stageSnapshot,
-        payload: {
-          rhythmResult: {
-            ...this.scoreState,
-            berlinScore: this.berlinScore,
-            accuracy: calculateAccuracy(this.scoreState),
-            success: true,
-          },
-        },
-      });
-    } catch (error) {
-      console.error('[RhythmScene] could not open development post-set dialogue', error);
-    }
   }
 
   private createClub(): void {
@@ -717,45 +689,44 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     });
   }
 
-  private async openRhythmComplete(): Promise<void> {
+  private openRhythmComplete(): void {
     const rhythmResult = {
       ...this.scoreState,
       berlinScore: this.berlinScore,
       accuracy: calculateAccuracy(this.scoreState),
       success: true,
     };
-    try {
-      const stageSnapshot = await captureCurrentSceneSnapshot(
-        this,
-        'current-scene-club-post-rhythm-dj',
-      );
+    const stageSnapshot = this.clubStageSnapshot;
+    if (stageSnapshot) {
       this.scene.start('LevelCompleteScene', {
         score: this.scoreState.score,
         maxScore: RHYTHM_SCORE_CAP,
         retryScene: 'RhythmScene',
-        retryData: { score: this.berlinScore, clubStoryCast: this.clubStoryCast },
+        retryData: {
+          score: this.berlinScore,
+          clubStoryCast: this.clubStoryCast,
+          clubStageSnapshot: stageSnapshot,
+        },
         continueScene: 'DialogueScene',
         continueData: {
           script: buildPostRhythmDialogue(this.clubStoryCast.dj3Id),
           stageSnapshot,
           payload: { rhythmResult },
         },
-        retryCleanupTextureKeys: [stageSnapshot.textureKey],
       } satisfies LevelCompleteSceneData);
-    } catch (error) {
-      // A renderer snapshot failure must not trap the campaign on a finished
-      // rhythm scene. The score and Level 4 remain reachable, while DEV gets
-      // the exact failure to diagnose.
-      console.warn('[RhythmScene] post-set scene capture failed', error);
-      this.scene.start('LevelCompleteScene', {
-        score: this.scoreState.score,
-        maxScore: RHYTHM_SCORE_CAP,
-        retryScene: 'RhythmScene',
-        retryData: { score: this.berlinScore, clubStoryCast: this.clubStoryCast },
-        continueScene: 'Level4Scene',
-        continueData: { rhythmResult },
-      } satisfies LevelCompleteSceneData);
+      return;
     }
+
+    // A direct Rhythm development/replay entry has no prior Club frame.
+    // Never substitute a Rhythm screenshot for the DJ room.
+    this.scene.start('LevelCompleteScene', {
+      score: this.scoreState.score,
+      maxScore: RHYTHM_SCORE_CAP,
+      retryScene: 'RhythmScene',
+      retryData: { score: this.berlinScore, clubStoryCast: this.clubStoryCast },
+      continueScene: 'Level4Scene',
+      continueData: { rhythmResult },
+    } satisfies LevelCompleteSceneData);
   }
 
   /** Raw Web Audio playback sits outside Phaser's update loop, so `scene.scene.pause()` alone can't stop it. */

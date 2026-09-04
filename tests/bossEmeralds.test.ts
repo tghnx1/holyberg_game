@@ -15,6 +15,7 @@ import {
   getAuthoredEmeraldSpots,
   isEmeraldId,
   nextEmeraldSpotId,
+  persistEmeraldSpot,
   type EmeraldSpot,
 } from '../src/game/boss/bossEmeraldSpots';
 import {
@@ -354,6 +355,44 @@ describe('authoring emeralds in the editor', () => {
     const spot = authoredIn().find((entry) => entry.id === 'emerald-02');
     expect(spot?.scale).toBe(1.8);
     expect(emeraldBox(spot!).halfWidth).toBeCloseTo(BOSS_EMERALDS.halfSizePx * 1.8);
+  });
+
+  it('round-trips move, two pastes, delete and resize through P payload and disk reload', () => {
+    const beforeIds = spotsInPayload();
+    const firstCopyId = nextEmeraldSpotId(new Set(beforeIds));
+    const secondCopyId = nextEmeraldSpotId(new Set([...beforeIds, firstCopyId]));
+
+    persistEmeraldSpot(SCENE, { id: 'emerald-01', x: 812, y: 566, scale: 1 });
+    persistEmeraldSpot(SCENE, { id: firstCopyId, x: 620, y: 572, scale: 1.25 });
+    persistEmeraldSpot(SCENE, { id: secondCopyId, x: 704, y: 548, scale: 0.8 });
+    removeSceneObjectLayout(SCENE, 'emerald-02');
+    persistEmeraldSpot(SCENE, { id: 'emerald-03', x: 940, y: 558, scale: 1.75 });
+
+    // P -> validated endpoint payload -> merge with the existing JSON file.
+    const payload = validateSceneLayout(buildSceneLayoutPayload(SCENE));
+    const disk = JSON.parse(
+      JSON.stringify({ OtherScene: { scenery: { xRatio: 0.5 } }, ...payload }),
+    ) as Parameters<typeof resetSceneLayout>[0];
+
+    // Reload the same serialized data as the sceneLayout module's source.
+    resetSceneLayout(disk);
+    const reloaded = getAuthoredEmeraldSpots(SCENE);
+    expect(reloaded.map((spot) => spot.id).sort()).toEqual(
+      ['emerald-01', 'emerald-03', 'emerald-04', firstCopyId, secondCopyId].sort(),
+    );
+    expect(reloaded.find((spot) => spot.id === 'emerald-01')).toMatchObject({ x: 812, y: 566 });
+    expect(reloaded.find((spot) => spot.id === 'emerald-03')?.scale).toBeCloseTo(1.75);
+    expect(reloaded.find((spot) => spot.id === firstCopyId)).toMatchObject({
+      x: 620,
+      y: 572,
+      scale: 1.25,
+    });
+    expect(reloaded.find((spot) => spot.id === secondCopyId)).toMatchObject({
+      x: 704,
+      y: 548,
+      scale: 0.8,
+    });
+    expect(reloaded.some((spot) => spot.id === 'emerald-02')).toBe(false);
   });
 });
 

@@ -4,14 +4,14 @@ import {
   EMERALD_ANIMATION,
   getCollectibleAnimationAssetUrls,
 } from '../collectibles/collectibleAnimations';
-import { removeSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
+import { removeSceneObjectLayout } from '../systems/sceneLayout';
 import type { EditableObject } from '../systems/SceneEditor';
 import { BOSS_EMERALDS } from './bossConfig';
 import { BossDepth } from './bossConstants';
 import {
-  emeraldSpotLayout,
   getAuthoredEmeraldSpots,
   nextEmeraldSpotId,
+  persistEmeraldSpot,
   type EmeraldSpot,
 } from './bossEmeraldSpots';
 import {
@@ -177,11 +177,7 @@ export class EmeraldLayer {
   }
 
   private persist(spot: EmeraldSpot): void {
-    setSceneObjectLayout(
-      this.sceneKey,
-      spot.id,
-      emeraldSpotLayout({ x: spot.x, y: spot.y }, spot.scale),
-    );
+    persistEmeraldSpot(this.sceneKey, spot);
   }
 
   // ------------------------------------------------------------- sprites
@@ -190,7 +186,9 @@ export class EmeraldLayer {
     const sprite = this.scene.add
       .sprite(spot.x, spot.y, EMERALD_ANIMATION.frameKeys[0])
       .setDepth(BossDepth.COLLECTIBLE)
-      .setVisible(false);
+      // Paste happens after authoring was enabled, so a new sprite must
+      // inherit that live visibility immediately.
+      .setVisible(this.authoring);
     sprite.setScale(this.displayScale(sprite) * spot.scale);
     sprite.play(EMERALD_ANIMATION.animKey);
     const emerald: LiveEmerald = { spot, sprite };

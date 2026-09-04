@@ -66,9 +66,12 @@ export class SceneEditor {
       describe: options.describe,
       title: 'SCENE EDITOR  —  E exit   P save',
       onSave: () => {
-        void Promise.resolve(options.onSave?.(this.getSnapshot())).then(() =>
-          this.core.flash('LAYOUT SAVED'),
-        );
+        void Promise.resolve(options.onSave?.(this.getSnapshot()))
+          .then(() => this.core.flash('LAYOUT SAVED'))
+          .catch((error: unknown) => {
+            console.error('[scene-editor] save failed', error);
+            this.core.flash('SAVE FAILED');
+          });
       },
     });
     scene.events.once('shutdown', () => this.destroy());
@@ -79,11 +82,23 @@ export class SceneEditor {
   }
 
   register(object: EditableObject): void {
-    this.objects.set(object.id, object);
+    // The core removes its EditableItem after Delete; mirror that removal in
+    // this transform registry so the snapshot handed to P cannot resurrect a
+    // deleted clone in scene-specific serializers.
+    const registered = object.remove
+      ? {
+          ...object,
+          remove: () => {
+            object.remove?.();
+            this.objects.delete(object.id);
+          },
+        }
+      : object;
+    this.objects.set(registered.id, registered);
     this.core.register(
       // A clone registers itself the same way, so a pasted copy is selectable
       // and saved without the scene re-declaring its objects.
-      toEditableItem(object, (created) => {
+      toEditableItem(registered, (created) => {
         this.register(created);
         return created.id;
       }),

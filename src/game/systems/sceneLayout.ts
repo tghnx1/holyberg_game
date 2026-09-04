@@ -101,6 +101,6 @@ export function buildSceneLayoutPayload(sceneKey: string): SceneLayoutConfig {
   return { [sceneKey]: current[sceneKey] ?? {} };
 }
 
-export function resetSceneLayout(): void {
-  current = structuredClone(stored);
+export function resetSceneLayout(source: SceneLayoutConfig = stored): void {
+  current = structuredClone(source);
 }

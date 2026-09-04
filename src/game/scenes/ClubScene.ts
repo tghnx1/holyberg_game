@@ -35,7 +35,12 @@ import type { EditableScene, EditorSavePayload } from '../systems/editableScene'
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 import { getSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
-import { launchCurrentSceneDialogue } from '../dialogue/currentSceneSnapshot';
+import {
+  captureCurrentSceneSnapshot,
+  launchCurrentSceneDialogue,
+  releaseCurrentSceneSnapshot,
+  type CurrentSceneSnapshot,
+} from '../dialogue/currentSceneSnapshot';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import { OrientationController } from '../responsive/OrientationController';
@@ -576,6 +581,25 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
   private complete(): void {
     if (this.finished) return;
     this.finished = true;
+    void this.openLevelComplete();
+  }
+
+  /** Retains the real final DJ room before ClubScene is torn down. */
+  private async openLevelComplete(): Promise<void> {
+    let clubStageSnapshot: CurrentSceneSnapshot | undefined;
+    try {
+      clubStageSnapshot = await captureCurrentSceneSnapshot(
+        this,
+        'current-scene-club-post-rhythm-dj',
+      );
+    } catch (error) {
+      console.warn('[ClubScene] could not retain final DJ room for post-set dialogue', error);
+    }
+    if (!this.scene.isActive()) {
+      releaseCurrentSceneSnapshot(this.textures, clubStageSnapshot);
+      return;
+    }
+
     this.releaseVideo();
     this.scene.start('LevelCompleteScene', {
       // Level 2 is a walk: it awards nothing and simply carries the running
@@ -585,7 +609,12 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       retryScene: 'ClubScene',
       retryData: { score: this.score, storyCast: this.storyCast },
       continueScene: 'RhythmScene',
-      continueData: { score: this.score, clubStoryCast: this.storyCast },
+      continueData: {
+        score: this.score,
+        clubStoryCast: this.storyCast,
+        clubStageSnapshot,
+      },
+      retryCleanupTextureKeys: clubStageSnapshot ? [clubStageSnapshot.textureKey] : undefined,
     } satisfies LevelCompleteSceneData);
   }
 

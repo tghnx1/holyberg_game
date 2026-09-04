@@ -70,6 +70,12 @@ export async function launchCurrentSceneDialogue(
     `current-scene-${request.script.id}`,
   );
   const sourceSceneKey = scene.scene.key;
+  const dialogueScene = scene.scene.get('DialogueScene');
+  // `launch` itself is queued. Register before queuing it, then reorder from
+  // CREATE when the target really exists in the active render list. Calling
+  // bringToTop immediately after launch can run too early outside a Scene
+  // Manager update and become a no-op.
+  dialogueScene.events.once('create', () => scene.scene.bringToTop('DialogueScene'));
   scene.scene.pause(sourceSceneKey);
   scene.scene.launch('DialogueScene', {
     script: request.script,

@@ -18,7 +18,11 @@ import {
   layoutRatiosFromDesignPoint,
   type DesignPoint,
 } from '../systems/designSpace';
-import { getSceneLayout, type SceneObjectLayout } from '../systems/sceneLayout';
+import {
+  getSceneLayout,
+  setSceneObjectLayout,
+  type SceneObjectLayout,
+} from '../systems/sceneLayout';
 
 /**
  * Every authored emerald's id starts like this, and no other scene object
@@ -82,4 +86,9 @@ function toSpot(id: string, entry: SceneObjectLayout): EmeraldSpot {
 /** What the editor writes back for one spot. */
 export function emeraldSpotLayout(point: DesignPoint, scale: number): SceneObjectLayout {
   return { ...layoutRatiosFromDesignPoint(point), scale };
+}
+
+/** Shared write path for live editor changes and save/reload verification. */
+export function persistEmeraldSpot(sceneKey: string, spot: EmeraldSpot): void {
+  setSceneObjectLayout(sceneKey, spot.id, emeraldSpotLayout(spot, spot.scale));
 }

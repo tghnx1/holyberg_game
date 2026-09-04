@@ -31,15 +31,19 @@ function attachSceneEditor(scene: Phaser.Scene & EditableScene): void {
       // file while still showing a save confirmation.
       onSave: async (snapshot) => {
         await Promise.all(
-          toSavePayloads(scene.buildEditorSave?.(snapshot)).map((payload) =>
-            fetch(payload.route, {
+          toSavePayloads(scene.buildEditorSave?.(snapshot)).map(async (payload) => {
+            const response = await fetch(payload.route, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload.body),
-            }).catch((error: unknown) => {
-              console.error(`[scene-editor] failed to save ${payload.route}`, error);
-            }),
-          ),
+            });
+            if (!response.ok) {
+              const result = (await response.json().catch(() => undefined)) as
+                | { error?: string }
+                | undefined;
+              throw new Error(result?.error ?? `${payload.route} returned HTTP ${response.status}`);
+            }
+          }),
         );
       },
       onEnable: () => scene.onEditorEnable?.(),

@@ -92,7 +92,6 @@ export class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV && developmentScene === 'rhythm') {
       this.scene.start('RhythmScene', {
         score: 500,
-        devPostDialogue: query.get('dialogue') === 'post',
       });
       return;
     }
