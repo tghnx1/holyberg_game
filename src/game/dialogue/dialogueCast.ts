@@ -58,7 +58,7 @@ export interface DialogueSceneCast {
   arrivingActor: CharacterRef;
 }
 
-export const DIALOGUE_SCENE_CASTS: Readonly<Record<DialogueSceneId, DialogueSceneCast>> = {
+export const DIALOGUE_SCENE_CASTS = {
   metroStation: {
     seatedActor: playerRef(),
     arrivingActor: roleRef('magician'),
@@ -67,7 +67,7 @@ export const DIALOGUE_SCENE_CASTS: Readonly<Record<DialogueSceneId, DialogueScen
     seatedActor: playerRef(),
     arrivingActor: roleRef('magician'),
   },
-};
+} as const satisfies Partial<Record<DialogueSceneId, DialogueSceneCast>>;
 
 export interface ResolvedSceneCast {
   seated: CharacterDefinition;
@@ -110,15 +110,12 @@ const ACTOR_CAPABILITIES: Readonly<
  * rejected every playable character from the toilet scene — none of them have
  * an appear animation — for capabilities that scene never draws.
  */
-export const DIALOGUE_SCENE_ACTOR_CAPABILITIES: Readonly<
-  Record<
-    DialogueSceneId,
-    { seated: readonly DialogueActorCapability[]; arriving: readonly DialogueActorCapability[] }
-  >
-> = {
+export const DIALOGUE_SCENE_ACTOR_CAPABILITIES = {
   metroStation: { seated: ['metroPose'], arriving: ['appearAnimation', 'standingPose'] },
   toilet: { seated: ['standingPose'], arriving: ['standingPose'] },
-};
+} as const satisfies Partial<
+  Record<DialogueSceneId, { seated: readonly DialogueActorCapability[]; arriving: readonly DialogueActorCapability[] }>
+>;
 
 /** The reference a line speaks through: its own, else the script's default. */
 export function getSpeakerRef(line: DialogueLine, script: DialogueScript): CharacterRef {
@@ -150,7 +147,8 @@ export function resolveSceneCast(
   script: DialogueScript,
   override?: DialogueSceneCast,
 ): ResolvedSceneCast {
-  const cast = override ?? DIALOGUE_SCENE_CASTS[script.sceneId];
+  const cast = override
+    ?? (DIALOGUE_SCENE_CASTS as Partial<Record<DialogueSceneId, DialogueSceneCast>>)[script.sceneId];
   if (!cast) {
     throw new DialogueCastError(`Dialogue scene "${script.sceneId}" has no cast configured.`);
   }
@@ -177,6 +175,7 @@ export function resolveDialogueCast(
     if (!seen.has(character.id)) seen.set(character.id, character);
   };
   for (const line of script.lines) add(resolveDialogueSpeaker(line, script).character);
+  if (script.sceneId === 'currentScene') return [...seen.values()];
   const sceneCast = resolveSceneCast(script, override);
   add(sceneCast.seated);
   add(sceneCast.arriving);
@@ -219,9 +218,24 @@ export function assertDialogueCastCapabilities(
     );
   }
 
+  // A current-scene stage is a captured frame. Its actors are already in the
+  // image, so only the speakers on the right need character capabilities.
+  if (script.sceneId === 'currentScene') return;
+
   const cast = resolveSceneCast(script, override);
-  const sceneRefs = override ?? DIALOGUE_SCENE_CASTS[script.sceneId];
-  const needed = DIALOGUE_SCENE_ACTOR_CAPABILITIES[script.sceneId];
+  const sceneRefs = override
+    ?? (DIALOGUE_SCENE_CASTS as Partial<Record<DialogueSceneId, DialogueSceneCast>>)[script.sceneId];
+  const needed = (
+    DIALOGUE_SCENE_ACTOR_CAPABILITIES as Partial<
+      Record<DialogueSceneId, { seated: readonly DialogueActorCapability[]; arriving: readonly DialogueActorCapability[] }>
+    >
+  )[script.sceneId];
+  if (!sceneRefs) {
+    throw new DialogueCastError(`Dialogue scene "${script.sceneId}" has no cast configured.`);
+  }
+  if (!needed) {
+    throw new DialogueCastError(`Dialogue scene "${script.sceneId}" has no actor requirements configured.`);
+  }
   const slots = [
     { label: 'seated actor', character: cast.seated, ref: sceneRefs.seatedActor, needs: needed.seated },
     {

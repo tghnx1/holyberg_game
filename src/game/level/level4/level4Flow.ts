@@ -1,8 +1,5 @@
-import { characterRef, playerRef } from '../../characters/characterRef';
-import { getPlayableCharacters } from '../../characters/characterRegistry';
-import { getSelectedCharacter } from '../../characters/characterSelection';
+import { resolveCharacterRole, roleRef } from '../../characters/characterRef';
 import type { CharacterDefinition } from '../../characters/characterManifest';
-import type { DialogueSceneCast } from '../../dialogue/dialogueCast';
 import type { DialogueScript } from '../../dialogue/types';
 import type { RhythmResult } from '../../rhythm/types';
 
@@ -23,38 +20,28 @@ export interface Level4ResumePayload {
 
 export interface Level4DialogueBundle {
   script: DialogueScript;
-  sceneCast: DialogueSceneCast;
 }
 
-export function chooseLevel4NpcCharacter(selected = getSelectedCharacter()): CharacterDefinition {
-  const playable = getPlayableCharacters();
-  const npc = playable.find((character) => character.id !== selected.id);
-  if (!npc) {
-    throw new Error(
-      `Level 4 needs another playable character for the NPC, but only "${selected.id}" is available.`,
-    );
-  }
-  return npc;
+export function chooseLevel4NpcCharacter(selected?: CharacterDefinition): CharacterDefinition {
+  void selected;
+  return resolveCharacterRole('magician');
 }
 
-export function buildLevel4DialogueBundle(
-  _player: CharacterDefinition,
-  npc: CharacterDefinition,
-): Level4DialogueBundle {
+export function buildLevel4DialogueBundle(): Level4DialogueBundle {
   return {
     script: {
-      id: 'level4-toilet-intro',
-      sceneId: 'toilet',
-      defaultSpeaker: playerRef(),
+      id: 'level4-toilet-magician',
+      sceneId: 'currentScene',
+      title: 'THE PORTAL',
+      defaultSpeaker: roleRef('magician'),
       lines: [
-        { text: 'привет, портал вот тут', speaker: characterRef(npc.id) },
-        { text: 'окей давай показывай', speaker: playerRef() },
+        {
+          text: 'Never doubted you for a second. Almost home.',
+          speaker: roleRef('magician'),
+          speakerName: 'THE MAGICIAN',
+        },
       ],
       nextScene: 'Level4Scene',
-    },
-    sceneCast: {
-      seatedActor: playerRef(),
-      arrivingActor: characterRef(npc.id),
     },
   };
 }

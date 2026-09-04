@@ -46,6 +46,7 @@ export class BossPlayer {
   private damageFrameUntilMs = -Infinity;
   private currentPose: BossPlayerPose = 'idle';
   private entranceStartedAtMs?: number;
+  private defeated = false;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -149,6 +150,10 @@ export class BossPlayer {
   }
 
   update(deltaMs: number, direction: MoveDirection, nowMs: number, arena: ArenaBounds): void {
+    if (this.defeated) {
+      this.renderDefeated(nowMs);
+      return;
+    }
     this.motion = stepBossPlayer(
       this.motion,
       deltaMs,
@@ -175,6 +180,31 @@ export class BossPlayer {
     if (this.motion.velocityX !== 0) {
       this.sprite.setFlipX(this.motion.velocityX < 0);
     }
+  }
+
+  /** Replaceable final-death presentation until the authored coal exists. */
+  showDefeated(nowMs: number): void {
+    this.defeated = true;
+    this.scene.tweens.killTweensOf(this.sprite);
+    this.sprite.setAlpha(1);
+    this.renderDefeated(nowMs);
+  }
+
+  private renderDefeated(nowMs: number): void {
+    const frame = this.character.gameplay.damage[0]
+      ?? this.character.gameplay.idle
+      ?? this.character.gameplay.run[staticRunFrameIndex(this.character.gameplay.run.length)];
+    this.currentPose = this.character.gameplay.damage.length > 0 ? 'damage' : 'idle';
+    if (frame.key !== this.currentFrameKey) {
+      this.sprite.setTexture(frame.key);
+      this.currentFrameKey = frame.key;
+    }
+    const scale = this.resolveScale(this.currentPose);
+    const anchor = this.anchorAt(nowMs, frame.footGap);
+    this.sprite
+      .setPosition(anchor.x + this.presentation.offsetX, anchor.y + this.presentation.offsetY)
+      .setScale(scale * this.presentation.scale)
+      .setRotation(Math.PI / 2);
   }
 
   /** Where the fight wants the character drawn, before any authored offset. */

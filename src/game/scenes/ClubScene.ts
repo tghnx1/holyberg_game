@@ -14,6 +14,15 @@ import {
 } from '../characters/characterManifest';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import {
+  buildClubRoomDialogue,
+  characterForClubStorySlot,
+  CLUB_STORY_PLACEMENTS,
+  clubStorySlotForRoom,
+  resolveClubStoryCast,
+  type ClubStoryCast,
+  type ClubStorySlot,
+} from '../level/club/clubStory';
+import {
   CLUB_ROOMS,
   resolveClubRoomTransition,
   type ClubRoomEdge,
@@ -25,6 +34,8 @@ import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
+import { getSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
+import { launchCurrentSceneDialogue } from '../dialogue/currentSceneSnapshot';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import { OrientationController } from '../responsive/OrientationController';
@@ -35,7 +46,21 @@ import type { LevelCompleteSceneData } from './LevelCompleteScene';
 export interface ClubSceneData {
   /** Running total carried in from Berlin; Level 2 does not change it. */
   score?: number;
+  storyCast?: ClubStoryCast;
+  /** Development route only: starts in one room and opens its story beat. */
+  devRoomId?: string;
+  devDialogue?: boolean;
 }
+
+interface ClubStoryActor {
+  slot: ClubStorySlot;
+  character: CharacterDefinition;
+  sprite: Phaser.GameObjects.Sprite;
+  mask?: Phaser.GameObjects.Graphics;
+}
+
+const CLUB_DIALOGUE_RESUMED_EVENT = 'club-story-dialogue-complete';
+const STORY_TRIGGER_DISTANCE = 84;
 
 /**
  * How far inside the edge the player is placed on entering a room, and how
@@ -101,6 +126,12 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
   private finished = false;
   /** Ambient crowd for the current room; scenery only, never consulted by gameplay. */
   private npcs?: ClubNpcLayer;
+  private storyCast!: ClubStoryCast;
+  private storyActor?: ClubStoryActor;
+  private completedStorySlots = new Set<ClubStorySlot>();
+  private activeStorySlot?: ClubStorySlot;
+  private devRoomId?: string;
+  private devDialogue = false;
 
   constructor() {
     super('ClubScene');
@@ -111,16 +142,24 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     // nothing, and a direct ?scene=club still loads what it needs.
     this.character = getSelectedCharacter();
     queueCharacterGameplay(this, this.character);
+    for (const slot of ['dj1', 'barkeeper', 'dj3'] as const) {
+      queueCharacterGameplay(this, characterForClubStorySlot(this.storyCast, slot));
+    }
   }
 
   init(data: ClubSceneData): void {
     this.score = data.score ?? 0;
-    this.roomIndex = 0;
+    this.storyCast = data.storyCast ?? resolveClubStoryCast();
+    this.devRoomId = data.devRoomId;
+    this.devDialogue = data.devDialogue === true;
+    this.roomIndex = Math.max(0, CLUB_ROOMS.findIndex((room) => room.id === this.devRoomId));
     this.walkX = 0;
     this.facing = 1;
     this.currentFrameKey = undefined;
     this.transitioning = false;
     this.finished = false;
+    this.completedStorySlots = new Set();
+    this.activeStorySlot = undefined;
   }
 
   create(): void {
@@ -156,12 +195,20 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       .setDepth(Depth.UI);
 
     this.buildControls();
+    this.events.on(CLUB_DIALOGUE_RESUMED_EVENT, this.onStoryDialogueComplete, this);
     this.enterRoom(this.roomIndex, 'left');
 
     new OrientationController(this, {
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
     this.applyResponsiveLayout();
+
+    if (this.devDialogue) {
+      this.time.delayedCall(350, () => {
+        const slot = clubStorySlotForRoom(this.roomIndexId());
+        if (slot) this.startStoryDialogue(slot);
+      });
+    }
 
   }
 
@@ -207,7 +254,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       this.walkX += direction * WALK_SPEED * (delta / 1000);
     }
     this.applyWalkFrame(direction !== 0);
-    if (direction !== 0) this.checkEdges(direction);
+    if (direction !== 0) {
+      this.checkStoryTrigger();
+      if (!this.transitioning) this.checkEdges(direction);
+    }
   }
 
   private applyWalkFrame(walking: boolean): void {
@@ -253,6 +303,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       // The ambient crowd exposes its own objects, so a room with a different
       // set of groups is editable without this scene knowing what is in it.
       ...(this.npcs?.getEditableObjects() ?? []),
+      ...(this.storyActor ? [this.storyActorEditable(this.storyActor)] : []),
       createPlayerEditable(this, {
         sprite: this.playerSprite,
         getAnchor: () => this.playerAnchor(frame.footGap, baseScale()),
@@ -356,7 +407,111 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     this.applyWalkFrame(false);
 
     this.loadRoomNpcs(room.id);
+    this.buildStoryActor(room.id);
     this.prefetchNeighbour(roomIndex + 1);
+  }
+
+  private buildStoryActor(roomId: string): void {
+    this.storyActor?.mask?.destroy();
+    this.storyActor?.sprite.destroy();
+    this.storyActor = undefined;
+    const slot = clubStorySlotForRoom(roomId);
+    if (!slot) return;
+    const character = characterForClubStorySlot(this.storyCast, slot);
+    const frame = resolveLocomotionFrame(character, 'idle', this.time.now);
+    const sprite = this.add
+      .sprite(0, 0, frame.key)
+      .setOrigin(0.5, 1)
+      .setDepth(Depth.ENVIRONMENT + 2);
+    const actor: ClubStoryActor = { slot, character, sprite };
+    if (CLUB_STORY_PLACEMENTS[slot].waistCrop) {
+      const mask = this.make.graphics({}, false);
+      sprite.setMask(mask.createGeometryMask());
+      actor.mask = mask;
+    }
+    this.storyActor = actor;
+    this.layoutStoryActor();
+  }
+
+  private layoutStoryActor(): void {
+    const actor = this.storyActor;
+    if (!actor) return;
+    const placement = CLUB_STORY_PLACEMENTS[actor.slot];
+    const saved = getSceneObjectLayout(this.scene.key, placement.layoutId);
+    const frame = resolveLocomotionFrame(actor.character, 'idle', this.time.now);
+    const baseScale = resolveGameplayScale(actor.character, 'idle');
+    const authoredScale = saved?.scale ?? placement.scale;
+    const scale = baseScale * authoredScale;
+    const x = (saved?.xRatio ?? placement.xRatio) * this.cameras.main.width;
+    const baseline = (saved?.yRatio ?? placement.baselineRatio) * this.cameras.main.height;
+    actor.sprite
+      .setTexture(frame.key)
+      .setScale(scale)
+      .setPosition(x, baseline + footOffset(frame.footGap, scale));
+    this.layoutStoryMask(actor, frame.bodyHeight * scale);
+  }
+
+  /** Keeps the barkeeper's waist crop attached to their edited transform. */
+  private layoutStoryMask(actor: ClubStoryActor, visibleBodyHeight: number): void {
+    const mask = actor.mask;
+    if (!mask) return;
+    const waistY = actor.sprite.y - visibleBodyHeight * 0.44;
+    mask.clear().fillStyle(0xffffff).fillRect(0, 0, this.cameras.main.width, waistY);
+  }
+
+  private storyActorEditable(actor: ClubStoryActor): EditableObject {
+    const placement = CLUB_STORY_PLACEMENTS[actor.slot];
+    return {
+      id: placement.layoutId,
+      label: actor.slot === 'barkeeper' ? 'BARKEEPER' : `STORY ${actor.slot.toUpperCase()}`,
+      target: actor.sprite,
+      getNativeSize: () => ({ width: actor.sprite.frame.realWidth, height: actor.sprite.frame.realHeight }),
+      onChange: (transform) => {
+        const frame = resolveLocomotionFrame(actor.character, 'idle', this.time.now);
+        const baseScale = resolveGameplayScale(actor.character, 'idle');
+        const scale = transform.scaleY;
+        setSceneObjectLayout(this.scene.key, placement.layoutId, {
+          xRatio: this.cameras.main.width > 0 ? transform.x / this.cameras.main.width : 0,
+          yRatio: this.cameras.main.height > 0
+            ? (transform.y - footOffset(frame.footGap, scale)) / this.cameras.main.height
+            : 0,
+          scale: baseScale > 0 ? scale / baseScale : placement.scale,
+        });
+        this.layoutStoryMask(actor, frame.bodyHeight * scale);
+      },
+    };
+  }
+
+  private checkStoryTrigger(): void {
+    const actor = this.storyActor;
+    if (!actor || this.completedStorySlots.has(actor.slot) || this.activeStorySlot) return;
+    if (Math.abs(this.walkX - actor.sprite.x) > STORY_TRIGGER_DISTANCE) return;
+    this.startStoryDialogue(actor.slot);
+  }
+
+  private startStoryDialogue(slot: ClubStorySlot): void {
+    if (this.activeStorySlot || this.completedStorySlots.has(slot) || this.finished) return;
+    this.activeStorySlot = slot;
+    this.transitioning = true;
+    this.applyWalkFrame(false);
+    const character = characterForClubStorySlot(this.storyCast, slot);
+    void launchCurrentSceneDialogue(this, {
+      script: buildClubRoomDialogue(slot, character.id),
+      resumeEvent: CLUB_DIALOGUE_RESUMED_EVENT,
+      resumePayload: { slot },
+    }).catch((error: unknown) => {
+      console.error('[ClubScene] could not open story dialogue', error);
+      this.activeStorySlot = undefined;
+      this.transitioning = false;
+    });
+  }
+
+  private onStoryDialogueComplete(payload: { slot?: ClubStorySlot }): void {
+    const slot = payload.slot ?? this.activeStorySlot;
+    if (slot) this.completedStorySlots.add(slot);
+    this.activeStorySlot = undefined;
+    this.transitioning = false;
+    this.applyWalkFrame(false);
   }
 
   /**
@@ -428,9 +583,9 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       score: this.score,
       maxScore: this.score,
       retryScene: 'ClubScene',
-      retryData: { score: this.score },
+      retryData: { score: this.score, storyCast: this.storyCast },
       continueScene: 'RhythmScene',
-      continueData: { score: this.score },
+      continueData: { score: this.score, clubStoryCast: this.storyCast },
     } satisfies LevelCompleteSceneData);
   }
 
@@ -526,6 +681,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
 
     // Ratio-based, so the crowd re-seats itself on the new viewport.
     this.npcs?.layout();
+    this.layoutStoryActor();
 
     // Keep the player inside the new width, and on the floor line.
     this.walkX = Phaser.Math.Clamp(this.walkX, EDGE_MARGIN, camera.width - EDGE_MARGIN);
@@ -536,6 +692,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     this.releaseVideo();
     this.npcs?.destroy();
     this.npcs = undefined;
+    this.storyActor?.mask?.destroy();
+    this.storyActor?.sprite.destroy();
+    this.storyActor = undefined;
+    this.events.off(CLUB_DIALOGUE_RESUMED_EVENT, this.onStoryDialogueComplete, this);
     // Leaving Level 2: every room file is done with, and a retry re-warms
     // from the HTTP cache rather than the network.
     for (const room of CLUB_ROOMS) releasePrefetchedVideo(room.videoUrl);

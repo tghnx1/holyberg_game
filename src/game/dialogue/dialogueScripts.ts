@@ -17,7 +17,11 @@ export const METRO_MAGICIAN_DIALOGUE: DialogueScript = {
   defaultSpeaker: roleRef('magician'),
   lines: [
     { text: 'I KNOW YOU!', speaker: roleRef('magician'), speakerName: 'THE MAGICIAN' },
-    { text: "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.", speaker: playerRef() },
+    {
+      text: "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.",
+      speaker: roleRef('magician'),
+      speakerName: 'THE MAGICIAN',
+    },
     {
       text: "I CAN OPEN YOU A PORTAL HOME,\nBUT YOU NEED TO PROVE YOU'RE\nCOOL ENOUGH FOR IT.",
       speaker: roleRef('magician'),

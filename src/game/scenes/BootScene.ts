@@ -90,19 +90,29 @@ export class BootScene extends Phaser.Scene {
       selectFallbackCharacter(query.get('character') ?? undefined);
     }
     if (import.meta.env.DEV && developmentScene === 'rhythm') {
-      this.scene.start('RhythmScene', { score: 500 });
+      this.scene.start('RhythmScene', {
+        score: 500,
+        devPostDialogue: query.get('dialogue') === 'post',
+      });
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'level4') {
-      this.scene.start('Level4Scene', { rhythmResult: createEmptyRhythmResult() });
+      this.scene.start('Level4Scene', {
+        rhythmResult: createEmptyRhythmResult(),
+        devDialogue: query.get('dialogue') === '1',
+      });
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'club') {
-      this.scene.start('ClubScene', { score: 500 });
+      this.scene.start('ClubScene', {
+        score: 500,
+        devRoomId: query.get('room') ?? undefined,
+        devDialogue: query.get('dialogue') === '1',
+      });
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'boss') {
-      this.scene.start('BossScene');
+      this.scene.start('BossScene', { devEnding: query.get('ending') === '1' });
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
@@ -113,8 +123,9 @@ export class BootScene extends Phaser.Scene {
     // Character Select comes first and starts the opening dialogue itself;
     // from there the sequence is DialogueScene -> BerlinScene ->
     // LevelCompleteScene -> ClubScene -> LevelCompleteScene -> RhythmScene ->
-    // LevelCompleteScene -> Level4Scene -> LevelCompleteScene -> BossScene ->
-    // ResultScene.
+    // LevelCompleteScene -> DialogueScene -> Level4Scene ->
+    // LevelCompleteScene -> BossScene -> DialogueScene ->
+    // LevelCompleteScene -> ResultScene.
     this.scene.start('CharacterSelectScene');
   }
 }

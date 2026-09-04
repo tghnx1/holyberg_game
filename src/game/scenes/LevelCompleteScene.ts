@@ -9,8 +9,9 @@ import type { ViewportInfo } from '../responsive/ViewportInfo';
  * to retry/continue to, and with what payload) is passed in as data — this
  * scene itself knows nothing about Berlin, Rhythm or Boss.
  *
- * Deliberately not used after BossScene: the final ResultScene/leaderboard
- * flow is untouched.
+ * The same screen is also the final Boss retry/continue gate; ResultScene and
+ * its leaderboard remain the continue destination rather than being rebuilt
+ * here.
  */
 export interface LevelCompleteSceneData {
   /** Score earned in this level only, not the cumulative total. */
@@ -25,6 +26,8 @@ export interface LevelCompleteSceneData {
   continueScene: string;
   /** Data to hand to that scene. */
   continueData?: Record<string, unknown>;
+  /** Snapshot textures owned by the continue path and discarded on retry. */
+  retryCleanupTextureKeys?: readonly string[];
 }
 
 /** Fixed so RETRY and CONTINUE always match, regardless of label length. */
@@ -125,6 +128,9 @@ export class LevelCompleteScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
 
     this.retryButton = this.createButton('RETRY', '#ff477e', () => {
+      for (const key of this.levelData.retryCleanupTextureKeys ?? []) {
+        if (this.textures.exists(key)) this.textures.remove(key);
+      }
       this.scene.start(this.levelData.retryScene, this.levelData.retryData);
     });
     this.continueButton = this.createButton('CONTINUE', '#ffdf57', () => {

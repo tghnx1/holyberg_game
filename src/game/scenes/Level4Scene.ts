@@ -5,7 +5,7 @@ import {
   DESIGN_WIDTH,
   GROUND_Y,
 } from '../constants';
-import { queueCharacterGameplay } from '../characters/characterAssets';
+import { queueCharacterAssets, queueCharacterGameplay } from '../characters/characterAssets';
 import { footOffset, staticRunFrameIndex } from '../characters/characterAnimation';
 import {
   resolveLocomotionFrame,
@@ -14,7 +14,6 @@ import {
 import type { CharacterAssetRef, CharacterDefinition } from '../characters/characterManifest';
 import { resolveGameplayScale } from '../characters/characterManifest';
 import { getSelectedCharacter } from '../characters/characterSelection';
-import { getCharacter } from '../characters/characterRegistry';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
@@ -25,8 +24,8 @@ import {
   buildLevel4DialogueBundle,
   chooseLevel4NpcCharacter,
   createEmptyRhythmResult,
-  type Level4ResumePayload,
 } from '../level/level4/level4Flow';
+import { launchCurrentSceneDialogue } from '../dialogue/currentSceneSnapshot';
 import {
   getLevel4AssetUrls,
   LEVEL4_ASSET_KEYS,
@@ -172,21 +171,13 @@ const TARGET_LABEL_STYLE: Phaser.Types.GameObjects.Text.TextStyle = {
 const PLAYER_START_X = 160 * TOILET_SCALE;
 const PLAYER_MIN_X = 40 * TOILET_SCALE;
 const NPC_WAIT_X = 645 * TOILET_SCALE;
-const NPC_EXIT_X = 555 * TOILET_SCALE;
-/** How far past the camera's left edge the NPC walks before being hidden. */
-const NPC_EXIT_OFFSCREEN_MARGIN = 160;
-/**
- * World px/s the story NPC leaves at. A pace, not a duration, so a wider
- * frame — which is a longer walk out of it — does not make the same stride
- * play faster on a phone than on a desktop. Matches the ~527 px/s the exit
- * ran at on a 16:9 frame, so desktop pacing is unchanged.
- */
-const NPC_EXIT_SPEED = 527;
 /** How close to the waiting NPC the player must walk for them to speak up. */
 const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 
 const LEVEL4_WORLD_WIDTH = TOILET_STRIP_WIDTH * TOILET_SCALE + DESIGN_WIDTH;
 const NPC_WAIT_FACING: 1 | -1 = -1;
+const LEVEL4_DIALOGUE_RESUMED_EVENT = 'level4-magician-dialogue-complete';
+const MAGICIAN_DISAPPEAR_FRAME_MS = 90;
 
 /**
  * Defaults for the toilet-to-Holyworld gap cutscene (see
@@ -271,6 +262,7 @@ export interface Level4SceneData {
   /** World x the camera was centred on; see `Level4ResumePayload`. */
   cameraFocusX?: number;
   npcId?: string;
+  devDialogue?: boolean;
 }
 
 export class Level4Scene extends Phaser.Scene implements EditableScene {
@@ -281,7 +273,6 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private cameraX = 0;
   /** Set only when resuming from the dialogue; see `Level4ResumePayload`. */
   private resumeCameraFocusX?: number;
-  private npcId?: string;
   private playerCharacter!: CharacterDefinition;
   private npcCharacter!: CharacterDefinition;
   private player!: Level4Actor;
@@ -335,6 +326,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   /** Restored when the editor closes, so it cannot free a cutscene's controls. */
   private controlsLockedBeforeEditor = false;
   private dialogueTriggered = false;
+  private npcDisappearing = false;
+  private devDialogue = false;
   private finished = false;
 
   // ------------------------------------------------ gap cutscene (fall)
@@ -371,13 +364,14 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.playerX = data.playerX ?? PLAYER_START_X;
     this.resumeCameraFocusX = data.cameraFocusX;
     this.cameraX = 0;
-    this.npcId = data.npcId;
     this.controlsLocked = false;
     // Coming back from DialogueScene the conversation has already happened.
     // Without this the resumed scene would re-arm the proximity trigger and
     // walk straight back into DialogueScene, looping forever at the stall.
     this.dialogueTriggered = this.introComplete;
     this.finished = false;
+    this.npcDisappearing = false;
+    this.devDialogue = data.devDialogue === true;
     // Runtime-only: a fresh Level 4 entry always re-arms the gap cutscene.
     // Only the authored trigger/camera-stop/fall-zone/speed persist — those
     // are reloaded from the editor's own store in `create()`, not reset here.
@@ -391,9 +385,9 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
 
   preload(): void {
     this.playerCharacter = getSelectedCharacter();
-    this.npcCharacter = this.npcId ? getCharacter(this.npcId) : chooseLevel4NpcCharacter(this.playerCharacter);
+    this.npcCharacter = chooseLevel4NpcCharacter(this.playerCharacter);
     queueCharacterGameplay(this, this.playerCharacter);
-    queueCharacterGameplay(this, this.npcCharacter);
+    queueCharacterAssets(this, this.npcCharacter, ['gameplay', 'appear']);
     const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
     for (const asset of getLevel4AssetUrls(profile)) {
       if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
@@ -413,6 +407,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.buildStallEntryTarget();
     this.buildGapCutscene();
     this.buildWorldRuler();
+    this.events.on(LEVEL4_DIALOGUE_RESUMED_EVENT, this.onDialogueComplete, this);
 
     // Same manual walk control as the Level 2 walk: arrows/A-D on desktop,
     // hold either half of the screen on touch. Below Depth.UI so the pause,
@@ -443,6 +438,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       this.syncActor(this.player, this.time.now);
       this.syncActor(this.npc, this.time.now);
       this.startPostDialogueCutscene();
+    } else if (this.devDialogue) {
+      this.time.delayedCall(350, () => this.startDialogue());
     }
   }
 
@@ -823,6 +820,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   }
 
   private syncActor(actor: Level4Actor, now: number): void {
+    if (actor === this.npc && this.npcDisappearing) return;
     const frame = this.resolveActorFrame(actor, now);
     const baseScale = resolveGameplayScale(
       actor.character,
@@ -1413,19 +1411,19 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.controlsLocked = true;
     this.player.motion = 'idle';
     this.npc.motion = 'idle';
-    const bundle = buildLevel4DialogueBundle(this.playerCharacter, this.npcCharacter);
-    const payload: Level4ResumePayload = {
-      introComplete: true,
-      playerX: this.player.x,
-      cameraFocusX: this.cameras.main.scrollX + this.cameras.main.width / 2,
-      npcId: this.npcCharacter.id,
-      rhythmResult: this.rhythmResult,
-    };
-    this.scene.start('DialogueScene', {
+    const bundle = buildLevel4DialogueBundle();
+    void launchCurrentSceneDialogue(this, {
       script: bundle.script,
-      sceneCast: bundle.sceneCast,
-      payload,
+      resumeEvent: LEVEL4_DIALOGUE_RESUMED_EVENT,
+    }).catch((error: unknown) => {
+      console.error('[Level4Scene] could not open Magician dialogue', error);
+      this.controlsLocked = false;
     });
+  }
+
+  private onDialogueComplete(): void {
+    this.introComplete = true;
+    this.startPostDialogueCutscene();
   }
 
   /**
@@ -1440,10 +1438,12 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
   private startPostDialogueCutscene(): void {
     this.controlsLocked = true;
     this.player.motion = 'walk';
-    this.npc.motion = 'walk';
+    // The Magician is already authored beside the stall. Only the player
+    // enters; moving the NPC here would override the editor's placement.
+    this.npc.motion = 'idle';
 
     this.stallSettled = false;
-    this.stallEntry = { playerArrived: false, npcArrived: false };
+    this.stallEntry = { playerArrived: false, npcArrived: true };
   }
 
   /** Advances both actors toward their stall-entry targets by one frame. */
@@ -1469,7 +1469,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     };
 
     entry.playerArrived = advance(this.player, targets.playerX, entry.playerArrived);
-    entry.npcArrived = advance(this.npc, targets.npcX, entry.npcArrived);
+    if (!entry.npcArrived) entry.npcArrived = advance(this.npc, targets.npcX, false);
 
     if (entry.playerArrived && entry.npcArrived) {
       this.stallEntry = undefined;
@@ -1546,7 +1546,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
         // has actually finished so no thin vertical strip is left standing
         // in front of the NPC's exit walk.
         this.stallDoor.setVisible(false);
-        this.walkNpcOut();
+        this.disappearMagician();
       },
     });
   }
@@ -1573,30 +1573,52 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
    * instead, so the exit reads identically everywhere and only takes as long
    * as the extra ground needs.
    */
-  private walkNpcOut(): void {
+  private disappearMagician(): void {
     // The pair are no longer parked on the zone, so authoring it must stop
     // dragging them around mid-exit.
     this.stallSettled = false;
-    this.npc.facing = -1;
-    this.npc.motion = 'walk';
-    const exitX = Math.min(
-      NPC_EXIT_X,
-      this.cameras.main.scrollX - NPC_EXIT_OFFSCREEN_MARGIN,
-    );
-    const distance = Math.abs(this.npc.x - exitX);
-    this.tweens.add({
-      targets: this.npc,
-      x: exitX,
-      duration: Math.max(1, (distance / NPC_EXIT_SPEED) * 1000),
-      ease: 'Sine.easeIn',
-      onComplete: () => {
-        this.npc.motion = 'idle';
-        // Hidden only now, once the walk has taken them out of frame; control
-        // returns at the same moment, exactly as the sequence already did.
+    this.npcDisappearing = true;
+    this.npc.motion = 'idle';
+    const frames = [...this.npcCharacter.dialogue.appear].reverse();
+    if (frames.length === 0) {
+      // A replacement Magician may not yet have authored appear frames. Keep
+      // the same materialisation language (scale/alpha disappearance) without
+      // borrowing another character's artwork.
+      this.tweens.add({
+        targets: this.npc.sprite,
+        alpha: 0,
+        scaleX: 0,
+        scaleY: 0,
+        duration: MAGICIAN_DISAPPEAR_FRAME_MS * 6,
+        onComplete: () => {
+          this.npc.sprite.setVisible(false);
+          this.npcDisappearing = false;
+          this.resumePlay();
+        },
+      });
+      return;
+    }
+    let index = 0;
+    const showNext = (): void => {
+      const frame = frames[index];
+      this.npc.sprite.setTexture(frame.key);
+      const scale = resolveGameplayScale(this.npcCharacter, 'idle') * this.npcScale;
+      this.npc.sprite.setPosition(
+        this.npc.sprite.x,
+        this.npc.y + footOffset(frame.footGap, scale) + 10,
+      );
+      index += 1;
+      if (index < frames.length) {
+        this.time.delayedCall(MAGICIAN_DISAPPEAR_FRAME_MS, showNext);
+        return;
+      }
+      this.time.delayedCall(MAGICIAN_DISAPPEAR_FRAME_MS, () => {
         this.npc.sprite.setVisible(false);
+        this.npcDisappearing = false;
         this.resumePlay();
-      },
-    });
+      });
+    };
+    showNext();
   }
 
   /** Hands control back: from here the player walks on under their own input. */
@@ -1614,6 +1636,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
       score: 0,
       maxScore: 0,
       retryScene: 'Level4Scene',
+      retryData: { rhythmResult: this.rhythmResult },
       continueScene: 'BossScene',
       continueData: {
         rhythmResult: this.rhythmResult,
@@ -1645,6 +1668,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     this.stallDoor?.destroy();
     this.player?.sprite.destroy();
     this.npc?.sprite.destroy();
+    this.events.off(LEVEL4_DIALOGUE_RESUMED_EVENT, this.onDialogueComplete, this);
     for (const part of this.worldRuler) part.destroy();
     this.worldRuler = [];
   }

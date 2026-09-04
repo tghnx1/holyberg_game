@@ -36,9 +36,18 @@ import { MAIN_RHYTHM_TRACK } from '../rhythm/TrackRegistry';
 import type { Judgement, Lane, RhythmChart, ScoreState } from '../rhythm/types';
 import type { RhythmPlaybackWindow } from '../rhythm/RhythmPlaybackWindow';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
+import {
+  buildPostRhythmDialogue,
+  resolveClubStoryCast,
+  type ClubStoryCast,
+} from '../level/club/clubStory';
+import { captureCurrentSceneSnapshot } from '../dialogue/currentSceneSnapshot';
 
 export class RhythmScene extends Phaser.Scene implements PausableScene {
   private berlinScore = 0;
+  private clubStoryCast!: ClubStoryCast;
+  /** Development route only: opens the post-set DJ line once the stage exists. */
+  private devPostDialogue = false;
   private unsubscribeSoundManager?: () => void;
   private chart!: RhythmChart;
   private playbackWindow!: RhythmPlaybackWindow;
@@ -99,8 +108,14 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   constructor() { super('RhythmScene'); }
-  init(data: { score?: number }): void {
+  init(data: {
+    score?: number;
+    clubStoryCast?: ClubStoryCast;
+    devPostDialogue?: boolean;
+  }): void {
     this.berlinScore = data.score ?? 0;
+    this.clubStoryCast = data.clubStoryCast ?? resolveClubStoryCast();
+    this.devPostDialogue = data.devPostDialogue === true;
     this.resetForNewRun();
   }
 
@@ -260,6 +275,34 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       },
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
+    if (this.devPostDialogue) {
+      this.time.delayedCall(350, () => void this.openPostRhythmDialogueForDevelopment());
+    }
+  }
+
+  /** `?scene=rhythm&dialogue=post`: inspect this dialogue without playing the chart. */
+  private async openPostRhythmDialogueForDevelopment(): Promise<void> {
+    if (!import.meta.env.DEV || !this.scene.isActive()) return;
+    try {
+      const stageSnapshot = await captureCurrentSceneSnapshot(
+        this,
+        'current-scene-club-post-rhythm-dj',
+      );
+      this.scene.start('DialogueScene', {
+        script: buildPostRhythmDialogue(this.clubStoryCast.dj3Id),
+        stageSnapshot,
+        payload: {
+          rhythmResult: {
+            ...this.scoreState,
+            berlinScore: this.berlinScore,
+            accuracy: calculateAccuracy(this.scoreState),
+            success: true,
+          },
+        },
+      });
+    } catch (error) {
+      console.error('[RhythmScene] could not open development post-set dialogue', error);
+    }
   }
 
   private createClub(): void {
@@ -670,24 +713,49 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.time.delayedCall(1500, () => {
       overlay.destroy(true);
       if (this.activeOverlay === overlay) this.activeOverlay = undefined;
-      // Level 3 carries the Berlin and rhythm totals through to the result.
+      void this.openRhythmComplete();
+    });
+  }
+
+  private async openRhythmComplete(): Promise<void> {
+    const rhythmResult = {
+      ...this.scoreState,
+      berlinScore: this.berlinScore,
+      accuracy: calculateAccuracy(this.scoreState),
+      success: true,
+    };
+    try {
+      const stageSnapshot = await captureCurrentSceneSnapshot(
+        this,
+        'current-scene-club-post-rhythm-dj',
+      );
       this.scene.start('LevelCompleteScene', {
         score: this.scoreState.score,
         maxScore: RHYTHM_SCORE_CAP,
         retryScene: 'RhythmScene',
-        // Preserves the already-earned Berlin score; resets only the rhythm run.
-        retryData: { score: this.berlinScore },
-        continueScene: 'Level4Scene',
+        retryData: { score: this.berlinScore, clubStoryCast: this.clubStoryCast },
+        continueScene: 'DialogueScene',
         continueData: {
-          rhythmResult: {
-            ...this.scoreState,
-            berlinScore: this.berlinScore,
-            accuracy: calculateAccuracy(this.scoreState),
-            success: true,
-          },
+          script: buildPostRhythmDialogue(this.clubStoryCast.dj3Id),
+          stageSnapshot,
+          payload: { rhythmResult },
         },
+        retryCleanupTextureKeys: [stageSnapshot.textureKey],
       } satisfies LevelCompleteSceneData);
-    });
+    } catch (error) {
+      // A renderer snapshot failure must not trap the campaign on a finished
+      // rhythm scene. The score and Level 4 remain reachable, while DEV gets
+      // the exact failure to diagnose.
+      console.warn('[RhythmScene] post-set scene capture failed', error);
+      this.scene.start('LevelCompleteScene', {
+        score: this.scoreState.score,
+        maxScore: RHYTHM_SCORE_CAP,
+        retryScene: 'RhythmScene',
+        retryData: { score: this.berlinScore, clubStoryCast: this.clubStoryCast },
+        continueScene: 'Level4Scene',
+        continueData: { rhythmResult },
+      } satisfies LevelCompleteSceneData);
+    }
   }
 
   /** Raw Web Audio playback sits outside Phaser's update loop, so `scene.scene.pause()` alone can't stop it. */

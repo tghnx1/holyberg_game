@@ -91,28 +91,28 @@ describe('displayed name', () => {
 });
 
 describe('the shipped opening dialogue', () => {
-  it('alternates Magician, player, Magician and resolves each correctly', () => {
+  it('keeps all four opening lines on the Magician', () => {
     const ids = METRO_MAGICIAN_DIALOGUE.lines.map(
       (line) => resolveDialogueSpeaker(line, METRO_MAGICIAN_DIALOGUE).character.id,
     );
-    expect(ids).toEqual(['disus', 'atmos', 'disus', 'disus']);
+    expect(ids).toEqual(['disus', 'disus', 'disus', 'disus']);
   });
 
   it('keeps the Magician label while cast as Disus', () => {
     const names = METRO_MAGICIAN_DIALOGUE.lines.map(
       (line) => resolveDialogueSpeaker(line, METRO_MAGICIAN_DIALOGUE).displayName,
     );
-    expect(names).toEqual(['THE MAGICIAN', 'Atmos', 'THE MAGICIAN', 'THE MAGICIAN']);
+    expect(names).toEqual(['THE MAGICIAN', 'THE MAGICIAN', 'THE MAGICIAN', 'THE MAGICIAN']);
   });
 
-  it('makes the player line follow whoever is selected', () => {
+  it('does not recast an opening line as the selected player', () => {
     selectCharacter('klaus');
     const resolved = resolveDialogueSpeaker(
       METRO_MAGICIAN_DIALOGUE.lines[1],
       METRO_MAGICIAN_DIALOGUE,
     );
-    expect(resolved.character.id).toBe('klaus');
-    expect(resolved.displayName).toBe('Klaus');
+    expect(resolved.character.id).toBe('disus');
+    expect(resolved.displayName).toBe('THE MAGICIAN');
   });
 });
 
@@ -283,18 +283,16 @@ describe('required capabilities follow what each scene actually draws', () => {
   // playable character — none of them have one — so DialogueScene threw in
   // preload *after* Level4Scene had already shut itself down, leaving Level 4
   // frozen at the NPC with no scene running.
-  it('stages the shipped Level 4 cast, whose NPC has no appear animation', () => {
+  it('stages the Level 4 current-scene snapshot with the Magician portrait', () => {
     const player = getCharacter('atmos');
     const npc = chooseLevel4NpcCharacter(player);
     expect(npc.id).not.toBe(player.id);
-    expect(npc.capabilities.playable).toBe(true);
-    expect(npc.capabilities.appearAnimation).toBe(false);
+    expect(npc.id).toBe('disus');
+    expect(npc.capabilities.dialoguePortrait).toBe(true);
 
-    const bundle = buildLevel4DialogueBundle(player, npc);
-    expect(bundle.script.sceneId).toBe('toilet');
-    expect(() =>
-      assertDialogueCastCapabilities(bundle.script, bundle.sceneCast),
-    ).not.toThrow();
+    const bundle = buildLevel4DialogueBundle();
+    expect(bundle.script.sceneId).toBe('currentScene');
+    expect(() => assertDialogueCastCapabilities(bundle.script)).not.toThrow();
   });
 
   it('still rejects a toilet actor with no pose to stand in', () => {

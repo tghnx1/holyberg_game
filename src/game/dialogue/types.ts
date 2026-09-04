@@ -26,11 +26,13 @@ export interface DialogueLine {
 }
 
 /** Which prebuilt left-hand scene a dialogue plays over. */
-export type DialogueSceneId = 'metroStation' | 'toilet';
+export type DialogueSceneId = 'metroStation' | 'toilet' | 'currentScene';
 
 export interface DialogueScript {
   id: string;
   sceneId: DialogueSceneId;
+  /** Optional title for the shared top bar. */
+  title?: string;
   /** Speaker for any line that does not set its own `speaker`. */
   defaultSpeaker: CharacterRef;
   lines: readonly DialogueLine[];

@@ -27,6 +27,8 @@ import {
 import { queueCharacterAssets } from '../characters/characterAssets';
 import { StationSceneView } from '../dialogue/StationSceneView';
 import { ToiletSceneView } from '../dialogue/ToiletSceneView';
+import { CurrentSceneView } from '../dialogue/CurrentSceneView';
+import type { CurrentSceneSnapshot } from '../dialogue/currentSceneSnapshot';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 import { TalkingPortrait, type PortraitFrames } from '../dialogue/TalkingPortrait';
 import type { CharacterDefinition } from '../characters/characterManifest';
@@ -49,6 +51,14 @@ export interface DialogueSceneData {
   sceneCast?: DialogueSceneCast;
   /** Forwarded untouched to the next scene, so level payloads survive. */
   payload?: Record<string, unknown>;
+  /** Frozen source-scene frame for a `currentScene` script. */
+  stageSnapshot?: CurrentSceneSnapshot;
+  /** Resume an already-running source scene instead of rebuilding it. */
+  resume?: {
+    sceneKey: string;
+    event: string;
+    payload?: Record<string, unknown>;
+  };
 }
 
 interface DialogueSceneStage {
@@ -97,8 +107,10 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
   private stationScene?: StationSceneView;
   private portrait?: TalkingPortrait;
   /** Resolved once per run, so casting cannot change mid-dialogue. */
-  private sceneCast!: ResolvedSceneCast;
+  private sceneCast?: ResolvedSceneCast;
   private sceneCastOverride?: DialogueSceneCast;
+  private stageSnapshot?: CurrentSceneSnapshot;
+  private resumeTarget?: DialogueSceneData['resume'];
   private topBarShape!: Phaser.GameObjects.Rectangle;
   private topBarTitle!: Phaser.GameObjects.Text;
   private topBarContainer!: Phaser.GameObjects.Container;
@@ -138,6 +150,8 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     this.script = data.script ?? (getDialogueScript(data.scriptId ?? '') ?? METRO_MAGICIAN_DIALOGUE);
     this.payload = data.payload ?? {};
     this.sceneCastOverride = data.sceneCast;
+    this.stageSnapshot = data.stageSnapshot;
+    this.resumeTarget = data.resume;
     this.lineIndex = 0;
     this.phase = 'slidingIn';
     this.spaceHeldSince = undefined;
@@ -157,7 +171,10 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     // Fails now, naming the role and what it lacks, rather than part-way
     // through the scene when a portrait turns out to be missing.
     assertDialogueCastCapabilities(this.script, this.sceneCastOverride);
-    this.sceneCast = resolveSceneCast(this.script, this.sceneCastOverride);
+    this.sceneCast =
+      this.script.sceneId === 'currentScene'
+        ? undefined
+        : resolveSceneCast(this.script, this.sceneCastOverride);
     // Only the characters this invocation can actually show. A character
     // cast as both the player and an NPC appears once, and the loader skips
     // anything already in the texture manager.
@@ -310,10 +327,21 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     // whole-scene editor transform — belongs to DialogueStageViewport, which
     // both stages compose their content into. A new dialogue stage inherits
     // all of it without this call site or the stage itself knowing about it.
-    const sceneStage =
-      this.script.sceneId === 'toilet'
-        ? new ToiletSceneView(this, width, height, this.sceneCast)
-        : new StationSceneView(this, width, height, this.sceneCast);
+    let sceneStage: DialogueSceneStage;
+    if (this.script.sceneId === 'currentScene') {
+      if (!this.stageSnapshot) {
+        throw new Error(`Dialogue "${this.script.id}" requires a current-scene snapshot.`);
+      }
+      sceneStage = new CurrentSceneView(this, width, height, this.stageSnapshot);
+    } else {
+      if (!this.sceneCast) {
+        throw new Error(`Dialogue "${this.script.id}" has no resolved scene cast.`);
+      }
+      sceneStage =
+        this.script.sceneId === 'toilet'
+          ? new ToiletSceneView(this, width, height, this.sceneCast)
+          : new StationSceneView(this, width, height, this.sceneCast);
+    }
     if (sceneStage instanceof StationSceneView) this.stationScene = sceneStage;
     this.sceneStage = sceneStage;
     sceneStage.root.setDepth(DialogueDepth.SCENE);
@@ -389,7 +417,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     const { width, height } = this.layout.topBar;
     this.topBarShape = this.add.rectangle(0, 0, width, height, DialoguePalette.bar).setOrigin(0, 0);
     this.topBarTitle = this.add
-      .text(DialogueLayout.textPaddingX, height / 2, 'BERLIN — UNDERGROUND', {
+      .text(DialogueLayout.textPaddingX, height / 2, this.script.title ?? 'BERLIN — UNDERGROUND', {
         fontFamily: 'Archivo Black',
         fontSize: '30px',
         color: '#ffdf57',
@@ -712,6 +740,14 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     this.skipHint.setVisible(false);
     this.skipFill.setVisible(false);
     this.panels.slideOut(() => {
+      const resume = this.resumeTarget;
+      if (resume) {
+        const source = this.scene.get(resume.sceneKey);
+        this.scene.resume(resume.sceneKey);
+        source.events.emit(resume.event, resume.payload ?? {});
+        this.scene.stop();
+        return;
+      }
       this.scene.start(this.script.nextScene, this.payload);
     });
   }
@@ -727,5 +763,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     this.sceneStage = undefined;
     this.stationScene = undefined;
     this.portrait = undefined;
+    this.stageSnapshot = undefined;
+    this.resumeTarget = undefined;
   }
 }

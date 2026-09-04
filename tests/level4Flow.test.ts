@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { characterRef, playerRef } from '../src/game/characters/characterRef';
-import { getCharacter } from '../src/game/characters/characterRegistry';
+import { roleRef } from '../src/game/characters/characterRef';
 import {
   resetCharacterSelection,
   selectCharacter,
@@ -12,37 +11,30 @@ beforeEach(() => {
 });
 
 describe('Level 4 casting', () => {
-  it('picks the other playable character for the NPC', () => {
+  it('uses the shared Magician role cast', () => {
     selectCharacter('atmos');
-    // The manifest is sorted by id, so the first playable that is not the
-    // player is Doctor Doms. This moved from Klaus when Doctor Doms became
-    // playable; what matters is that it is deterministic and never the player.
     const npc = chooseLevel4NpcCharacter();
-    expect(npc.id).toBe('doctor-doms');
-    expect(npc.capabilities.playable).toBe(true);
+    expect(npc.id).toBe('disus');
   });
 
-  it('swaps to Atmos when Klaus is the player', () => {
+  it('keeps the role resolver authoritative for another selected player', () => {
     selectCharacter('klaus');
-    expect(chooseLevel4NpcCharacter().id).toBe('atmos');
+    expect(chooseLevel4NpcCharacter().id).toBe('disus');
   });
 });
 
 describe('Level 4 dialogue bundle', () => {
-  it('builds the toilet intro with the selected player and a different NPC', () => {
+  it('builds the toilet Magician beat on the captured current scene', () => {
     selectCharacter('atmos');
-    const bundle = buildLevel4DialogueBundle(getCharacter('atmos'), getCharacter('klaus'));
+    const bundle = buildLevel4DialogueBundle();
 
-    expect(bundle.script.sceneId).toBe('toilet');
+    expect(bundle.script.id).toBe('level4-toilet-magician');
+    expect(bundle.script.sceneId).toBe('currentScene');
     expect(bundle.script.nextScene).toBe('Level4Scene');
     expect(bundle.script.lines.map((line) => line.text)).toEqual([
-      'привет, портал вот тут',
-      'окей давай показывай',
+      'Never doubted you for a second. Almost home.',
     ]);
-    expect(bundle.script.lines[0].speaker).toEqual(characterRef('klaus'));
-    expect(bundle.script.lines[1].speaker).toEqual(playerRef());
-    expect(bundle.sceneCast.seatedActor).toEqual({ type: 'player' });
-    expect(bundle.sceneCast.arrivingActor).toEqual(characterRef('klaus'));
+    expect(bundle.script.lines[0].speaker).toEqual(roleRef('magician'));
   });
 
   it('creates an empty rhythm result for direct dev routes', () => {

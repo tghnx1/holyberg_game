@@ -7,6 +7,7 @@ import { BossInput } from '../boss/BossInput';
 import { BossPlayer } from '../boss/BossPlayer';
 import { EmeraldLayer } from '../boss/EmeraldLayer';
 import { getBossAssetUrls } from '../boss/bossAssets';
+import { BOSS_ART } from '../boss/bossAssets';
 import { BOSS_EMERALDS, BOSS_SCORING } from '../boss/bossConfig';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
@@ -21,6 +22,14 @@ import type { EditorSavePayload } from '../systems/editableSceneContract';
 import { designPointFromLayout, layoutRatiosFromDesignPoint } from '../systems/designSpace';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import type { EditableObject } from '../systems/SceneEditor';
+import { launchCurrentSceneDialogue } from '../dialogue/currentSceneSnapshot';
+import {
+  BOSS_ENDING_DIALOGUE_RESUMED_EVENT,
+  BOSS_ENDING_TIMING,
+  buildBossEndingDialogue,
+  buildBossResult,
+} from '../boss/bossEnding';
+import type { LevelCompleteSceneData } from './LevelCompleteScene';
 import {
   buildSceneLayoutPayload,
   getSceneObjectLayout,
@@ -38,7 +47,11 @@ export interface BossSceneData {
   rhythmResult: RhythmResult;
   /** Optional fixed seed; the fight is deterministic for a given seed. */
   seed?: number;
+  /** Development route: stage the ending without waiting out the fight. */
+  devEnding?: boolean;
 }
+
+type BossEndingPhase = 'charging' | 'projectile' | 'settled' | 'dialogue';
 
 /**
  * Level 3: a boss dodge fight.
@@ -70,6 +83,10 @@ export class BossScene extends Phaser.Scene {
   private introPhase: 'playerFall' | 'bossSpawn' | 'instructions' = 'playerFall';
   /** Restored when the dev editor closes, so the fight resumes as it was. */
   private runningBeforeEditor = false;
+  private endingPhase?: BossEndingPhase;
+  private endingProjectile?: Phaser.GameObjects.Sprite;
+  private bossResult?: RhythmResult;
+  private devEnding = false;
 
   constructor() {
     super('BossScene');
@@ -78,9 +95,12 @@ export class BossScene extends Phaser.Scene {
   init(data: Partial<BossSceneData>): void {
     this.rhythmResult = data.rhythmResult ?? this.createEmptyResult();
     this.seed = data.seed ?? 1;
+    this.devEnding = data.devEnding === true;
     this.running = false;
     this.finished = false;
     this.introPhase = 'playerFall';
+    this.endingPhase = undefined;
+    this.bossResult = undefined;
   }
 
   /** Lets the scene be launched standalone in dev without Levels 1 and 2. */
@@ -132,6 +152,7 @@ export class BossScene extends Phaser.Scene {
     this.controls = new BossInput(this, this.game.device.input.touch);
     this.hud = new BossHud(this);
     this.emeralds = new EmeraldLayer(this, this.scene.key);
+    this.events.on(BOSS_ENDING_DIALOGUE_RESUMED_EVENT, this.showEndingChoices, this);
 
     this.applyAuthoredPresentation();
 
@@ -287,7 +308,8 @@ export class BossScene extends Phaser.Scene {
     this.time.delayedCall(1600, () => {
       this.introText?.destroy();
       this.introText = undefined;
-      this.running = true;
+      if (this.devEnding) this.endFight();
+      else this.running = true;
     });
   }
 
@@ -308,6 +330,10 @@ export class BossScene extends Phaser.Scene {
     // teleport the fight clock past a whole telegraph.
     const step = Math.min(delta, MAX_FRAME_DELTA_MS);
     this.drawPickupOutline();
+    if (this.endingPhase) {
+      this.updateEnding(now);
+      return;
+    }
     if (!this.running) {
       // The previous level drops the player into this arena. The boss only
       // erupts after that landing, then the unchanged timed fight begins.
@@ -409,39 +435,94 @@ export class BossScene extends Phaser.Scene {
    * survived.
    */
   private endFight(): void {
-    if (this.finished) return;
-    this.finished = true;
+    if (this.finished || this.endingPhase) return;
     this.running = false;
     this.emeralds.hideAll();
     const { score } = this.director.result;
-    const { width, height } = this.cameras.main;
-    const headline = score.hits === 0 ? 'FLAWLESS' : 'YOU SURVIVED';
-    this.add
-      .text(width / 2, height / 2 - 30, `${headline}\nBOSS SCORE  ${score.score}`, {
-        fontFamily: 'Archivo Black',
-        fontSize: '44px',
-        color: '#ffdf57',
-        align: 'center',
-        stroke: '#55145e',
-        strokeThickness: 8,
-      })
-      .setOrigin(0.5)
-      .setDepth(2000);
-    this.time.delayedCall(2200, () => {
-      this.scene.start('ResultScene', {
-        ...this.rhythmResult,
-        bossScore: score.score,
-        bossHits: score.hits,
-        bossMaxCombo: score.maxCombo,
-        bossEmeralds: score.emeralds,
-        bossEmeraldScore: score.emeraldScore,
-      });
+    this.bossResult = buildBossResult(this.rhythmResult, score);
+    this.endingPhase = 'charging';
+    this.controls.destroy();
+    this.time.delayedCall(BOSS_ENDING_TIMING.chargeMs, () => this.fireEndingProjectile());
+  }
+
+  private updateEnding(now: number): void {
+    const playerX = this.player.damageHitbox.centerX;
+    this.player.update(0, 0, now, this.bounds);
+    this.boss.update(now, this.bossX, playerX, this.endingPhase === 'charging');
+    const projectile = this.endingProjectile;
+    if (projectile?.visible) {
+      const frame = BOSS_ART.energySphere[Math.floor(now / 90) % BOSS_ART.energySphere.length];
+      projectile.setTexture(frame.key);
+    }
+    this.attacks.redraw([], 0, this.boss.energySphereWorldCenter);
+  }
+
+  private fireEndingProjectile(): void {
+    if (this.endingPhase !== 'charging') return;
+    this.endingPhase = 'projectile';
+    const origin = this.boss.energySphereWorldCenter;
+    const target = {
+      x: this.player.damageHitbox.centerX,
+      y: this.player.displayObject.y - this.player.displayObject.displayHeight * 0.45,
+    };
+    this.endingProjectile = this.add
+      .sprite(origin.x, origin.y, BOSS_ART.energySphere[0].key)
+      .setDisplaySize(150, 150)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setDepth(BossDepth.LASER + 1);
+    this.tweens.add({
+      targets: this.endingProjectile,
+      x: target.x,
+      y: target.y,
+      scaleX: 0.72,
+      scaleY: 0.72,
+      duration: BOSS_ENDING_TIMING.projectileMs,
+      ease: 'Cubic.easeIn',
+      onComplete: () => this.settleEndingKill(),
     });
+  }
+
+  private settleEndingKill(): void {
+    if (this.endingPhase !== 'projectile') return;
+    this.endingPhase = 'settled';
+    this.endingProjectile?.destroy();
+    this.endingProjectile = undefined;
+    this.player.showDefeated(this.time.now);
+    this.cameras.main.flash(180, 255, 255, 255).shake(140, 0.008);
+    this.time.delayedCall(BOSS_ENDING_TIMING.settleMs, () => this.openFinalDialogue());
+  }
+
+  private openFinalDialogue(): void {
+    if (this.endingPhase !== 'settled') return;
+    this.endingPhase = 'dialogue';
+    void launchCurrentSceneDialogue(this, {
+      script: buildBossEndingDialogue(),
+      resumeEvent: BOSS_ENDING_DIALOGUE_RESUMED_EVENT,
+    }).catch((error: unknown) => {
+      console.error('[BossScene] could not open final dialogue', error);
+      this.showEndingChoices();
+    });
+  }
+
+  private showEndingChoices(): void {
+    if (this.finished || !this.bossResult) return;
+    this.finished = true;
+    const bossScore = this.bossResult.bossScore ?? 0;
+    this.scene.start('LevelCompleteScene', {
+      score: bossScore,
+      maxScore: bossScore,
+      retryScene: 'BossScene',
+      retryData: { rhythmResult: this.rhythmResult, seed: this.seed },
+      continueScene: 'ResultScene',
+      continueData: { ...this.bossResult },
+    } satisfies LevelCompleteSceneData);
   }
 
   private cleanup(): void {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.controls?.destroy();
+    this.endingProjectile?.destroy();
+    this.endingProjectile = undefined;
     this.pickupOutline?.destroy();
     this.pickupOutline = undefined;
     this.emeralds?.destroy();
@@ -450,5 +531,6 @@ export class BossScene extends Phaser.Scene {
     this.attacks?.destroy();
     this.arena?.destroy();
     this.time.removeAllEvents();
+    this.events.off(BOSS_ENDING_DIALOGUE_RESUMED_EVENT, this.showEndingChoices, this);
   }
 }
