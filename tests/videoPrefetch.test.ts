@@ -1,116 +1,89 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  getPrefetchedVideoUrls,
-  prefetchVideo,
-  releasePrefetchedVideo,
+  AssetPrefetchQueue,
+  getPrefetchPolicy,
+  type PrefetchAsset,
 } from '../src/game/systems/videoPrefetch';
 
-interface FakeVideo {
-  muted: boolean;
-  defaultMuted: boolean;
-  preload: string;
-  src: string;
-  attributes: Record<string, string>;
-  loadCalls: number;
-  playCalls: number;
-  srcRemoved: boolean;
-}
+const item = (url: string, priority: PrefetchAsset['priority'] = 'HIGH'): PrefetchAsset => ({
+  url,
+  priority,
+  kind: 'image',
+});
 
-let created: FakeVideo[] = [];
+describe('campaign asset prefetch queue', () => {
+  it('deduplicates a URL and shares its result', async () => {
+    let calls = 0;
+    const queue = new AssetPrefetchQueue(async () => {
+      calls += 1;
+      return 123;
+    });
+    const first = queue.enqueue(item('same.webp'));
+    const second = queue.enqueue(item('same.webp'));
+    expect(second).toBe(first);
+    expect(await second).toMatchObject({ ok: true, bytes: 123 });
+    expect(calls).toBe(1);
+  });
 
-beforeEach(() => {
-  created = [];
-  vi.stubGlobal('document', {
-    createElement: (tag: string) => {
-      expect(tag).toBe('video');
-      const element = {
-        muted: false,
-        defaultMuted: false,
-        preload: '',
-        src: '',
-        attributes: {} as Record<string, string>,
-        loadCalls: 0,
-        playCalls: 0,
-        srcRemoved: false,
-        setAttribute(name: string, value: string) {
-          element.attributes[name] = value;
-        },
-        removeAttribute(name: string) {
-          if (name === 'src') {
-            element.srcRemoved = true;
-            element.src = '';
-          }
-        },
-        load() {
-          element.loadCalls += 1;
-        },
-        play() {
-          element.playCalls += 1;
-        },
-      };
-      created.push(element as unknown as FakeVideo);
-      return element;
-    },
+  it('runs queued critical work before high and low work', async () => {
+    const starts: string[] = [];
+    let releaseBlocker!: () => void;
+    const blocker = new Promise<void>((resolve) => {
+      releaseBlocker = resolve;
+    });
+    const queue = new AssetPrefetchQueue(async ({ url }) => {
+      starts.push(url);
+      if (url === 'active') await blocker;
+      return 1;
+    }, 1);
+
+    const active = queue.enqueue(item('active', 'HIGH'));
+    const low = queue.enqueue(item('low', 'LOW'));
+    const high = queue.enqueue(item('high', 'HIGH'));
+    const critical = queue.enqueue(item('critical', 'CRITICAL'));
+    releaseBlocker();
+    await Promise.all([active, low, high, critical]);
+    expect(starts).toEqual(['active', 'critical', 'high', 'low']);
+  });
+
+  it('never exceeds configured concurrency', async () => {
+    let active = 0;
+    let maximum = 0;
+    const queue = new AssetPrefetchQueue(async () => {
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await new Promise<void>((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return 1;
+    }, 2);
+    const pending = ['a', 'b', 'c', 'd'].map((url) => queue.enqueue(item(url)));
+    await Promise.resolve();
+    expect(active).toBe(2);
+    await Promise.all(pending);
+    expect(maximum).toBe(2);
+  });
+
+  it('turns failures into a non-blocking result', async () => {
+    const queue = new AssetPrefetchQueue(async () => {
+      throw new Error('offline');
+    });
+    await expect(queue.enqueue(item('missing'))).resolves.toMatchObject({
+      ok: false,
+      bytes: 0,
+      error: 'offline',
+    });
   });
 });
 
-afterEach(() => {
-  for (const url of getPrefetchedVideoUrls()) releasePrefetchedVideo(url);
-  vi.unstubAllGlobals();
-});
-
-describe('video prefetch', () => {
-  it('starts a muted, playsinline, never-played download', () => {
-    prefetchVideo('a.mp4');
-    expect(created).toHaveLength(1);
-    const element = created[0];
-    expect(element.src).toBe('a.mp4');
-    expect(element.muted).toBe(true);
-    expect(element.defaultMuted).toBe(true);
-    expect(element.attributes.playsinline).toBe('playsinline');
-    expect(element.preload).toBe('auto');
-    expect(element.loadCalls).toBe(1);
-    // The whole point: it warms the cache and never decodes for playback.
-    expect(element.playCalls).toBe(0);
+describe('network policy', () => {
+  it('limits save-data and very slow connections to critical assets', () => {
+    expect(getPrefetchPolicy({ saveData: true, effectiveType: '4g' })).toBe('critical-only');
+    expect(getPrefetchPolicy({ effectiveType: 'slow-2g' })).toBe('critical-only');
+    expect(getPrefetchPolicy({ effectiveType: '2g' })).toBe('critical-only');
   });
 
-  it('never creates a second element for a url already being prefetched', () => {
-    prefetchVideo('a.mp4');
-    prefetchVideo('a.mp4');
-    prefetchVideo('a.mp4');
-    expect(created).toHaveLength(1);
-    expect(getPrefetchedVideoUrls()).toEqual(['a.mp4']);
-  });
-
-  it('re-prefetches after a release, so a retry warms again', () => {
-    prefetchVideo('a.mp4');
-    releasePrefetchedVideo('a.mp4');
-    expect(getPrefetchedVideoUrls()).toEqual([]);
-    prefetchVideo('a.mp4');
-    expect(created).toHaveLength(2);
-  });
-
-  it('detaches the source on release so the request is torn down', () => {
-    prefetchVideo('a.mp4');
-    releasePrefetchedVideo('a.mp4');
-    const element = created[0];
-    expect(element.srcRemoved).toBe(true);
-    expect(element.loadCalls).toBe(2);
-  });
-
-  it('releasing an unknown or already-released url is a no-op', () => {
-    expect(() => releasePrefetchedVideo('nope.mp4')).not.toThrow();
-    prefetchVideo('a.mp4');
-    releasePrefetchedVideo('a.mp4');
-    expect(() => releasePrefetchedVideo('a.mp4')).not.toThrow();
-    expect(created).toHaveLength(1);
-  });
-
-  it('holds several urls independently', () => {
-    prefetchVideo('a.mp4');
-    prefetchVideo('b.mp4');
-    expect(getPrefetchedVideoUrls()).toEqual(['a.mp4', 'b.mp4']);
-    releasePrefetchedVideo('a.mp4');
-    expect(getPrefetchedVideoUrls()).toEqual(['b.mp4']);
+  it('uses the full package on normal or unsupported connections', () => {
+    expect(getPrefetchPolicy({ effectiveType: '3g' })).toBe('full');
+    expect(getPrefetchPolicy(undefined)).toBe('full');
   });
 });

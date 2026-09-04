@@ -72,7 +72,7 @@ const GROUP_SPECS: Record<ClubNpcGroupId, GroupSpec> = {
   dancefloor_crowd: { frameCount: 4, contentHeight: 480, footGap: 22 },
 };
 
-const ASSET_ROOT = 'assets/level_2/npcs';
+const ASSET_ROOT = 'assets/generated/level2/npcs';
 
 /** Texture key for one frame. Nothing outside this module builds these strings. */
 function frameKey(group: ClubNpcGroupId, frameNumber: number): string {
@@ -84,7 +84,7 @@ function buildGroup(id: ClubNpcGroupId): ClubNpcGroupArt {
   const frames: ClubNpcFrame[] = [];
   for (let frameNumber = 1; frameNumber <= spec.frameCount; frameNumber += 1) {
     const padded = String(frameNumber).padStart(2, '0');
-    frames.push({ key: frameKey(id, frameNumber), url: `${ASSET_ROOT}/${id}/${padded}.png` });
+    frames.push({ key: frameKey(id, frameNumber), url: `${ASSET_ROOT}/${id}/${padded}.webp` });
   }
   return { id, frames, contentHeight: spec.contentHeight, footGap: spec.footGap };
 }
@@ -115,4 +115,12 @@ export function collectClubNpcFrames(groups: readonly ClubNpcGroupId[]): ClubNpc
     }
   }
   return frames;
+}
+
+/** First visible pose for each group, used by Club's blocking cold-start preload. */
+export function collectClubNpcFirstFrames(groups: readonly ClubNpcGroupId[]): ClubNpcFrame[] {
+  return groups.flatMap((id) => {
+    const first = GROUPS[id].frames[0];
+    return first ? [first] : [];
+  });
 }

@@ -35,7 +35,7 @@ describe('club NPC artwork', () => {
       const group = getClubNpcGroup(id);
       const numbers = group.frames.map((frame) => frame.url.split('/').pop());
       const expected = group.frames.map((_frame, index) =>
-        `${String(index + 1).padStart(2, '0')}.png`,
+        `${String(index + 1).padStart(2, '0')}.webp`,
       );
       expect(numbers).toEqual(expected);
     }
@@ -53,7 +53,7 @@ describe('club NPC artwork', () => {
   it('lives outside the player artwork, so NPCs are never mistaken for characters', () => {
     for (const id of CLUB_NPC_GROUP_IDS) {
       for (const frame of getClubNpcGroup(id).frames) {
-        expect(frame.url.startsWith('assets/level_2/npcs/')).toBe(true);
+        expect(frame.url.startsWith('assets/generated/level2/npcs/')).toBe(true);
         expect(frame.url).not.toContain('assets/players/');
       }
     }

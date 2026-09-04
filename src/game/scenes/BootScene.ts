@@ -19,9 +19,7 @@ import {
   getCollectibleAnimationAssetUrls,
 } from '../collectibles/collectibleAnimations';
 import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/sceneryAssets';
-import { getLevel4AssetUrls } from '../level/level4/level4Assets';
 import { createEmptyRhythmResult } from '../level/level4/level4Flow';
-import { CLUB_ROOMS } from '../level/club/clubRooms';
 import { selectFallbackCharacter } from '../characters/characterSelection';
 
 export class BootScene extends Phaser.Scene {
@@ -64,14 +62,9 @@ export class BootScene extends Phaser.Scene {
     for (const asset of getSceneryAssetUrls()) {
       this.load.image(asset.key, asset.url);
     }
-    for (const asset of getLevel4AssetUrls(qualityProfile)) {
-      this.load.image(asset.key, asset.url);
-    }
-    // Room stills only, ~200 KB for all three. The videos themselves are
-    // never queued here; they stream in ClubScene.
-    for (const room of CLUB_ROOMS) {
-      this.load.image(room.posterKey, room.posterUrl);
-    }
+    // Later campaign packages are not part of Berlin's blocking boot. Their
+    // owning scenes keep independent cold-load paths while the current scene
+    // progressively warms the next package.
   }
 
   create(): void {

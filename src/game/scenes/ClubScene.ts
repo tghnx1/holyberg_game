@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
-import { queueCharacterGameplay } from '../characters/characterAssets';
+import { queueCharacterAssets, queueCharacterWalk } from '../characters/characterAssets';
 import { footOffset } from '../characters/characterAnimation';
 import {
   resolveLocomotionFrame,
@@ -28,7 +28,7 @@ import {
   type ClubRoomEdge,
 } from '../level/club/clubRooms';
 import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
-import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
+import { collectClubNpcFirstFrames, collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
@@ -43,6 +43,12 @@ import {
 } from '../dialogue/currentSceneSnapshot';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
+import {
+  getClubAssetPackage,
+  prefetchNextLevel,
+  summarizeResourceCache,
+} from '../systems/campaignPrefetch';
+import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
@@ -137,18 +143,27 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
   private activeStorySlot?: ClubStorySlot;
   private devRoomId?: string;
   private devDialogue = false;
+  private preloadStartedAt = 0;
 
   constructor() {
     super('ClubScene');
   }
 
   preload(): void {
+    this.preloadStartedAt = performance.now();
     // Demand-driven and idempotent: after Berlin has run, this queues
     // nothing, and a direct ?scene=club still loads what it needs.
     this.character = getSelectedCharacter();
-    queueCharacterGameplay(this, this.character);
+    queueCharacterWalk(this, this.character);
     for (const slot of ['dj1', 'barkeeper', 'dj3'] as const) {
-      queueCharacterGameplay(this, characterForClubStorySlot(this.storyCast, slot));
+      queueCharacterAssets(this, characterForClubStorySlot(this.storyCast, slot), ['idle']);
+    }
+    const room = CLUB_ROOMS[this.roomIndex];
+    if (!this.textures.exists(room.posterKey)) {
+      this.load.image(room.posterKey, room.posterUrl);
+    }
+    for (const frame of collectClubNpcFirstFrames(getRoomNpcGroups(room.id))) {
+      if (!this.textures.exists(frame.key)) this.load.image(frame.key, frame.url);
     }
   }
 
@@ -202,6 +217,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     this.buildControls();
     this.events.on(CLUB_DIALOGUE_RESUMED_EVENT, this.onStoryDialogueComplete, this);
     this.enterRoom(this.roomIndex, 'left');
+    if (import.meta.env.DEV) this.reportStartupMetrics();
 
     new OrientationController(this, {
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
@@ -214,6 +230,12 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
         if (slot) this.startStoryDialogue(slot);
       });
     }
+
+    prefetchNextLevel('Club', {
+      selectedCharacter: this.character,
+      profile: getRuntimeAssetQualityProfile(this.game, this.scale),
+      clubStoryCast: this.storyCast,
+    });
 
   }
 
@@ -539,6 +561,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       (frame) => !this.textures.exists(frame.key),
     );
     if (missing.length === 0) {
+      this.prepareNeighbourNpcs(this.roomIndex + 1);
       return;
     }
 
@@ -548,7 +571,25 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       // was in flight; rebuilding then would populate the wrong room.
       if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
       npcs.setRoom(roomId);
+      this.prepareNeighbourNpcs(this.roomIndex + 1);
     });
+    this.load.start();
+  }
+
+  /** Decode/register only the adjacent room while this room is being played. */
+  private prepareNeighbourNpcs(roomIndex: number): void {
+    const room = CLUB_ROOMS[roomIndex];
+    if (!room) return;
+    if (this.load.isLoading()) {
+      this.load.once(Phaser.Loader.Events.COMPLETE, () => this.prepareNeighbourNpcs(roomIndex));
+      return;
+    }
+    const missing = collectClubNpcFrames(getRoomNpcGroups(room.id)).filter(
+      (frame) => !this.textures.exists(frame.key),
+    );
+    if (!this.textures.exists(room.posterKey)) this.load.image(room.posterKey, room.posterUrl);
+    if (missing.length === 0 && this.load.list.size === 0) return;
+    for (const frame of missing) this.load.image(frame.key, frame.url);
     this.load.start();
   }
 
@@ -638,6 +679,20 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     for (const event of ['metadata', 'created', 'playing', 'locked', 'unlocked', 'error'] as const) {
       video.once(event, () => console.debug(`[ClubScene] ${url} ${event} +${since()}`));
     }
+  }
+
+  private reportStartupMetrics(): void {
+    const package_ = getClubAssetPackage(this.character, this.storyCast);
+    const urls = [...package_.critical, ...package_.full].map((entry) => entry.url);
+    const stats = summarizeResourceCache(
+      urls,
+      performance.getEntriesByType('resource') as PerformanceResourceTiming[],
+    );
+    console.debug(
+      `[ClubScene] blocking load ${Math.round(performance.now() - this.preloadStartedAt)}ms; ` +
+        `cache hits ${stats.hits}/${stats.expected} (${stats.observed} observed); ` +
+        `NPCs visible ${this.npcs?.isComplete() === true}`,
+    );
   }
 
   /**

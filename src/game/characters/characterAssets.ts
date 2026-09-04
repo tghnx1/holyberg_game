@@ -31,6 +31,12 @@ export type CharacterAssetGroup =
    * to its run frames, which this group already loaded.
    */
   | 'gameplay'
+  /**
+   * The compact locomotion package used by walking-only scenes: idle plus
+   * authored walk frames, or run only when walk is unavailable. It deliberately
+   * excludes jump/crouch/damage, which Club never draws.
+   */
+  | 'walk'
   /** The two dialogue portrait frames. */
   | 'portrait'
   /** The seated pose the metro dialogue scene needs. */
@@ -60,6 +66,14 @@ export function collectCharacterAssets(
           ...character.gameplay.crouch,
           ...character.gameplay.damage,
           ...character.gameplay.walk,
+        );
+        break;
+      case 'walk':
+        push(character.gameplay.idle);
+        refs.push(
+          ...(character.gameplay.walk.length > 0
+            ? character.gameplay.walk
+            : character.gameplay.run),
         );
         break;
       case 'portrait':
@@ -126,6 +140,14 @@ export function queueCharacterGameplay(
   character: CharacterDefinition,
 ): CharacterAssetRef[] {
   return queueCharacterAssets(scene, character, ['gameplay']);
+}
+
+/** Idle plus the minimum frames required by a walking-only scene. */
+export function queueCharacterWalk(
+  scene: Phaser.Scene,
+  character: CharacterDefinition,
+): CharacterAssetRef[] {
+  return queueCharacterAssets(scene, character, ['walk']);
 }
 
 /**

@@ -34,6 +34,22 @@ describe('what each group loads', () => {
     expect(walkKeys).toEqual(atmos.gameplay.walk.map((ref) => ref.key));
   });
 
+  it('walk loads only idle plus authored walk frames', () => {
+    const loaded = keys(['walk']);
+    expect(loaded).toEqual([
+      'character:atmos:gameplay:idle',
+      ...atmos.gameplay.walk.map((ref) => ref.key),
+    ]);
+    expect(loaded.some((key) => /:(jump|crouch|damage):/.test(key))).toBe(false);
+  });
+
+  it('walk uses run only when the character has no authored walk', () => {
+    expect(keys(['walk'], klaus)).toEqual([
+      'character:klaus:gameplay:idle',
+      ...klaus.gameplay.run.map((ref) => ref.key),
+    ]);
+  });
+
   it('a character with no walk set still loads full gameplay via the run fallback', () => {
     // Klaus has no walk frames; characterLocomotion falls back to run for it.
     expect(klaus.gameplay.walk).toEqual([]);
@@ -138,7 +154,10 @@ describe('idempotency', () => {
 
   it('sharing an NPC between two scenes costs the second nothing', () => {
     const loaded = new Set<string>();
-    for (const ref of selectMissingAssets(collectCharacterAssets(disus, ['portrait']), () => false)) {
+    for (const ref of selectMissingAssets(
+      collectCharacterAssets(disus, ['portrait']),
+      () => false,
+    )) {
       loaded.add(ref.key);
     }
     const again = selectMissingAssets(collectCharacterAssets(disus, ['portrait', 'appear']), (k) =>

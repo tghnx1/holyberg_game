@@ -49,6 +49,7 @@ import {
 } from '../level/level4/level4Layout';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 import { isSceneEditorActive } from '../systems/sceneEditorState';
+import { prefetchNextLevel } from '../systems/campaignPrefetch';
 
 // Native pixel dimensions of assets/level_4/toilet-full.png. The artwork is
 // authored as a short wide strip (floor-to-ceiling height, full room width)
@@ -441,6 +442,11 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     } else if (this.devDialogue) {
       this.time.delayedCall(350, () => this.startDialogue());
     }
+
+    prefetchNextLevel('Level4', {
+      selectedCharacter: this.playerCharacter,
+      profile: getRuntimeAssetQualityProfile(this.game, this.scale),
+    });
   }
 
   private buildBackground(): void {

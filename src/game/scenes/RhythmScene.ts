@@ -42,6 +42,8 @@ import {
   type ClubStoryCast,
 } from '../level/club/clubStory';
 import type { CurrentSceneSnapshot } from '../dialogue/currentSceneSnapshot';
+import { prefetchNextLevel } from '../systems/campaignPrefetch';
+import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 
 export class RhythmScene extends Phaser.Scene implements PausableScene {
   private berlinScore = 0;
@@ -267,6 +269,11 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     );
     this.notes.setCenterX(this.centerX);
     this.createStartOverlay();
+    // Track preparation is complete and the start gate is usable: only now
+    // may Level 4 use idle bandwidth.
+    prefetchNextLevel('Rhythm', {
+      profile: getRuntimeAssetQualityProfile(this.game, this.scale),
+    });
     new OrientationController(this, {
       onPause: () => { this.clock.pause(); this.boothAnimation.pause(); void this.audio.pause(); },
       onResume: () => {

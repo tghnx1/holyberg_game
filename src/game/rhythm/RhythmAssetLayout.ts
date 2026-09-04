@@ -1,6 +1,15 @@
 export const RHYTHM_HIGHWAY_TEXTURE_KEY = 'rhythm-highway-figma';
 export const RHYTHM_DECK_TEXTURE_KEY = 'rhythm-deck-left';
 
+export const RHYTHM_VISUAL_ASSETS = [
+  {
+    key: RHYTHM_HIGHWAY_TEXTURE_KEY,
+    url: 'assets/level_3/Rhythm Highway (unchanged).svg',
+    type: 'svg',
+  },
+  { key: RHYTHM_DECK_TEXTURE_KEY, url: 'assets/level_3/Deck L.svg', type: 'svg' },
+] as const;
+
 export const RHYTHM_HIGHWAY_WIDTH = 960;
 export const RHYTHM_HIGHWAY_HEIGHT = 720;
 export const RHYTHM_HIGHWAY_LOCAL_CENTER_X = RHYTHM_HIGHWAY_WIDTH / 2;

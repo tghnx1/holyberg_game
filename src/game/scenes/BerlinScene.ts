@@ -14,7 +14,6 @@ import {
   GROUND_SEGMENTS,
 } from '../level/berlin/berlinLevelConfig';
 import { getBerlinMaxScore } from '../level/berlin/berlinMaxScore';
-import { CLUB_ROOMS } from '../level/club/clubRooms';
 import { canAcceptTutorialJumpInput, resolveIntroStart } from '../level/berlin/controlsTutorial';
 import {
   isCollectible,
@@ -31,7 +30,8 @@ import {
 } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
-import { prefetchVideo } from '../systems/videoPrefetch';
+import { prefetchNextLevel } from '../systems/campaignPrefetch';
+import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { ControlsTutorialSystem } from '../systems/ControlsTutorialSystem';
@@ -220,13 +220,6 @@ export class BerlinScene extends Phaser.Scene {
     this.duckKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.followPlayer();
     attachFullscreenExitControl(this);
-    // Level 2's first room is a multi-megabyte MP4 that ClubScene otherwise
-    // only starts fetching once it is already on screen. Warming just that
-    // one here gives it the length of Level 1 to arrive; the remaining rooms
-    // stay on ClubScene's own neighbour prefetch. Ownership is module-level,
-    // so this deliberately outlives Berlin's shutdown and is still in flight
-    // through LevelCompleteScene.
-    prefetchVideo(CLUB_ROOMS[0].videoUrl);
     void this.createDevelopmentTools();
     // `once` so a restart cannot stack handlers; everything registered above
     // is released here rather than left attached to a dead scene.
@@ -322,6 +315,11 @@ export class BerlinScene extends Phaser.Scene {
       // Removes the hint and the fullscreen button together.
       this.intro.destroy();
       this.introHint = undefined;
+      // The run has accepted its start gesture and is now playable. Future
+      // Club downloads therefore cannot compete with Berlin's blocking load.
+      prefetchNextLevel('Berlin', {
+        profile: getRuntimeAssetQualityProfile(this.game, this.scale),
+      });
       this.hud.flash(BERLIN_SECTIONS[0].label, 900);
       // One buffered impulse, so the input that starts the run also jumps and
       // no second press is needed. The buffer is cleared on consumption, so it

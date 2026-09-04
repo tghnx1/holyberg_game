@@ -17,6 +17,7 @@ import type { ActiveAttack, ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
+import { getLevel4AssetUrls, LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
 import type { RhythmResult } from '../rhythm/types';
 import type { EditorSavePayload } from '../systems/editableSceneContract';
 import { designPointFromLayout, layoutRatiosFromDesignPoint } from '../systems/designSpace';
@@ -30,6 +31,7 @@ import {
   buildBossResult,
 } from '../boss/bossEnding';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
+import { prefetchNextLevel } from '../systems/campaignPrefetch';
 import {
   buildSceneLayoutPayload,
   getSceneObjectLayout,
@@ -129,6 +131,12 @@ export class BossScene extends Phaser.Scene {
     queueCharacterGameplay(this, getSelectedCharacter());
     EmeraldLayer.queueAssets(this);
     const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
+    const background = getLevel4AssetUrls(profile).find(
+      (asset) => asset.key === LEVEL4_ASSET_KEYS.holyworldBackground,
+    );
+    if (background && !this.textures.exists(background.key)) {
+      this.load.image(background.key, background.url);
+    }
     for (const asset of getBossAssetUrls(profile)) {
       if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
     }
@@ -158,6 +166,9 @@ export class BossScene extends Phaser.Scene {
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.showIntro();
+    prefetchNextLevel('Boss', {
+      profile: getRuntimeAssetQualityProfile(this.game, this.scale),
+    });
   }
 
   // ------------------------------------------------------- EditableScene
