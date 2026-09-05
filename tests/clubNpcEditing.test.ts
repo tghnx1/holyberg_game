@@ -111,6 +111,20 @@ describe('editing the ambient club crowd', () => {
     expect(sprite.textureKey).toBe(nextFrame);
   });
 
+  it('materializes placements when their first frames finish loading', () => {
+    const loaded = new Set<string>();
+    const { layer, sprites } = buildLayer(ROOM, loaded);
+    expect(sprites).toHaveLength(0);
+
+    for (const placement of getRoomNpcPlacements(ROOM)) {
+      loaded.add(getClubNpcGroup(placement.group).frames[0].key);
+    }
+    layer.update(0);
+
+    expect(sprites).toHaveLength(getRoomNpcPlacements(ROOM).length);
+    expect(layer.getEditableObjects()).toHaveLength(getRoomNpcPlacements(ROOM).length);
+  });
+
   it('builds one editable object per authored placement', () => {
     const { layer } = buildLayer(ROOM);
     expect(layer.getEditableObjects()).toHaveLength(getRoomNpcPlacements(ROOM).length);

@@ -40,6 +40,7 @@ interface NpcInstance {
  */
 export class ClubNpcLayer {
   private instances: NpcInstance[] = [];
+  private pendingPlacements: { placement: ClubNpcPlacement; index: number }[] = [];
   private roomId = '';
   /** Suffix counter, so a duplicated group never collides with an existing id. */
   private cloneCount = 0;
@@ -61,30 +62,11 @@ export class ClubNpcLayer {
   setRoom(roomId: string): void {
     this.clear();
     this.roomId = roomId;
-
-    getRoomNpcPlacements(roomId).forEach((placement, index) => {
-      const art = getClubNpcGroup(placement.group);
-      const first = art.frames[0];
-      if (!first || !this.scene.textures.exists(first.key)) return;
-
-      const sprite = this.scene.add
-        .sprite(0, 0, first.key)
-        // Bottom origin: the sprite's y is its floor line, before the
-        // group's own foot gap is added back on.
-        .setOrigin(0.5, 1)
-        .setDepth(this.depth)
-        .setFlipX(placement.flipX === true);
-
-      this.instances.push({
-        // Index-qualified so a room showing the same group twice stays addressable.
-        id: `${roomId}:${index}:${placement.group}`,
-        placement,
-        art,
-        sprite,
-        currentKey: first.key,
-      });
-    });
-
+    this.pendingPlacements = getRoomNpcPlacements(roomId).map((placement, index) => ({
+      placement,
+      index,
+    }));
+    this.materializePending();
     this.layout();
   }
 
@@ -100,6 +82,8 @@ export class ClubNpcLayer {
    * `setTexture` only when the frame actually changes.
    */
   update(now: number): void {
+    const added = this.materializePending();
+    if (added) this.layout();
     for (const instance of this.instances) {
       const { frames } = instance.art;
       if (frames.length === 0) continue;
@@ -116,6 +100,42 @@ export class ClubNpcLayer {
       instance.sprite.setTexture(frame.key);
       instance.currentKey = frame.key;
     }
+  }
+
+  /**
+   * Registers placements whose first frame has become available since the
+   * room was entered. This makes the layer resilient to either Phaser's
+   * preload or the progressive runtime loader winning the race: a placement
+   * never disappears permanently just because its first request was late.
+   */
+  private materializePending(): boolean {
+    if (this.pendingPlacements.length === 0) return false;
+    const waiting = this.pendingPlacements;
+    this.pendingPlacements = [];
+    let added = false;
+    for (const pending of waiting) {
+      const { placement, index } = pending;
+      const art = getClubNpcGroup(placement.group);
+      const first = art.frames[0];
+      if (!first || !this.scene.textures.exists(first.key)) {
+        this.pendingPlacements.push(pending);
+        continue;
+      }
+      const sprite = this.scene.add
+        .sprite(0, 0, first.key)
+        .setOrigin(0.5, 1)
+        .setDepth(this.depth)
+        .setFlipX(placement.flipX === true);
+      this.instances.push({
+        id: `${this.roomId}:${index}:${placement.group}`,
+        placement,
+        art,
+        sprite,
+        currentKey: first.key,
+      });
+      added = true;
+    }
+    return added;
   }
 
   /** Re-places every group for the current viewport; call on any resize. */
@@ -278,6 +298,7 @@ export class ClubNpcLayer {
   clear(): void {
     for (const instance of this.instances) instance.sprite.destroy();
     this.instances = [];
+    this.pendingPlacements = [];
   }
 
   destroy(): void {
