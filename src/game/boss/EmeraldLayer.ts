@@ -23,7 +23,7 @@ import {
 } from './emeraldField';
 
 /** Remaining, uncollected emeralds stay visible this long after the laser goes live. */
-export const EMERALD_HIDE_DELAY_MS = 1000;
+export const EMERALD_HIDE_DELAY_MS = 1500;
 
 interface LiveEmerald {
   spot: EmeraldSpot;
@@ -108,8 +108,16 @@ export class EmeraldLayer {
     const spots = getAuthoredEmeraldSpots(this.windowSceneKey);
     this.translateDeltaX = this.computeTranslateDeltaX(playerX, spots);
     for (const spot of spots) this.add(spot);
-    this.offered = this.emeralds.map((emerald) => emerald.spot);
+    // Collision/collect math and the boss scene's own score-popup placement
+    // both need where the emerald is actually drawn, not its authored
+    // player-relative offset — `resolvedSpot` is what translates it.
+    this.offered = this.emeralds.map((emerald) => this.resolvedSpot(emerald));
     this.syncVisibility();
+  }
+
+  /** `emerald.spot` translated into the world point it's actually drawn at. */
+  private resolvedSpot(emerald: LiveEmerald): EmeraldSpot {
+    return { ...emerald.spot, x: emerald.spot.x + this.translateDeltaX };
   }
 
   /**

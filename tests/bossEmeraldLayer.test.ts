@@ -215,7 +215,7 @@ describe('EmeraldLayer', () => {
     expect(layer.getEditableObjects()[0].id).toBe('emerald-01');
   });
 
-  it('keeps remaining emeralds visible/collectable for 1000ms after the attack activates, then hides them', () => {
+  it('keeps remaining emeralds visible/collectable for 1500ms after the attack activates, then hides them', () => {
     authorSpots('attack-00', [{ id: 'emerald-01', x: 0, y: 560 }]);
     const { scene, timers } = createScene();
     const layer = new EmeraldLayer(scene as never, SCENE_KEY);
@@ -233,8 +233,39 @@ describe('EmeraldLayer', () => {
     expect(layer.offeredCount).toBe(0);
   });
 
-  it('defaults scheduleHide to the documented 1000ms delay constant', () => {
-    expect(EMERALD_HIDE_DELAY_MS).toBe(1000);
+  it('defaults scheduleHide to the documented 1500ms delay constant', () => {
+    expect(EMERALD_HIDE_DELAY_MS).toBe(1500);
+  });
+
+  it('collects an emerald by its actual translated (drawn) position, not its raw authored offset', () => {
+    // Authored offset is -300 from the anchor; with the group anchored at
+    // 900, the emerald is actually drawn/collectable at world x 600 — a
+    // player standing at the *offset* value (300) must not collect it, only
+    // one standing where it is actually drawn.
+    authorSpots('attack-00', [{ id: 'emerald-01', x: -300, y: 560 }]);
+    const { scene } = createScene();
+    const layer = new EmeraldLayer(scene as never, SCENE_KEY);
+    layer.setBounds(arena);
+    layer.showWindow('attack-00', 900);
+
+    const missAtRawOffset = layer.collect({
+      centerX: -300,
+      centerY: 560,
+      halfWidth: 10,
+      halfHeight: 10,
+    });
+    expect(missAtRawOffset).toHaveLength(0);
+    expect(layer.offeredCount).toBe(1);
+
+    const hitAtDrawnPosition = layer.collect({
+      centerX: 600,
+      centerY: 560,
+      halfWidth: 10,
+      halfHeight: 10,
+    });
+    expect(hitAtDrawnPosition.map((spot) => spot.id)).toEqual(['emerald-01']);
+    expect(hitAtDrawnPosition[0].x).toBeCloseTo(600);
+    expect(layer.offeredCount).toBe(0);
   });
 
   it('never lets a stale hide timer from the previous attack hide the next attack’s emeralds', () => {

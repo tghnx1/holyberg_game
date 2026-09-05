@@ -393,6 +393,14 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     };
 
     let sprite: Phaser.GameObjects.Sprite | undefined;
+    // The dialogue clone lives in DialogueScene, not here — and BossScene is
+    // *paused* underneath it for the whole final dialogue (see
+    // `launchCurrentSceneDialogue`'s `scene.scene.pause(sourceSceneKey)`), so
+    // a paused scene's own `time` never fires a `delayedCall`. Scheduling the
+    // appear sequence on `this.time` would show the first frame (set
+    // synchronously below) and then hang forever. It has to run on the scene
+    // `create` is actually handed — DialogueScene's own live clock.
+    let dialogueScene: Phaser.Scene | undefined;
     const actor: CurrentSceneLiveActor = {
       id: MAGICIAN_EDITABLE_ID,
       label: 'DISUS',
@@ -400,6 +408,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       sourceScrollX: camera.scrollX,
       sourceScrollY: camera.scrollY,
       create: (scene) => {
+        dialogueScene = scene;
         const startFrame = appearFrames[0];
         sprite = scene.add
           .sprite(
@@ -418,11 +427,12 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     };
 
     const playArrival = (onComplete: () => void): void => {
-      if (!sprite) {
+      if (!sprite || !dialogueScene) {
         onComplete();
         return;
       }
       const live = sprite;
+      const clock = dialogueScene;
       gameAudio(this).playSfx('disusAppearDisappear');
       live.setVisible(true);
       stepAppearFrames({
@@ -433,7 +443,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
           live.setTexture(frame.key);
           live.setY(floorForFrame(frame) - camera.scrollY);
         },
-        schedule: (delayMs, callback) => this.time.delayedCall(delayMs, callback),
+        schedule: (delayMs, callback) => clock.time.delayedCall(delayMs, callback),
         onComplete,
       });
     };
