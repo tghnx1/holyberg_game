@@ -3,8 +3,6 @@ import {
   computeStageFit,
   DIALOGUE_STAGE_CANONICAL_HEIGHT,
   DIALOGUE_STAGE_CANONICAL_WIDTH,
-  DIALOGUE_STAGE_RENDER_OVERLAP,
-  computeSceneSeamUnderlap,
 } from '../src/game/dialogue/DialogueStageViewport';
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../src/game/constants';
 import { DialogueLayout } from '../src/game/dialogue/dialogueConstants';
@@ -24,15 +22,10 @@ describe('the shared canonical box', () => {
     expect(H).toBe(panel.height);
   });
 
-  it('carries the seam overlap both stages need', () => {
-    expect(DIALOGUE_STAGE_RENDER_OVERLAP).toBe(
-      DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
-    );
-  });
-
-  it('extends only the missing right-edge strip under the divider', () => {
-    expect(computeSceneSeamUnderlap(717, 813)).toEqual({ x: 717, width: 96 });
-    expect(computeSceneSeamUnderlap(820, 813)).toBeUndefined();
+  it('includes the divider underlap in the real stage render width', () => {
+    const layout = computeDialogueLayout(DESIGN_WIDTH, DESIGN_HEIGHT);
+    expect(layout.scenePanel.width).toBeGreaterThan(layout.scenePanelFrameWidth);
+    expect(layout.scenePanel.width - layout.scenePanelFrameWidth).toBe(DialogueLayout.dividerSkew);
   });
 });
 
@@ -41,21 +34,19 @@ describe('the shared canonical box', () => {
  * the canonical box coincide, so the shared fit has to reproduce exactly what
  * the station's own cover fit produced there — scale 1, no offset.
  */
-describe('Dialogue 1 framing is unchanged', () => {
-  it('is identical to the previous cover fit at the design aspect', () => {
+describe('Dialogue stage framing', () => {
+  it('cover-fits the actual widened scene panel at the design aspect', () => {
     const layout = computeDialogueLayout(DESIGN_WIDTH, DESIGN_HEIGHT);
     const panel = layout.scenePanel;
-    const shared = computeStageFit(layout.scenePanelFrameWidth, panel.height);
-    const previous = computeCoverFit(W, H, layout.scenePanelFrameWidth, panel.height);
+    const shared = computeStageFit(panel.width, panel.height);
+    const previous = computeCoverFit(W, H, panel.width, panel.height);
     expect(shared.scale).toBeCloseTo(previous.scale);
     expect(shared.offsetX).toBeCloseTo(previous.offsetX);
     expect(shared.offsetY).toBeCloseTo(previous.offsetY);
-    expect(shared.scale).toBeCloseTo(1);
+    expect(shared.scale).toBeGreaterThan(1);
   });
 
-  it('agrees with the cover fit on any panel at or narrower than the canonical aspect', () => {
-    // Where cover's tighter axis is already the height, the two rules pick the
-    // same scale — so nothing that framed correctly before moves.
+  it('agrees with cover fit on every panel shape', () => {
     for (const [width, height] of [
       [W, H],
       [W * 0.9, H],
@@ -77,13 +68,11 @@ describe('the universal framing rule', () => {
     [900, 1600],
   ];
 
-  it('never clips the composition vertically, on any panel', () => {
+  it('covers the entire stage panel on every axis', () => {
     for (const [width, height] of panels) {
       const fit = computeStageFit(width, height);
-      // Top edge is on the panel's top, bottom edge on its bottom.
-      expect(fit.offsetY).toBeCloseTo(0);
-      expect(H * fit.scale).toBeLessThanOrEqual(height + 0.001);
-      expect(H * fit.scale).toBeCloseTo(height);
+      expect(W * fit.scale).toBeGreaterThanOrEqual(width - 0.001);
+      expect(H * fit.scale).toBeGreaterThanOrEqual(height - 0.001);
     }
   });
 
@@ -94,22 +83,23 @@ describe('the universal framing rule', () => {
     expect(fit.scale).toBeGreaterThan(0);
   });
 
-  it('centres horizontally, so overflow is shared between both edges', () => {
+  it('centres overflow horizontally, so the scene is continuous beneath the seam', () => {
     const fit = computeStageFit(W * 0.5, H);
     expect(fit.offsetX).toBeCloseTo((W * 0.5 - W * fit.scale) / 2);
   });
 
-  it('does what a cover fit would not: refuses to crop a wide panel vertically', () => {
+  it('matches cover fit on a wide panel, preventing an uncovered right edge', () => {
     const width = W * 1.6;
     const height = H;
     const cover = computeCoverFit(W, H, width, height);
     const shared = computeStageFit(width, height);
     // Cover scales up to fill the width and pushes the composition past the
-    // top and bottom of the body; the shared rule does not.
+    // top and bottom of the body; the shared rule intentionally does too so
+    // the actual scene reaches the diagonal divider.
     expect(H * cover.scale).toBeGreaterThan(height);
     expect(cover.offsetY).toBeLessThan(0);
-    expect(H * shared.scale).toBeCloseTo(height);
-    expect(shared.offsetY).toBeCloseTo(0);
+    expect(shared.scale).toBeCloseTo(cover.scale);
+    expect(shared.offsetY).toBeCloseTo(cover.offsetY);
   });
 
   it('is safe on a degenerate canonical box', () => {

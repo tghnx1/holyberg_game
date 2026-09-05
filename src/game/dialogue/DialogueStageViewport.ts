@@ -42,19 +42,6 @@ export const DIALOGUE_STAGE_CANONICAL_HEIGHT =
   DESIGN_HEIGHT - DialogueLayout.topBarHeight - DialogueLayout.bottomBarHeight;
 
 /**
- * How far a stage renders past the panel's own logical width.
- *
- * The divider between the scene panel and the portrait panel leans right as
- * it descends, so a stage masked strictly to the panel width stops on a
- * vertical line and leaves a black wedge between that line and the divider's
- * left edge. Only the *mask* is widened by this; the composition is never
- * stretched or duplicated to reach it, and the divider drawn on top covers
- * its own band regardless.
- */
-export const DIALOGUE_STAGE_RENDER_OVERLAP =
-  DialogueLayout.dividerSkew + DialogueLayout.dividerThickness;
-
-/**
  * `Phaser.Scenes.Events.UPDATE`, as its literal value.
  *
  * Spelled out so this module never imports Phaser as a *value*: the framing
@@ -70,33 +57,18 @@ export interface DialogueStageFit {
 }
 
 /**
- * Returns the narrow strip needed to carry a scene's right edge underneath
- * the diagonal seam.  The scene image itself is never stretched: callers
- * render this strip from its last source column instead.
- */
-export function computeSceneSeamUnderlap(
-  imageRight: number,
-  targetRight: number,
-): { x: number; width: number } | undefined {
-  const width = targetRight - imageRight;
-  return width > 0 ? { x: imageRight, width } : undefined;
-}
-
-/**
- * The universal framing rule, uniform in both axes:
+ * The universal stage framing rule, uniform in both axes:
  *
- * - the complete canonical composition fits vertically inside the dialogue
- *   body, so nothing useful is ever clipped at the top or the bottom and the
- *   scene can never bleed into the speaker/text area;
- * - horizontally it is centred, and whatever the art naturally extends past
- *   the panel edge is allowed to show through under the diagonal divider.
+ * - the source scene fills the complete left panel, including the extra width
+ *   below its diagonal divider;
+ * - any excess is clipped by that panel's shared mask, never fabricated from
+ *   a stretched source edge or a flat fill;
+ * - scale stays uniform, so scenery and live scene snapshots preserve their
+ *   proportions.
  *
- * Deliberately *not* a cover fit. Cover takes `max(w/W, h/H)`, so on any
- * panel wider than the canonical aspect it scales up past the panel height
- * and crops the composition top and bottom — which is exactly the class of
- * bug each stage was fixing for itself. At the 16:9 aspect the game is
- * designed at, panel and canonical box coincide and this returns scale 1,
- * so desktop framing is identical to what a cover fit produced there.
+ * The diagonal has no rectangular right edge: its widest point is below the
+ * nominal scene frame. A contain fit leaves that extra triangular region
+ * uncovered; this cover fit makes the actual stage image reach it.
  */
 export function computeStageFit(
   panelWidth: number,
@@ -107,13 +79,11 @@ export function computeStageFit(
   if (canonicalWidth <= 0 || canonicalHeight <= 0) {
     return { scale: 0, offsetX: 0, offsetY: 0 };
   }
-  const scale = panelHeight / canonicalHeight;
+  const scale = Math.max(panelWidth / canonicalWidth, panelHeight / canonicalHeight);
   return {
     scale,
     offsetX: (panelWidth - canonicalWidth * scale) / 2,
-    // Exact by construction: the composition is scaled to the panel height,
-    // so it starts at the top and ends at the bottom with nothing cut off.
-    offsetY: 0,
+    offsetY: (panelHeight - canonicalHeight * scale) / 2,
   };
 }
 
@@ -145,10 +115,6 @@ export class DialogueStageViewport {
   readonly canonicalHeight: number;
 
   private readonly mask: Phaser.GameObjects.Graphics;
-  private readonly seamExtensions: {
-    image: Phaser.GameObjects.Image;
-    extension: Phaser.GameObjects.Image;
-  }[] = [];
   private panelWidth = 0;
   private panelHeight = 0;
   private renderWidth = 0;
@@ -178,40 +144,20 @@ export class DialogueStageViewport {
 
   private syncMask(): void {
     this.mask.setPosition(this.root.x, this.root.y);
-    this.syncSceneSeamExtensions();
   }
 
   /** Puts the stage's own objects into the framed content container. */
   add(children: Phaser.GameObjects.GameObject[]): void {
-    for (const child of children) {
-      this.content.add(child);
-      // Dialogue backdrops are Images with a top-left origin.  Add a tiny
-      // source-column extension after each such image, before actors are
-      // added, so the artwork—not the portrait colour—owns the seam.
-      const image = child as Phaser.GameObjects.Image;
-      if (child.type !== 'Image' || image.originX !== 0 || image.originY !== 0) continue;
-      const source = image.texture.getSourceImage() as { width?: number; height?: number };
-      if (!source.width || !source.height) continue;
-      const extension = this.scene.add.image(0, 0, image.texture.key).setOrigin(0, 0);
-      extension
-        .setCrop(source.width - 1, 0, 1, source.height)
-        .setVisible(image.visible);
-      this.content.add(extension);
-      this.seamExtensions.push({
-        image,
-        extension,
-      });
-    }
+    this.content.add(children);
   }
 
   /**
    * Reframes for a new panel size.
    *
-   * The mask is widened by the seam overlap; the fit itself is always
-   * computed against the real panel size, never the widened one, so
-   * extending that coverage neither rescales nor repositions the stage. An
+   * The panel width already includes the diagonal underlap. The actual stage
+   * is uniformly cover-fitted to that width, then clipped by this mask. An
    * authored transform wins outright and is never re-derived, so a resize
-   * cannot re-crop a framing that was set by hand in the editor.
+   * cannot overwrite a framing set by hand in the editor.
    */
   resize(width: number, height: number, framingWidth = width): void {
     // `width` includes the scene's seam underlap; authoring and composition
@@ -222,26 +168,9 @@ export class DialogueStageViewport {
     this.mask
       .clear()
       .fillStyle(0xffffff)
-      .fillRect(0, 0, width + DIALOGUE_STAGE_RENDER_OVERLAP, height);
+      .fillRect(0, 0, width, height);
     this.syncMask();
     this.applyComposition();
-  }
-
-  private syncSceneSeamExtensions(): void {
-    if (this.renderWidth <= 0 || this.content.scaleX === 0) return;
-    const targetRight = (this.renderWidth - this.content.x) / this.content.scaleX;
-    for (const seam of this.seamExtensions) {
-      const imageRight = seam.image.x + seam.image.displayWidth;
-      const strip = computeSceneSeamUnderlap(imageRight, targetRight);
-      if (!strip) {
-        seam.extension.setVisible(false);
-        continue;
-      }
-      seam.extension
-        .setVisible(seam.image.visible)
-        .setPosition(strip.x, seam.image.y)
-        .setDisplaySize(strip.width, seam.image.displayHeight);
-    }
   }
 
   private applyComposition(): void {
@@ -253,7 +182,7 @@ export class DialogueStageViewport {
       return;
     }
     const fit = computeStageFit(
-      this.panelWidth,
+      this.renderWidth,
       this.panelHeight,
       this.canonicalWidth,
       this.canonicalHeight,
@@ -288,7 +217,6 @@ export class DialogueStageViewport {
     this.scene.events.off(SCENE_UPDATE_EVENT, this.syncMask, this);
     this.root.clearMask(true);
     this.mask.destroy();
-    for (const seam of this.seamExtensions) seam.extension.destroy();
     this.root.destroy(true);
   }
 }

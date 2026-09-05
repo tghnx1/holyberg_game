@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { DialogueLayout } from '../src/game/dialogue/dialogueConstants';
-import { buildDiagonalStripPoints } from '../src/game/dialogue/dialogueLayoutMetrics';
+import {
+  buildDiagonalStripPoints,
+  computeDialogueLayout,
+} from '../src/game/dialogue/dialogueLayoutMetrics';
+import { computeStageFit } from '../src/game/dialogue/DialogueStageViewport';
 
 /**
  * The seam between a dialogue's scene panel and its portrait panel is a
@@ -9,59 +13,31 @@ import { buildDiagonalStripPoints } from '../src/game/dialogue/dialogueLayoutMet
  * triangle between that line and the divider's left edge is left showing the
  * background — the black wedge.
  *
- * Both scene views take the same `renderOverlap` for this, and it has to be
- * at least as wide as the divider actually travels, or the wedge is only
- * narrowed rather than closed.
+ * The shared layout gives the real scene panel that extra width, and the
+ * viewport cover-fits the actual source scene into it. There is no synthetic
+ * edge-pixel or colour fill in the seam path.
  */
-const RENDER_OVERLAP = DialogueLayout.dividerSkew + DialogueLayout.dividerThickness;
 
-describe('scene panel render overlap', () => {
-  it('is the divider skew plus its thickness', () => {
-    expect(RENDER_OVERLAP).toBe(DialogueLayout.dividerSkew + DialogueLayout.dividerThickness);
-    expect(RENDER_OVERLAP).toBeGreaterThan(0);
-  });
-
-  it('reaches at least as far right as the divider ever does', () => {
-    const bodyHeight = 600;
-    const points = buildDiagonalStripPoints(
-      DialogueLayout.dividerThickness,
-      DialogueLayout.dividerSkew,
-      bodyHeight,
-    );
-    // Even x values are the polygon's horizontal coordinates, relative to the
-    // seam's own origin at the panel's right edge.
-    const xs = points.filter((_, index) => index % 2 === 0);
-    expect(RENDER_OVERLAP).toBeGreaterThanOrEqual(Math.max(...xs));
-  });
-
-  it('covers the widest point of the seam, which is its bottom-right corner', () => {
-    const points = buildDiagonalStripPoints(
-      DialogueLayout.dividerThickness,
-      DialogueLayout.dividerSkew,
-      480,
-    );
-    const rightmost = Math.max(...points.filter((_, index) => index % 2 === 0));
-    expect(rightmost).toBeCloseTo(DialogueLayout.dividerThickness / 2 + DialogueLayout.dividerSkew);
-    expect(RENDER_OVERLAP).toBeGreaterThan(rightmost);
-  });
-
-  it('does not change the panel\'s own logical width', () => {
-    // The overlap widens only the mask; the composition is still fitted to,
-    // and the layout still reserves, the real panel width.
-    const panelWidth = 1280 * DialogueLayout.scenePanelWidthRatio;
-    expect(panelWidth + RENDER_OVERLAP).toBeGreaterThan(panelWidth);
-    expect(DialogueLayout.scenePanelWidthRatio).toBeLessThan(1);
-  });
-
-  it('is independent of panel height, so it holds at every aspect ratio', () => {
-    for (const height of [360, 480, 720, 1080]) {
+describe('dialogue scene under the diagonal divider', () => {
+  it('gives the real scene panel enough width to reach the divider at every tested viewport', () => {
+    for (const [width, height] of [[800, 480], [960, 720], [1280, 720], [1920, 1080]]) {
+      const layout = computeDialogueLayout(width, height);
       const points = buildDiagonalStripPoints(
         DialogueLayout.dividerThickness,
         DialogueLayout.dividerSkew,
-        height,
+        layout.scenePanel.height,
       );
-      const rightmost = Math.max(...points.filter((_, index) => index % 2 === 0));
-      expect(RENDER_OVERLAP).toBeGreaterThanOrEqual(rightmost);
+      const sceneRight = layout.scenePanel.x + layout.scenePanel.width;
+      const dividerLeftAtBottom = layout.portraitPanel.x + points[6];
+      expect(sceneRight).toBeGreaterThanOrEqual(dividerLeftAtBottom);
     }
+  });
+
+  it('cover-fits the source scene to that widened panel without per-axis stretching', () => {
+    const layout = computeDialogueLayout(1280, 720);
+    const fit = computeStageFit(layout.scenePanel.width, layout.scenePanel.height);
+    expect(fit.scale).toBeGreaterThan(0);
+    expect(fit.offsetX).toBeLessThanOrEqual(0.001);
+    expect(fit.offsetY).toBeLessThanOrEqual(0.001);
   });
 });
