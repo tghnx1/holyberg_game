@@ -79,6 +79,8 @@ export interface EditableObject {
   clone?: () => EditableObject | undefined;
   /** Optional deletion capability, paired with `clone` for scenes that support both. */
   remove?: () => void;
+  /** Optional authored horizontal mirror for character-like sprites only. */
+  flipHorizontal?: () => void;
 }
 
 function ancestorChain(target: EditableTarget): AncestorTransform[] {
@@ -178,6 +180,7 @@ export function toEditableItem(
         }
       : undefined,
     remove: object.remove ? () => object.remove?.() : undefined,
+    flipHorizontal: object.flipHorizontal ? () => object.flipHorizontal?.() : undefined,
 
     bringToFront: object.getParentContainer
       ? () => object.getParentContainer?.()?.bringToTop(object.target)

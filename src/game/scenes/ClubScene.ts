@@ -313,7 +313,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       this.currentFrameKey = frame.key;
     }
     // Right is the artwork's natural facing; left mirrors it.
-    this.playerSprite.setFlipX(this.facing === -1);
+    this.playerSprite.setFlipX((this.facing === -1) !== getPlayerVisualOffset(this.scene.key).flipX);
     const anchor = this.playerAnchor(frame.footGap, baseScale);
     // Visual only: the saved offset moves the drawn sprite, never `walkX`, so
     // room edges and transitions trigger at exactly the same places.
@@ -530,6 +530,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const baseline = (saved?.yRatio ?? placement.baselineRatio) * this.cameras.main.height;
     actor.sprite
       .setTexture(frame.key)
+      .setFlipX(saved?.flipX === true)
       .setScale(scale)
       .setPosition(x, baseline + footOffset(frame.footGap, scale));
     this.layoutStoryMask(actor, frame.bodyHeight * scale);
@@ -575,6 +576,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
         const baseScale = resolveGameplayScale(actor.character, 'idle');
         const scale = transform.scaleY;
         setSceneObjectLayout(this.scene.key, placement.layoutId, {
+          ...getSceneObjectLayout(this.scene.key, placement.layoutId),
           xRatio: this.cameras.main.width > 0 ? transform.x / this.cameras.main.width : 0,
           yRatio: this.cameras.main.height > 0
             ? (transform.y - footOffset(frame.footGap, scale)) / this.cameras.main.height
@@ -582,6 +584,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
           scale: baseScale > 0 ? scale / baseScale : placement.scale,
         });
         this.layoutStoryMask(actor, frame.bodyHeight * scale);
+      },
+      flipHorizontal: () => {
+        const saved = getSceneObjectLayout(this.scene.key, placement.layoutId);
+        setSceneObjectLayout(this.scene.key, placement.layoutId, {
+          ...saved,
+          flipX: saved?.flipX !== true,
+        });
+        this.layoutStoryActor();
       },
     };
   }

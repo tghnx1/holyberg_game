@@ -11,6 +11,7 @@ import { PASTE_OFFSET } from './editorClipboard';
 import {
   boundsContain,
   isCloneable,
+  isFlippable,
   isRemovable,
   isResizable,
   minimumSizeOf,
@@ -93,6 +94,7 @@ export function editorActionHelp(item?: EditableItem): string {
   if (isResizable(item)) actions.push('handles resize · Shift = keep ratio');
   if (isCloneable(item)) actions.push('C copy · V paste');
   if (isRemovable(item)) actions.push('Del delete');
+  if (isFlippable(item)) actions.push('F flip');
   if (item.bringToFront || item.sendToBack) actions.push('[ / ] layer');
   return actions.join(' · ');
 }
@@ -139,6 +141,7 @@ export class SceneEditorCore {
   private readonly growKeys: Phaser.Input.Keyboard.Key[];
   private readonly shrinkKeys: Phaser.Input.Keyboard.Key[];
   private readonly deleteKeys: Phaser.Input.Keyboard.Key[];
+  private readonly flipKey: Phaser.Input.Keyboard.Key;
   private readonly escapeKey: Phaser.Input.Keyboard.Key;
   private readonly saveKey: Phaser.Input.Keyboard.Key;
   private readonly raiseKey: Phaser.Input.Keyboard.Key;
@@ -224,6 +227,7 @@ export class SceneEditorCore {
       keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DELETE),
       keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.BACKSPACE),
     ];
+    this.flipKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
     this.escapeKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     this.saveKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
     this.raiseKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.CLOSED_BRACKET);
@@ -354,6 +358,7 @@ export class SceneEditorCore {
     if (Phaser.Input.Keyboard.JustDown(this.copyKey)) this.copySelected();
     if (Phaser.Input.Keyboard.JustDown(this.pasteKey)) this.paste();
     if (this.deleteKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))) this.deleteSelected();
+    if (Phaser.Input.Keyboard.JustDown(this.flipKey)) this.flipSelected();
     this.redraw();
   }
 
@@ -473,6 +478,13 @@ export class SceneEditorCore {
     item.remove?.();
     this.unregister(id);
     this.status = `deleted ${id}`;
+  }
+
+  private flipSelected(): void {
+    const item = this.selectedItem();
+    if (!item?.flipHorizontal) return;
+    item.flipHorizontal();
+    this.status = `flipped ${item.label ?? item.id}`;
   }
 
   // ----------------------------------------------------------------- input

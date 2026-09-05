@@ -3,6 +3,7 @@ import {
   boundsContain,
   DEFAULT_MINIMUM_SIZE,
   isCloneable,
+  isFlippable,
   isRemovable,
   isResizable,
   minimumSizeOf,
@@ -36,6 +37,11 @@ describe('capabilities are opt-in', () => {
   it('treats an item without remove as un-deletable', () => {
     expect(isRemovable(baseItem())).toBe(false);
     expect(isRemovable(baseItem({ remove: () => {} }))).toBe(true);
+  });
+
+  it('treats horizontal flip as an explicit character capability', () => {
+    expect(isFlippable(baseItem())).toBe(false);
+    expect(isFlippable(baseItem({ flipHorizontal: () => {} }))).toBe(true);
   });
 
   it('is resizable unless it explicitly opts out', () => {
@@ -185,6 +191,13 @@ describe('transform-backed objects on the shared core', () => {
   it('offers no clone for an object that did not declare one', () => {
     // Level 4's toilet backdrop and every scene's main player are exactly this.
     expect(toEditableItem(fakeObject()).clone).toBeUndefined();
+  });
+
+  it('passes an authored flip capability through to the shared core item', () => {
+    const flip = vi.fn();
+    const item = toEditableItem(fakeObject({ flipHorizontal: flip }));
+    item.flipHorizontal?.();
+    expect(flip).toHaveBeenCalledOnce();
   });
 
   it('registers a clone so the copy is immediately editable', () => {

@@ -73,6 +73,7 @@ export function storeLevel4Placement(
   placement: Level4Placement,
 ): void {
   const layout: SceneObjectLayout = {
+    ...getSceneObjectLayout(sceneKey, id),
     ...layoutRatiosFromDesignPoint(placement),
     scaleX: placement.scaleX,
     scaleY: placement.scaleY,

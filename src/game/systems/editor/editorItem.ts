@@ -84,6 +84,9 @@ export interface EditableItem {
   /** Present only on an item that can meaningfully be deleted. */
   remove?: () => void;
 
+  /** Present only on a character/actor whose authored horizontal mirror is editable. */
+  flipHorizontal?: () => void;
+
   /**
    * Extra draggable markers drawn alongside the item — Berlin's moving
    * platform travel ends are the current case.
@@ -129,6 +132,10 @@ export function isCloneable(item: EditableItem): boolean {
 
 export function isRemovable(item: EditableItem): boolean {
   return typeof item.remove === 'function';
+}
+
+export function isFlippable(item: EditableItem): boolean {
+  return typeof item.flipHorizontal === 'function';
 }
 
 export function shouldPreserveAspect(item: EditableItem, shiftDown: boolean): boolean {

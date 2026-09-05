@@ -51,6 +51,10 @@ function validateObjectLayout(value: unknown, where: string): SceneObjectLayout 
     }
     layout[key] = record[key];
   }
+  if (record.flipX !== undefined) {
+    if (typeof record.flipX !== 'boolean') throw new Error(`${where}.flipX must be a boolean`);
+    layout.flipX = record.flipX;
+  }
   if (record.value !== undefined) {
     if (!isFiniteNumber(record.value)) throw new Error(`${where}.value must be a finite number`);
     if (record.value < MIN_VALUE || record.value > MAX_VALUE) {

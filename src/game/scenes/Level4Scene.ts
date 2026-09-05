@@ -52,7 +52,11 @@ import {
   type Level4CutsceneConfig,
   type Level4Placement,
 } from '../level/level4/level4Layout';
-import { buildSceneLayoutPayload } from '../systems/sceneLayout';
+import {
+  buildSceneLayoutPayload,
+  getSceneObjectLayout,
+  setSceneObjectLayout,
+} from '../systems/sceneLayout';
 import { isSceneEditorActive } from '../systems/sceneEditorState';
 import { prefetchNextLevel } from '../systems/campaignPrefetch';
 
@@ -846,7 +850,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     // never `actor.x`, so triggers, the cutscene and completion are unaffected.
     const visual = this.playerVisualOffset(actor);
     actor.sprite
-      .setFlipX(actor.facing < 0)
+      .setFlipX((actor.facing < 0) !== visual.flipX)
       .setScale(baseScale * visual.scale)
       .setPosition(anchor.x + visual.offsetX, anchor.y + visual.offsetY);
   }
@@ -861,10 +865,18 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     offsetX: number;
     offsetY: number;
     scale: number;
+    flipX: boolean;
   } {
     // The NPC carries no drawing offset — its authored position lives in
     // `actor.x/y` itself — but it does carry an authored scale multiplier.
-    if (actor !== this.player) return { offsetX: 0, offsetY: 0, scale: this.npcScale };
+    if (actor !== this.player) {
+      return {
+        offsetX: 0,
+        offsetY: 0,
+        scale: this.npcScale,
+        flipX: getSceneObjectLayout(this.scene.key, LEVEL4_EDITABLE_IDS.npc)?.flipX === true,
+      };
+    }
     return getPlayerVisualOffset(this.scene.key);
   }
 
@@ -989,6 +1001,14 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
         // instead makes the edit what the runtime renders from — no snap-back,
         // and the dialogue trigger follows because it reads the same value.
         onChange: (transform) => this.applyNpcEdit(transform),
+        flipHorizontal: () => {
+          const saved = getSceneObjectLayout(this.scene.key, LEVEL4_EDITABLE_IDS.npc);
+          setSceneObjectLayout(this.scene.key, LEVEL4_EDITABLE_IDS.npc, {
+            ...saved,
+            flipX: saved?.flipX !== true,
+          });
+          this.syncActor(this.npc, this.time.now);
+        },
       },
       createPlayerEditable(this, {
         sprite: this.player.sprite,

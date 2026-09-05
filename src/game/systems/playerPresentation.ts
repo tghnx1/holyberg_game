@@ -23,6 +23,7 @@ export interface PlayerVisualOffset {
   offsetX: number;
   offsetY: number;
   scale: number;
+  flipX: boolean;
 }
 
 /**
@@ -38,7 +39,12 @@ export interface PlayerVisualOffset {
 export function getPlayerVisualOffset(sceneKey: string): PlayerVisualOffset {
   const layout = getSceneObjectLayout(sceneKey, PLAYER_EDITABLE_ID);
   const offset = designPointFromLayout(layout, { x: 0, y: 0 });
-  return { offsetX: offset.x, offsetY: offset.y, scale: layout?.scale ?? 1 };
+  return {
+    offsetX: offset.x,
+    offsetY: offset.y,
+    scale: layout?.scale ?? 1,
+    flipX: layout?.flipX === true,
+  };
 }
 
 export interface PlayerEditableOptions {
@@ -83,8 +89,17 @@ export function createPlayerEditable(
       const anchor = getAnchor();
       const base = getBaseScale();
       setSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID, {
+        ...getSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID),
         ...layoutRatiosFromDesignPoint({ x: transform.x - anchor.x, y: transform.y - anchor.y }),
         scale: base > 0 ? transform.scaleY / base : 1,
+      });
+      refresh();
+    },
+    flipHorizontal: () => {
+      const current = getSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID);
+      setSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID, {
+        ...current,
+        flipX: current?.flipX !== true,
       });
       refresh();
     },

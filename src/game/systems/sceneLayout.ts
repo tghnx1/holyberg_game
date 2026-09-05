@@ -38,6 +38,8 @@ export interface SceneObjectLayout {
    */
   scaleX?: number;
   scaleY?: number;
+  /** Authored visual mirror for character sprites; never encoded as negative scale. */
+  flipX?: boolean;
   /**
    * A plain absolute number, for an authored value that is not a screen
    * position or a scale multiplier at all — Level 4's `autoWalkSpeed` (a

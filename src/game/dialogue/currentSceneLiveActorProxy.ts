@@ -1,3 +1,4 @@
+import type Phaser from 'phaser';
 import type { EditableObject, EditableTransform } from '../systems/SceneEditor';
 import type { CurrentSceneLiveActor, LiveStageTarget } from './currentSceneLiveStage';
 
@@ -13,6 +14,13 @@ export function buildLiveActorEditable(
     getNativeSize: definition.source.getNativeSize,
     resizable: definition.source.resizable,
     allowNonUniformScale: definition.source.allowNonUniformScale,
+    flipHorizontal: definition.source.flipHorizontal
+      ? () => {
+          definition.source.flipHorizontal?.();
+          const source = definition.source.target as Phaser.GameObjects.Sprite;
+          (target as Phaser.GameObjects.Sprite).setFlipX(source.flipX);
+        }
+      : undefined,
     onChange: (transform: EditableTransform) => {
       const sourceTransform = {
         ...transform,

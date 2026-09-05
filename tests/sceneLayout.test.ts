@@ -18,6 +18,7 @@ describe('shared scene layout', () => {
       offsetX: 0,
       offsetY: 0,
       scale: 1,
+      flipX: false,
     });
   });
 
@@ -34,11 +35,13 @@ describe('shared scene layout', () => {
       xRatio: 0.1,
       yRatio: -0.05,
       scale: 1.25,
+      flipX: false,
     });
     expect(getPlayerVisualOffset('Level4Scene')).toEqual({
       offsetX: 0.1 * DESIGN_SPACE.width,
       offsetY: -0.05 * DESIGN_SPACE.height,
       scale: 1.25,
+      flipX: false,
     });
   });
 
@@ -59,6 +62,13 @@ describe('scene layout validation', () => {
 
   it('accepts a partial entry', () => {
     expect(validateSceneLayout({ S: { o: { scale: 2 } } })).toEqual({ S: { o: { scale: 2 } } });
+  });
+
+  it('persists a boolean character flip without accepting arbitrary values', () => {
+    expect(validateSceneLayout({ S: { actor: { flipX: true } } })).toEqual({
+      S: { actor: { flipX: true } },
+    });
+    expect(() => validateSceneLayout({ S: { actor: { flipX: 'true' } } })).toThrow(/flipX/);
   });
 
   it('rejects malformed or out-of-range values', () => {

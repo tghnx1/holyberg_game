@@ -40,7 +40,7 @@ export class BossPlayer {
   private motion: BossPlayerMotion;
   private readonly sprite: Phaser.GameObjects.Sprite;
   private currentFrameKey?: string;
-  private presentation = { offsetX: 0, offsetY: 0, scale: 1 };
+  private presentation = { offsetX: 0, offsetY: 0, scale: 1, flipX: false };
   /** Cached with the presentation; only those two inputs can change it. */
   private visibleHalfWidth = 0;
   private damageFrameUntilMs = -Infinity;
@@ -178,7 +178,7 @@ export class BossPlayer {
     this.sprite.setScale(scale * this.presentation.scale);
     // Face the way the player is travelling; the run art is drawn facing right.
     if (this.motion.velocityX !== 0) {
-      this.sprite.setFlipX(this.motion.velocityX < 0);
+      this.sprite.setFlipX((this.motion.velocityX < 0) !== this.presentation.flipX);
     }
   }
 
@@ -233,7 +233,7 @@ export class BossPlayer {
   }
 
   /** Applies the authored visual offset/scale; re-read on every update. */
-  setPresentation(presentation: { offsetX: number; offsetY: number; scale: number }): void {
+  setPresentation(presentation: { offsetX: number; offsetY: number; scale: number; flipX: boolean }): void {
     this.presentation = presentation;
     this.visibleHalfWidth = visiblePlayerHalfWidth(this.character, presentation.scale);
   }
