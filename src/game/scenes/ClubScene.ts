@@ -668,9 +668,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
 
     void this.runtimeAssets?.load(frames).then(() => {
       // The player may have walked on, or left Level 2 entirely, while this
-      // was in flight; rebuilding then would populate the wrong room.
+      // was in flight; materializing then would populate the wrong room.
       if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
-      npcs.setRoom(roomId);
+      // Not `setRoom`: by the time this resolves, some placements may already
+      // be live sprites (materialized progressively via `update`, and
+      // possibly edited). `setRoom` would clear and rebuild the whole room
+      // from placement data, discarding any unsaved edit; `refreshPending`
+      // only fills in what's still missing.
+      npcs.refreshPending();
       this.prepareNeighbourNpcs(this.roomIndex + 1);
     });
   }

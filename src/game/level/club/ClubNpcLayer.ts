@@ -85,6 +85,24 @@ export class ClubNpcLayer {
   }
 
   /**
+   * Fills in placements whose art has just finished loading, without
+   * touching sprites that already exist.
+   *
+   * `setRoom` clears and rebuilds the whole crowd, which is correct when the
+   * player (re)enters a room but destructive if called again later: async
+   * asset loads for the *same* room resolve well after the room's sprites
+   * have already materialized progressively (each frame, via `update`) and
+   * potentially been moved/resized/duplicated/deleted in the editor. Calling
+   * `setRoom` again at that point would recreate every instance from its
+   * original placement, silently discarding any unsaved edit. Callers that
+   * only want "pick up whatever just became available" should use this
+   * instead of `setRoom`.
+   */
+  refreshPending(): void {
+    if (this.materializePending()) this.layout();
+  }
+
+  /**
    * Advances every group to the frame its own loop is on at `now`.
    *
    * Cheap enough to run every frame: it is a modulo per group and a

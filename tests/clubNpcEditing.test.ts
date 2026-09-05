@@ -237,4 +237,34 @@ describe('editing the ambient club crowd', () => {
     layer.getEditableObjects().find((object) => object.id === copy?.id)?.remove?.();
     expect(layer.getEditableObjects()).toHaveLength(withCopy - 1);
   });
+
+  it('refreshPending never recreates already-materialized sprites, so an unsaved edit survives it', () => {
+    const { layer, sprites } = buildLayer(ROOM);
+    const target = layer.getEditableObjects()[0];
+    const sprite = target.target as unknown as FakeSprite;
+
+    // Simulate a live, unsaved editor drag directly on the sprite.
+    sprite.setPosition(999, 888);
+
+    // Simulate the async runtime loader resolving late for this same room.
+    layer.refreshPending();
+
+    expect(sprite.destroyed).toBe(false);
+    expect(sprite.x).toBe(999);
+    expect(sprite.y).toBe(888);
+    expect(sprites.filter((s) => !s.destroyed)).toHaveLength(getRoomNpcPlacements(ROOM).length);
+  });
+
+  it('refreshPending still materializes placements that were pending when their art finishes loading', () => {
+    const loaded = new Set<string>();
+    const { layer, sprites } = buildLayer(ROOM, loaded);
+    expect(sprites).toHaveLength(0);
+
+    for (const placement of getRoomNpcPlacements(ROOM)) {
+      loaded.add(getClubNpcGroup(placement.group).frames[0].key);
+    }
+    layer.refreshPending();
+
+    expect(sprites).toHaveLength(getRoomNpcPlacements(ROOM).length);
+  });
 });
