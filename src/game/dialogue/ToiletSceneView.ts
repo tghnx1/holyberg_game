@@ -104,6 +104,7 @@ export class ToiletSceneView {
     width: number,
     height: number,
     cast: ResolvedSceneCast,
+    framingWidth = width,
   ) {
     this.viewport = new DialogueStageViewport(scene, {
       layoutId: TOILET_VIEW_IDS.composition,
@@ -149,7 +150,7 @@ export class ToiletSceneView {
       this.seated.sprite,
       this.arriving.sprite,
     ]);
-    this.resize(width, height);
+    this.resize(width, height, framingWidth);
   }
 
   get root(): Phaser.GameObjects.Container {
@@ -232,8 +233,8 @@ export class ToiletSceneView {
     });
   }
 
-  resize(width: number, height: number): void {
-    this.viewport.resize(width, height);
+  resize(width: number, height: number, framingWidth = width): void {
+    this.viewport.resize(width, height, framingWidth);
   }
 
   /** No entrance here: the NPC is already waiting by the stall. */

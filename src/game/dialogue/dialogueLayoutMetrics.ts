@@ -22,6 +22,8 @@ export interface DialogueLayoutMetrics {
   bottomBar: DialoguePanelRect;
   /** The body strip between the two bars, before the scene/portrait split. */
   scenePanel: DialoguePanelRect;
+  /** Nominal scene width before the diagonal underlap is added. */
+  scenePanelFrameWidth: number;
   portraitPanel: DialoguePanelRect;
   /**
    * Polygon for the diagonal seam, local to the portrait panel's own origin
@@ -54,16 +56,9 @@ export function buildDiagonalStripPoints(
 }
 
 /**
- * Clip polygon for the portrait panel's own content (gradient, glow, noise,
- * the figure itself). The portrait deliberately remains rectangular behind
- * the diagonal divider instead of being cut to the divider's left edge.
- *
- * The scene panel's artwork is framed, not stretched: its mask can extend
- * under the seam, but a canonical image may naturally end before the full
- * skew. Cutting the portrait to the same diagonal then leaves neither panel
- * drawing that wedge, exposing the black scene clear colour. A rectangular
- * underlap guarantees coverage; the opaque divider drawn above both panels
- * remains the visible boundary and preserves the existing framing.
+ * Clip polygon for the portrait panel's own content. The portrait starts at
+ * the right edge of the diagonal, while the scene panel extends beneath it;
+ * the divider drawn above both remains the only visible boundary.
  */
 export function buildPortraitClipPoints(
   panelWidth: number,
@@ -71,9 +66,9 @@ export function buildPortraitClipPoints(
   thickness: number,
   skew: number,
 ): number[] {
-  void skew;
-  const underlapX = -thickness / 2;
-  return [underlapX, 0, panelWidth, 0, panelWidth, panelHeight, underlapX, panelHeight];
+  const topRight = thickness / 2;
+  const bottomRight = topRight + skew;
+  return [topRight, 0, panelWidth, 0, panelWidth, panelHeight, bottomRight, panelHeight];
 }
 
 /**
@@ -101,13 +96,16 @@ export function computeDialogueLayout(width: number, height: number): DialogueLa
   const bodyHeight = Math.max(0, height - topBarHeight - bottomBarHeight);
   const sceneWidth = Math.round(width * DialogueLayout.scenePanelWidthRatio);
   const portraitWidth = Math.max(0, width - sceneWidth);
+  const scenePanelFrameWidth = sceneWidth;
+  const scenePanelWidth = sceneWidth + DialogueLayout.dividerSkew;
 
   return {
     width,
     height,
     topBar: { x: 0, y: 0, width, height: topBarHeight },
     bottomBar: { x: 0, y: height - bottomBarHeight, width, height: bottomBarHeight },
-    scenePanel: { x: 0, y: topBarHeight, width: sceneWidth, height: bodyHeight },
+    scenePanel: { x: 0, y: topBarHeight, width: scenePanelWidth, height: bodyHeight },
+    scenePanelFrameWidth,
     portraitPanel: { x: sceneWidth, y: topBarHeight, width: portraitWidth, height: bodyHeight },
     dividerPoints: buildDiagonalStripPoints(
       DialogueLayout.dividerThickness,

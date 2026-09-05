@@ -109,6 +109,7 @@ export class StationSceneView {
      */
     private readonly cast: ResolvedSceneCast,
     private readonly layout: DialogueStationLayoutConfig = DEFAULT_STATION_LAYOUT,
+    framingWidth = width,
   ) {
     this.viewport = new DialogueStageViewport(scene, {
       layoutId: 'station-scene',
@@ -148,7 +149,7 @@ export class StationSceneView {
     // Content only: the mask, the fit, the seam overlap and the whole-scene
     // editor transform all belong to the viewport.
     this.viewport.add(children);
-    this.resize(width, height);
+    this.resize(width, height, framingWidth);
   }
 
   get root(): Phaser.GameObjects.Container {
@@ -231,8 +232,8 @@ export class StationSceneView {
     return this.arrivingFloorY + footOffset(frame.footGap, this.arriving.scaleY);
   }
 
-  resize(width: number, height: number): void {
-    this.viewport.resize(width, height);
+  resize(width: number, height: number, framingWidth = width): void {
+    this.viewport.resize(width, height, framingWidth);
   }
 
   /**

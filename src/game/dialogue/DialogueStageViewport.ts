@@ -176,8 +176,10 @@ export class DialogueStageViewport {
    * authored transform wins outright and is never re-derived, so a resize
    * cannot re-crop a framing that was set by hand in the editor.
    */
-  resize(width: number, height: number): void {
-    this.panelWidth = width;
+  resize(width: number, height: number, framingWidth = width): void {
+    // `width` includes the scene's seam underlap; authoring and composition
+    // remain based on the nominal frame width so resizing does not shift art.
+    this.panelWidth = framingWidth;
     this.panelHeight = height;
     this.mask
       .clear()

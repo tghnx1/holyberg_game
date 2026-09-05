@@ -63,7 +63,7 @@ export interface DialogueSceneData {
 
 interface DialogueSceneStage {
   root: Phaser.GameObjects.Container;
-  resize(width: number, height: number): void;
+  resize(width: number, height: number, framingWidth?: number): void;
   playArrival(onComplete: () => void): void;
   getEditableObjects(): import('../systems/SceneEditor').EditableObject[];
   buildEditorSave?(snapshot: EditableSnapshot[]):
@@ -338,15 +338,34 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
       if (!this.stageSnapshot) {
         throw new Error(`Dialogue "${this.script.id}" requires a current-scene snapshot.`);
       }
-      sceneStage = new CurrentSceneView(this, width, height, this.stageSnapshot);
+      sceneStage = new CurrentSceneView(
+        this,
+        width,
+        height,
+        this.stageSnapshot,
+        this.layout.scenePanelFrameWidth,
+      );
     } else {
       if (!this.sceneCast) {
         throw new Error(`Dialogue "${this.script.id}" has no resolved scene cast.`);
       }
       sceneStage =
         this.script.sceneId === 'toilet'
-          ? new ToiletSceneView(this, width, height, this.sceneCast)
-          : new StationSceneView(this, width, height, this.sceneCast);
+          ? new ToiletSceneView(
+              this,
+              width,
+              height,
+              this.sceneCast,
+              this.layout.scenePanelFrameWidth,
+            )
+          : new StationSceneView(
+              this,
+              width,
+              height,
+              this.sceneCast,
+              undefined,
+              this.layout.scenePanelFrameWidth,
+            );
     }
     if (sceneStage instanceof StationSceneView) this.stationScene = sceneStage;
     this.sceneStage = sceneStage;
@@ -514,7 +533,11 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
       offY: layout.height,
     });
 
-    this.sceneStage?.resize(layout.scenePanel.width, layout.scenePanel.height);
+    this.sceneStage?.resize(
+      layout.scenePanel.width,
+      layout.scenePanel.height,
+      layout.scenePanelFrameWidth,
+    );
     this.panels.updateGeometry('scene', {
       restX: layout.scenePanel.x,
       restY: layout.scenePanel.y,

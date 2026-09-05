@@ -20,6 +20,7 @@ export class CurrentSceneView {
     width: number,
     height: number,
     private readonly snapshot: CurrentSceneSnapshot,
+    framingWidth = width,
   ) {
     this.viewport = new DialogueStageViewport(scene, {
       layoutId: snapshot.layoutId,
@@ -37,15 +38,15 @@ export class CurrentSceneView {
       this.viewport.add([target]);
       return { definition, target };
     });
-    this.resize(width, height);
+    this.resize(width, height, framingWidth);
   }
 
   get root(): Phaser.GameObjects.Container {
     return this.viewport.root;
   }
 
-  resize(width: number, height: number): void {
-    this.viewport.resize(width, height);
+  resize(width: number, height: number, framingWidth = width): void {
+    this.viewport.resize(width, height, framingWidth);
   }
 
   playArrival(onComplete: () => void): void {

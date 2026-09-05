@@ -17,8 +17,9 @@ const H = DIALOGUE_STAGE_CANONICAL_HEIGHT;
 
 describe('the shared canonical box', () => {
   it('is the scene panel at the aspect the game is designed for', () => {
-    const panel = computeDialogueLayout(DESIGN_WIDTH, DESIGN_HEIGHT).scenePanel;
-    expect(W).toBe(panel.width);
+    const layout = computeDialogueLayout(DESIGN_WIDTH, DESIGN_HEIGHT);
+    const panel = layout.scenePanel;
+    expect(W).toBe(layout.scenePanelFrameWidth);
     expect(H).toBe(panel.height);
   });
 
@@ -36,9 +37,10 @@ describe('the shared canonical box', () => {
  */
 describe('Dialogue 1 framing is unchanged', () => {
   it('is identical to the previous cover fit at the design aspect', () => {
-    const panel = computeDialogueLayout(DESIGN_WIDTH, DESIGN_HEIGHT).scenePanel;
-    const shared = computeStageFit(panel.width, panel.height);
-    const previous = computeCoverFit(W, H, panel.width, panel.height);
+    const layout = computeDialogueLayout(DESIGN_WIDTH, DESIGN_HEIGHT);
+    const panel = layout.scenePanel;
+    const shared = computeStageFit(layout.scenePanelFrameWidth, panel.height);
+    const previous = computeCoverFit(W, H, layout.scenePanelFrameWidth, panel.height);
     expect(shared.scale).toBeCloseTo(previous.scale);
     expect(shared.offsetX).toBeCloseTo(previous.offsetX);
     expect(shared.offsetY).toBeCloseTo(previous.offsetY);

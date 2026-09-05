@@ -22,16 +22,17 @@ describe('dialogue layout metrics', () => {
   it('splits the body into a left scene panel and a right portrait panel with no gap', () => {
     const layout = computeDialogueLayout(1280, 720);
     expect(layout.scenePanel.x).toBe(0);
-    expect(layout.portraitPanel.x).toBe(layout.scenePanel.width);
-    expect(layout.scenePanel.width + layout.portraitPanel.width).toBe(1280);
+    expect(layout.portraitPanel.x).toBe(layout.scenePanelFrameWidth);
+    expect(layout.scenePanel.width).toBeGreaterThan(layout.portraitPanel.x);
+    expect(layout.scenePanel.width + layout.portraitPanel.width).toBeGreaterThan(1280);
     expect(layout.scenePanel.height).toBe(layout.portraitPanel.height);
   });
 
   it('keeps the same panel proportions across a wide desktop and a narrower mobile landscape width', () => {
     const desktop = computeDialogueLayout(1280, 720);
     const mobile = computeDialogueLayout(960, 720);
-    const desktopRatio = desktop.scenePanel.width / desktop.width;
-    const mobileRatio = mobile.scenePanel.width / mobile.width;
+    const desktopRatio = desktop.scenePanelFrameWidth / desktop.width;
+    const mobileRatio = mobile.scenePanelFrameWidth / mobile.width;
     // Sub-pixel rounding of the panel split is expected; the ratio itself is not.
     expect(mobileRatio).toBeCloseTo(desktopRatio, 2);
     // Bar heights don't depend on width.
@@ -68,21 +69,18 @@ describe('dialogue layout metrics', () => {
 });
 
 describe('portrait clip polygon', () => {
-  it('shares the top-left edge with the divider, so no seam gap appears', () => {
+  it('starts at the divider right edge, leaving the scene visible on the left', () => {
     const clip = buildPortraitClipPoints(300, 400, 20, 90);
     const divider = buildDiagonalStripPoints(20, 90, 400);
-    // Clip's top-left x matches the divider band's own left edge at y=0.
-    expect(clip[0]).toBe(divider[0]);
+    expect(clip[0]).toBe(divider[2]);
     expect(clip[1]).toBe(0);
   });
 
-  it('underlaps the diagonal at the bottom so no black wedge can be exposed', () => {
+  it('keeps the scene/portrait overlap beneath the full diagonal at the bottom', () => {
     const clip = buildPortraitClipPoints(300, 400, 20, 90);
     const divider = buildDiagonalStripPoints(20, 90, 400);
-    // The portrait remains behind the complete diagonal while the divider is
-    // the visible boundary; it must start left of the divider's bottom edge.
-    expect(clip[6]).toBe(clip[0]);
-    expect(clip[6]).toBeLessThan(divider[6]);
+    expect(clip[6]).toBe(divider[4]);
+    expect(clip[6]).toBeGreaterThan(divider[6]);
     expect(clip[7]).toBe(400);
   });
 
@@ -90,11 +88,34 @@ describe('portrait clip polygon', () => {
     for (const [width, height] of [[220, 180], [700, 420], [1200, 900]]) {
       const clip = buildPortraitClipPoints(width, height, 26, 96);
       const divider = buildDiagonalStripPoints(26, 96, height);
-      expect(clip[0]).toBe(clip[6]);
-      expect(clip[0]).toBeLessThanOrEqual(divider[0]);
-      expect(clip[6]).toBeLessThan(divider[6]);
+      expect(clip[0]).toBe(divider[2]);
+      expect(clip[6]).toBe(divider[4]);
+      expect(clip[0]).toBeGreaterThanOrEqual(divider[0]);
+      expect(clip[6]).toBeGreaterThan(divider[6]);
       expect(clip[2]).toBe(width);
       expect(clip[4]).toBe(width);
+    }
+  });
+
+  it('has no uncovered seam interval at any tested viewport size', () => {
+    for (const [width, height] of [[800, 480], [960, 720], [1280, 720], [1920, 1080], [2560, 900]]) {
+      const layout = computeDialogueLayout(width, height);
+      const divider = buildDiagonalStripPoints(
+        DialogueLayout.dividerThickness,
+        DialogueLayout.dividerSkew,
+        layout.scenePanel.height,
+      );
+      const sceneRight = layout.scenePanel.x + layout.scenePanel.width;
+      const portraitLeft = layout.portraitPanel.x;
+      // Scene reaches the divider's left edge, portrait starts at its right
+      // edge, and the divider itself fills the interval between them.
+      expect(sceneRight).toBeGreaterThanOrEqual(portraitLeft + divider[6]);
+      expect(buildPortraitClipPoints(
+        layout.portraitPanel.width,
+        layout.scenePanel.height,
+        DialogueLayout.dividerThickness,
+        DialogueLayout.dividerSkew,
+      )[0]).toBe(divider[2]);
     }
   });
 
