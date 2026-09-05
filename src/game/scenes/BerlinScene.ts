@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { gameAudio } from '../audio/GameAudio';
+import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import {
   Depth,
   DESIGN_HEIGHT,
@@ -103,9 +105,12 @@ export class BerlinScene extends Phaser.Scene {
     // Demand-driven and idempotent: whichever gameplay scene runs first pays
     // for the selected character, the rest queue nothing.
     queueCharacterGameplay(this, getSelectedCharacter());
+    queueSceneAudio(this, 'BerlinScene');
   }
 
   create(): void {
+    // Berlin begins only after the opening metro dialogue has finished.
+    gameAudio(this).startSceneMusic('BerlinScene');
     this.progress = { state: 'intro', seconds: START_TIME, score: 0 };
     this.scoreSystem = new BerlinScoreSystem();
     this.sections = new SectionTracker();

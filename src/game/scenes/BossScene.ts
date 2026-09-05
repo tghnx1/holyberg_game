@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { gameAudio } from '../audio/GameAudio';
+import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import { AttackRenderer } from '../boss/AttackRenderer';
 import { BossArena } from '../boss/BossArena';
 import { BossFightDirector, type BossFightEvent } from '../boss/BossFightDirector';
@@ -136,6 +138,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Demand-driven and idempotent, so a direct ?scene=boss works even
     // though Berlin was never entered.
     queueCharacterGameplay(this, getSelectedCharacter());
+    queueSceneAudio(this, 'BossScene');
     EmeraldLayer.queueAssets(this);
     const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
     const background = getLevel4AssetUrls(profile).find(
@@ -150,6 +153,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
   }
 
   create(): void {
+    gameAudio(this).startSceneMusic('BossScene');
     new OrientationController(this);
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor(BossPalette.background);

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import { DialogueDepth, DialogueLayout, DialoguePalette } from '../dialogue/dialogueConstants';
 import { DialoguePanels } from '../dialogue/DialoguePanels';
 import {
@@ -167,6 +168,9 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
   }
 
   preload(): void {
+    // Only dialogue-specific cues are loaded here; the underlying level's
+    // soundtrack remains alive underneath this overlay.
+    queueSceneAudio(this, 'DialogueScene');
     // No fallback selection here on purpose. The campaign always arrives via
     // CharacterSelectScene, and BootScene already selects one for a direct
     // ?scene= route, so reaching this without a player is a routing bug —

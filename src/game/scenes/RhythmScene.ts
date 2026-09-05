@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { gameAudio } from '../audio/GameAudio';
+import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import { DESIGN_WIDTH } from '../constants';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
@@ -148,6 +150,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.audioEnded = false;
   }
   preload(): void {
+    queueSceneAudio(this, 'RhythmScene');
     this.load.json('rhythm-track-metadata', MAIN_RHYTHM_TRACK.metadataUrl);
     this.load.binary('rhythm-track-midi', MAIN_RHYTHM_TRACK.midiUrl);
     this.load.binary('rhythm-track-audio', MAIN_RHYTHM_TRACK.audioUrl);
@@ -157,6 +160,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   create(): void {
+    // Rhythm owns its dedicated Web Audio track; no general soundtrack may overlap it.
+    gameAudio(this).stopMusic();
     attachFullscreenExitControl(this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
     this.cameras.main.setBackgroundColor('#07040d');

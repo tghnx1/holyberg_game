@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { gameAudio } from '../audio/GameAudio';
+import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import {
   Depth,
   DESIGN_HEIGHT,
@@ -394,6 +396,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
   }
 
   preload(): void {
+    queueSceneAudio(this, 'Level4Scene');
     this.playerCharacter = getSelectedCharacter();
     this.npcCharacter = chooseLevel4NpcCharacter(this.playerCharacter);
     queueCharacterGameplay(this, this.playerCharacter);
@@ -405,6 +408,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
   }
 
   create(): void {
+    gameAudio(this).startSceneMusic('Level4Scene');
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#0a0612');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());

@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { gameAudio } from '../audio/GameAudio';
+import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
 import { queueCharacterWalk } from '../characters/characterAssets';
 import { footOffset } from '../characters/characterAnimation';
@@ -165,6 +167,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Demand-driven and idempotent: after Berlin has run, this queues
     // nothing, and a direct ?scene=club still loads what it needs.
     this.character = getSelectedCharacter();
+    queueSceneAudio(this, 'ClubScene');
     queueCharacterWalk(this, this.character);
     const minimum = getClubRoomMinimumAssets(this.roomIndex);
     const room = minimum.room;
@@ -192,6 +195,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   }
 
   create(): void {
+    gameAudio(this).startSceneMusic('ClubScene');
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#07040d');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
