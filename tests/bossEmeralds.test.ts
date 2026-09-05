@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BossFightDirector } from '../src/game/boss/BossFightDirector';
 import {
-  ATTACK_TIMINGS,
   BOSS_ARENA,
   BOSS_EMERALDS,
-  BOSS_PHASES,
   BOSS_PLAYER,
   BOSS_SCORING,
-  MINIMUM_TELEGRAPH_MS,
 } from '../src/game/boss/bossConfig';
 import {
   emeraldSpotId,
@@ -23,11 +19,10 @@ import {
   collectEmeralds,
   emeraldBox,
   playerPickupBox,
-  reachableDistancePx,
-  selectTelegraphEmeralds,
   stableBodyMetrics,
   type CollectibleBox,
 } from '../src/game/boss/emeraldField';
+import { bossEmeraldWindowSceneKey } from '../src/game/boss/bossEmeraldWindows';
 import { visiblePlayerHalfWidth } from '../src/game/boss/bossPlayerMovement';
 import { getCharacter, getPlayableCharacters } from '../src/game/characters/characterRegistry';
 import type { ArenaBounds } from '../src/game/boss/types';
@@ -42,16 +37,9 @@ import { validateSceneLayout } from '../src/game/systems/sceneLayoutSchema';
 
 const arena: ArenaBounds = { minX: 70, maxX: 1210 };
 /** Where the visible player's centre can actually stand, for a typical build. */
-const reachable: ArenaBounds = { minX: 107, maxX: 1173 };
 const PLAYER_HALF_WIDTH = 37;
-const PICKUP_REACH = PLAYER_HALF_WIDTH + BOSS_EMERALDS.halfSizePx;
-
-const telegraphMsFor = (scale: number): number =>
-  Math.max(MINIMUM_TELEGRAPH_MS, Math.round(ATTACK_TIMINGS.aimedLaser.telegraphMs * scale));
-const LONGEST_TELEGRAPH_MS = telegraphMsFor(Math.max(...BOSS_PHASES.map((p) => p.telegraphScale)));
-const SHORTEST_TELEGRAPH_MS = telegraphMsFor(Math.min(...BOSS_PHASES.map((p) => p.telegraphScale)));
-
-const authored = (): EmeraldSpot[] => getAuthoredEmeraldSpots('BossScene');
+const authored = (): EmeraldSpot[] =>
+  getAuthoredEmeraldSpots(bossEmeraldWindowSceneKey('BossScene', 'attack-00'));
 
 const SPOT_Y = BOSS_ARENA.floorY - BOSS_EMERALDS.floorOffsetPx;
 
@@ -70,18 +58,6 @@ const grid = (count: number, first = 120, last = 1160): EmeraldSpot[] =>
     y: SPOT_Y,
     scale: 1,
   }));
-
-const offer = (
-  spots: readonly EmeraldSpot[],
-  playerCenterX: number,
-  telegraphMs = LONGEST_TELEGRAPH_MS,
-): EmeraldSpot[] =>
-  selectTelegraphEmeralds(spots, {
-    reachable,
-    playerCenterX,
-    telegraphMs,
-    pickupReachPx: PICKUP_REACH,
-  });
 
 describe('authored emerald spots', () => {
   it('ships an arena with emeralds in it', () => {
@@ -116,70 +92,6 @@ describe('authored emerald spots', () => {
     for (const other of ['player', 'boss', 'toilet', 'emerald', 'emeralds', 'stall-door']) {
       expect(isEmeraldId(other)).toBe(false);
     }
-  });
-});
-
-describe('what a telegraph offers', () => {
-  it('offers only spots the player could run to and still leave', () => {
-    for (let playerCenterX = 110; playerCenterX <= 1170; playerCenterX += 7) {
-      for (const spot of offer(grid(12), playerCenterX)) {
-        const distance = Math.max(0, Math.abs(spot.x - playerCenterX) - PICKUP_REACH);
-        expect(distance).toBeLessThanOrEqual(reachableDistancePx(LONGEST_TELEGRAPH_MS) + 1e-9);
-        const travelMs = (distance / BOSS_PLAYER.moveSpeed) * 1000;
-        expect(travelMs).toBeLessThan(LONGEST_TELEGRAPH_MS);
-      }
-    }
-  });
-
-  it('never offers one the player is already standing on', () => {
-    for (let playerCenterX = 110; playerCenterX <= 1170; playerCenterX += 7) {
-      for (const spot of offer(grid(12), playerCenterX)) {
-        expect(Math.abs(spot.x - playerCenterX)).toBeGreaterThanOrEqual(
-          BOSS_EMERALDS.minPlayerDistancePx,
-        );
-      }
-    }
-  });
-
-  it('leaves nobody empty-handed: every position gets an offer, on any telegraph', () => {
-    const spots = grid(12);
-    for (const telegraphMs of [LONGEST_TELEGRAPH_MS, SHORTEST_TELEGRAPH_MS]) {
-      for (let playerCenterX = 107; playerCenterX <= 1173; playerCenterX += 3) {
-        expect(offer(spots, playerCenterX, telegraphMs).length).toBeGreaterThan(0);
-      }
-    }
-  });
-
-  it('offers a bigger spread on a generous telegraph than a tight one', () => {
-    const spots = grid(12);
-    const generous = offer(spots, 640, LONGEST_TELEGRAPH_MS).length;
-    const tight = offer(spots, 640, SHORTEST_TELEGRAPH_MS).length;
-    expect(generous).toBeGreaterThan(tight);
-  });
-
-  it('counts a spot beside a wall, which no player centre can stand on', () => {
-    // The whole point of pickupReachPx: the player collects it by running
-    // into the wall, so ruling it unreachable would be wrong.
-    const atWall: EmeraldSpot[] = [{ id: 'emerald-01', x: reachable.minX - 20, y: 578, scale: 1 }];
-    expect(offer(atWall, reachable.minX + BOSS_EMERALDS.minPlayerDistancePx)).toHaveLength(1);
-  });
-
-  it('is the same offer every run: nothing about it is random', () => {
-    const spots = grid(12);
-    expect(offer(spots, 500)).toEqual(offer(spots, 500));
-    expect(offer(spots, 500)).not.toEqual(offer(spots, 900));
-  });
-
-  it('offers nothing rather than cheating when there is no time or no room', () => {
-    expect(offer(grid(12), 640, 0)).toEqual([]);
-    expect(
-      selectTelegraphEmeralds(grid(12), {
-        reachable: { minX: 640, maxX: 640 },
-        playerCenterX: 640,
-        telegraphMs: LONGEST_TELEGRAPH_MS,
-        pickupReachPx: 0,
-      }),
-    ).toEqual([]);
   });
 });
 
@@ -230,47 +142,7 @@ describe('emerald collection', () => {
   });
 });
 
-describe('emerald lifecycle against the fight', () => {
-  const bounds: ArenaBounds = { minX: 70, maxX: 1210 };
-
-  /**
-   * Mirrors what BossScene does with the director's events, so the rule under
-   * test is the real wiring: offer on telegraph, hide on active.
-   */
-  function runFight(): { maxOffered: number; offers: number; liveDuringActive: number[] } {
-    const director = new BossFightDirector(bounds, 1);
-    const spots = grid(12);
-    let offered = 0;
-    let offers = 0;
-    let maxOffered = 0;
-    const liveDuringActive: number[] = [];
-    let guard = 0;
-
-    while (!director.snapshot.finished && guard < 100_000) {
-      for (const event of director.update(16, 640)) {
-        if (event.kind === 'telegraphStarted') {
-          offered = offer(spots, 640, event.attack.timing.telegraphMs).length;
-          offers += 1;
-          maxOffered = Math.max(maxOffered, offered);
-        }
-        if (event.kind === 'attackActivated') offered = 0;
-      }
-      if (director.snapshot.activeAttacks.some((attack) => attack.phase === 'active')) {
-        liveDuringActive.push(offered);
-      }
-      guard += 1;
-    }
-    return { maxOffered, offers, liveDuringActive };
-  }
-
-  it('offers a set for every telegraph and clears it the instant the laser fires', () => {
-    const { maxOffered, offers, liveDuringActive } = runFight();
-    expect(offers).toBeGreaterThan(10);
-    expect(maxOffered).toBeGreaterThan(0);
-    // Nothing survives into an active laser, a recovery, or the next attack.
-    expect(liveDuringActive.every((count) => count === 0)).toBe(true);
-  });
-
+describe('emerald lifecycle scoring', () => {
   it('keeps one named constant as the emerald value', () => {
     expect(BOSS_SCORING.emeraldScore).toBe(100);
   });

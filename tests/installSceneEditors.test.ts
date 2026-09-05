@@ -15,6 +15,7 @@ vi.mock('phaser', () => ({
 const sceneEditorInstances: Array<{
   active: boolean;
   register: ReturnType<typeof vi.fn>;
+  replaceObjects: ReturnType<typeof vi.fn>;
   toggle: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
 }> = [];
@@ -23,6 +24,7 @@ vi.mock('../src/game/systems/SceneEditor', () => ({
     const instance = {
       active: false,
       register: vi.fn(),
+      replaceObjects: vi.fn(),
       toggle: vi.fn(function (this: { active: boolean }) {
         this.active = !this.active;
       }),
@@ -135,6 +137,7 @@ describe('installSceneEditors', () => {
 
     expect(dialogue.input.keyboard.addKey).toHaveBeenCalledWith(69);
     expect(sceneEditorInstances).toHaveLength(1);
+    expect(sceneEditorInstances[0].replaceObjects).toHaveBeenCalledWith([{ id: 'portrait' }]);
     expect(sceneEditorInstances[0].toggle).toHaveBeenCalledTimes(1);
     expect(sceneEditorInstances[0].active).toBe(true);
   });
