@@ -107,6 +107,12 @@ export class ClubNpcLayer {
       const phaseMs = instance.placement.phaseMs ?? 0;
       const frame = frames[loopedFrameIndex(now + phaseMs, frames.length, cycleMs)];
       if (frame.key === instance.currentKey) continue;
+      // Runtime room loads are progressive: the first frame may already be
+      // registered while later frames are still in flight. Never hand Phaser
+      // an unknown key, because that replaces the last valid artwork with its
+      // green missing-texture placeholder. The next update will pick up the
+      // frame automatically once the loader registers it.
+      if (!this.scene.textures.exists(frame.key)) continue;
       instance.sprite.setTexture(frame.key);
       instance.currentKey = frame.key;
     }

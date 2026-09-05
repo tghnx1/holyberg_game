@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ClubNpcLayer } from '../src/game/level/club/ClubNpcLayer';
-import { getRoomNpcPlacements } from '../src/game/level/club/clubNpcPlacement';
+import { getRoomNpcPlacements, NPC_IDLE_CYCLE_MS } from '../src/game/level/club/clubNpcPlacement';
+import { getClubNpcGroup } from '../src/game/level/club/clubNpcAssets';
 
 /**
  * `ClubNpcLayer` imports Phaser as a type only, so it runs here against a
@@ -15,6 +16,7 @@ interface FakeSprite {
   width: number;
   height: number;
   flipX: boolean;
+  textureKey: string;
   destroyed: boolean;
   setOrigin: () => FakeSprite;
   setDepth: () => FakeSprite;
@@ -25,7 +27,7 @@ interface FakeSprite {
   destroy: () => void;
 }
 
-function createScene() {
+function createScene(loadedKeys?: Set<string>) {
   const sprites: FakeSprite[] = [];
   const scene = {
     add: {
@@ -38,6 +40,7 @@ function createScene() {
           width: 100,
           height: 200,
           flipX: false,
+          textureKey: key,
           destroyed: false,
           setOrigin: () => sprite,
           setDepth: () => sprite,
@@ -55,7 +58,10 @@ function createScene() {
             sprite.y = py;
             return sprite;
           },
-          setTexture: () => sprite,
+          setTexture(nextKey) {
+            sprite.textureKey = nextKey;
+            return sprite;
+          },
           destroy() {
             sprite.destroyed = true;
           },
@@ -65,14 +71,14 @@ function createScene() {
         return sprite;
       },
     },
-    textures: { exists: () => true },
+    textures: { exists: (key: string) => loadedKeys?.has(key) ?? true },
     cameras: { main: { width: 1280, height: 720 } },
   };
   return { scene, sprites };
 }
 
-function buildLayer(roomId: string) {
-  const { scene, sprites } = createScene();
+function buildLayer(roomId: string, loadedKeys?: Set<string>) {
+  const { scene, sprites } = createScene(loadedKeys);
   const layer = new ClubNpcLayer(scene as never, 10, 0.9);
   layer.setRoom(roomId);
   return { layer, sprites };
@@ -81,6 +87,30 @@ function buildLayer(roomId: string) {
 const ROOM = 'lounge';
 
 describe('editing the ambient club crowd', () => {
+  it('keeps the last valid frame until a progressive-load frame is registered', () => {
+    const firstFrames = new Set(
+      getRoomNpcPlacements(ROOM).map((placement) => getClubNpcGroup(placement.group).frames[0].key),
+    );
+    const { layer, sprites } = buildLayer(ROOM, firstFrames);
+    const firstPlacement = getRoomNpcPlacements(ROOM)[0];
+    const firstGroup = getClubNpcGroup(firstPlacement.group);
+    const frameTime = (
+      NPC_IDLE_CYCLE_MS / firstGroup.frames.length * 1.5
+      - (firstPlacement.phaseMs ?? 0)
+      + NPC_IDLE_CYCLE_MS
+    ) % NPC_IDLE_CYCLE_MS;
+    const nextFrame = firstGroup.frames[1].key;
+    const sprite = sprites[0];
+
+    expect(sprite.textureKey).toBe(firstGroup.frames[0].key);
+    layer.update(frameTime);
+    expect(sprite.textureKey).toBe(firstGroup.frames[0].key);
+
+    firstFrames.add(nextFrame);
+    layer.update(frameTime);
+    expect(sprite.textureKey).toBe(nextFrame);
+  });
+
   it('builds one editable object per authored placement', () => {
     const { layer } = buildLayer(ROOM);
     expect(layer.getEditableObjects()).toHaveLength(getRoomNpcPlacements(ROOM).length);
