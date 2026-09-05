@@ -147,6 +147,21 @@ export class ClubNpcLayer {
     return this.instances.map((instance) => this.toEditableObject(instance));
   }
 
+  /** Live sprite/editor metadata consumed by the shared current-scene dialogue adapter. */
+  getDialogueActorSpecs(): {
+    editable: EditableObject;
+    frameKeys: string[];
+    cycleMs: number;
+    phaseMs: number;
+  }[] {
+    return this.instances.map((instance) => ({
+      editable: this.toEditableObject(instance),
+      frameKeys: instance.art.frames.map((frame) => frame.key),
+      cycleMs: instance.placement.cycleMs ?? NPC_IDLE_CYCLE_MS,
+      phaseMs: instance.placement.phaseMs ?? 0,
+    }));
+  }
+
   /**
    * A crowd group is one of the things duplicating genuinely makes sense for:
    * a room is populated by placing the same handful of groups repeatedly, so

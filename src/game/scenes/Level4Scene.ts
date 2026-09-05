@@ -27,6 +27,11 @@ import {
 } from '../level/level4/level4Flow';
 import { launchCurrentSceneDialogue } from '../dialogue/currentSceneSnapshot';
 import {
+  liveSpriteActor,
+  type CurrentSceneDialogueSource,
+  type CurrentSceneLiveStage,
+} from '../dialogue/currentSceneLiveStage';
+import {
   getLevel4AssetUrls,
   LEVEL4_ASSET_KEYS,
   TOILET_STRIP_NATIVE_HEIGHT,
@@ -266,7 +271,7 @@ export interface Level4SceneData {
   devDialogue?: boolean;
 }
 
-export class Level4Scene extends Phaser.Scene implements EditableScene {
+export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentSceneDialogueSource {
   private rhythmResult: RhythmResult = createEmptyRhythmResult();
   private introComplete = false;
   private playerX = PLAYER_START_X;
@@ -1080,6 +1085,17 @@ export class Level4Scene extends Phaser.Scene implements EditableScene {
     return {
       route: '/__scene-editor/save-layout',
       body: buildSceneLayoutPayload(this.scene.key),
+    };
+  }
+
+  buildCurrentSceneDialogueStage(): CurrentSceneLiveStage {
+    const editable = this.getEditableObjects();
+    const actorIds = new Set([LEVEL4_EDITABLE_IDS.npc, 'player']);
+    return {
+      actors: editable
+        .filter((object) => actorIds.has(object.id))
+        .map((object) => liveSpriteActor(this, object)),
+      buildEditorSave: () => this.buildEditorSave(),
     };
   }
 

@@ -68,6 +68,40 @@ export class BossRenderer {
     return this.root;
   }
 
+  /** Real, independently-owned boss sprites for the shared dialogue stage. */
+  createDialogueClone(scene: Phaser.Scene): Phaser.GameObjects.Container {
+    const baby = scene.add
+      .sprite(this.baby.x, this.baby.y, this.baby.texture.key, this.baby.frame.name)
+      .setOrigin(this.baby.originX, this.baby.originY)
+      .setScale(this.baby.scaleX, this.baby.scaleY);
+    const sphere = scene.add
+      .sprite(
+        this.energySphere.x,
+        this.energySphere.y,
+        this.energySphere.texture.key,
+        this.energySphere.frame.name,
+      )
+      .setOrigin(this.energySphere.originX, this.energySphere.originY)
+      .setScale(this.energySphere.scaleX, this.energySphere.scaleY)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setVisible(this.energySphere.visible);
+    return scene.add
+      .container(this.root.x, this.root.y, [baby, sphere])
+      .setScale(this.root.scaleX, this.root.scaleY)
+      .setRotation(this.root.rotation)
+      .setAlpha(this.root.alpha);
+  }
+
+  /** Advances only child textures; the dialogue editor remains authority for the clone transform. */
+  updateDialogueClone(target: Phaser.GameObjects.Container, nowMs: number): void {
+    const baby = target.list[0] as Phaser.GameObjects.Sprite | undefined;
+    if (!baby) return;
+    const frame = getBossBabyFrames(this.facing)[
+      loopedBossFrameIndex(nowMs, BOSS_VISUAL.animationCycleMs)
+    ];
+    if (baby.texture.key !== frame.key) baby.setTexture(frame.key);
+  }
+
   get spawnComplete(): boolean {
     return this.entranceState === 'active';
   }

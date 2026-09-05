@@ -43,6 +43,11 @@ import {
   releaseCurrentSceneSnapshot,
   type CurrentSceneSnapshot,
 } from '../dialogue/currentSceneSnapshot';
+import {
+  liveSpriteActor,
+  type CurrentSceneDialogueSource,
+  type CurrentSceneLiveStage,
+} from '../dialogue/currentSceneLiveStage';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { prefetchVideo, releasePrefetchedVideo } from '../systems/videoPrefetch';
 import {
@@ -55,6 +60,7 @@ import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
+import { transformOf } from '../systems/editor/transformItem';
 
 export interface ClubSceneData {
   /** Running total carried in from Berlin; Level 2 does not change it. */
@@ -108,7 +114,7 @@ const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
  * never-played element (see `prefetchNeighbour`), which fills the HTTP cache
  * without giving the browser a second video to decode.
  */
-export class ClubScene extends Phaser.Scene implements EditableScene {
+export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSceneDialogueSource {
   private score = 0;
   private roomIndex = 0;
   private video?: Phaser.GameObjects.Video;
@@ -359,6 +365,32 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
       });
     }
     return payloads;
+  }
+
+  buildCurrentSceneDialogueStage(): CurrentSceneLiveStage {
+    const player = this.getEditableObjects().find((object) => object.id === 'player');
+    const story = this.storyActor
+      ? this.storyActorEditable(this.storyActor)
+      : undefined;
+    const actors = [
+      ...this.npcs?.getDialogueActorSpecs().map((spec) =>
+        liveSpriteActor(this, spec.editable, {
+          frameKeys: spec.frameKeys.filter((key) => this.textures.exists(key)),
+          cycleMs: spec.cycleMs,
+          phaseMs: spec.phaseMs,
+        }),
+      ) ?? [],
+      ...(story ? [liveSpriteActor(this, story)] : []),
+      ...(player ? [liveSpriteActor(this, player)] : []),
+    ];
+    return {
+      actors,
+      buildEditorSave: () =>
+        this.buildEditorSave(this.getEditableObjects().map((object) => ({
+          id: object.id,
+          ...transformOf(object),
+        }))),
+    };
   }
 
   private checkEdges(direction: -1 | 1): void {

@@ -66,6 +66,10 @@ interface DialogueSceneStage {
   resize(width: number, height: number): void;
   playArrival(onComplete: () => void): void;
   getEditableObjects(): import('../systems/SceneEditor').EditableObject[];
+  buildEditorSave?(snapshot: EditableSnapshot[]):
+    | EditorSavePayload
+    | readonly EditorSavePayload[]
+    | undefined;
   update?(now: number): void;
   destroy(): void;
 }
@@ -302,6 +306,8 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
         body: this.stationScene.buildLayoutFromSnapshot(snapshot),
       });
     }
+    const stageSave = this.sceneStage?.buildEditorSave?.(snapshot);
+    if (stageSave) payloads.push(...(Array.isArray(stageSave) ? stageSave : [stageSave as EditorSavePayload]));
     // Every dialogue stage's whole-scene framing — and the toilet's actors —
     // live in the shared scene-layout store, written as the editor moves
     // things, so this only has to hand over this scene's slice. Sent for any

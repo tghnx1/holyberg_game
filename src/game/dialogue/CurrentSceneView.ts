@@ -1,6 +1,9 @@
 import type Phaser from 'phaser';
 import type { EditableObject } from '../systems/SceneEditor';
+import type { EditorSavePayload } from '../systems/editableSceneContract';
 import { DialogueStageViewport } from './DialogueStageViewport';
+import type { CurrentSceneLiveActor, LiveStageTarget } from './currentSceneLiveStage';
+import { buildLiveActorEditable } from './currentSceneLiveActorProxy';
 import {
   releaseCurrentSceneSnapshot,
   type CurrentSceneSnapshot,
@@ -10,6 +13,7 @@ import {
 export class CurrentSceneView {
   private readonly viewport: DialogueStageViewport;
   private readonly image: Phaser.GameObjects.Image;
+  private readonly actors: { definition: CurrentSceneLiveActor; target: LiveStageTarget }[];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -28,6 +32,11 @@ export class CurrentSceneView {
       .setOrigin(0, 0)
       .setDisplaySize(snapshot.width, snapshot.height);
     this.viewport.add([this.image]);
+    this.actors = (snapshot.liveStage?.actors ?? []).map((definition) => {
+      const target = definition.create(scene);
+      this.viewport.add([target]);
+      return { definition, target };
+    });
     this.resize(width, height);
   }
 
@@ -44,7 +53,21 @@ export class CurrentSceneView {
   }
 
   getEditableObjects(): EditableObject[] {
-    return [this.viewport.getEditableObject()];
+    return [
+      this.viewport.getEditableObject(),
+      ...this.actors.map(({ definition, target }) => buildLiveActorEditable(definition, target)),
+    ];
+  }
+
+  update(now: number): void {
+    for (const actor of this.actors) actor.definition.update?.(actor.target, now);
+  }
+
+  buildEditorSave():
+    | EditorSavePayload
+    | readonly EditorSavePayload[]
+    | undefined {
+    return this.snapshot.liveStage?.buildEditorSave?.();
   }
 
   destroy(): void {

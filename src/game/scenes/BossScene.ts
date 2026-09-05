@@ -19,11 +19,17 @@ import { OrientationController } from '../responsive/OrientationController';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 import { getLevel4AssetUrls, LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
 import type { RhythmResult } from '../rhythm/types';
-import type { EditorSavePayload } from '../systems/editableSceneContract';
+import type { EditableScene, EditorSavePayload } from '../systems/editableSceneContract';
 import { designPointFromLayout, layoutRatiosFromDesignPoint } from '../systems/designSpace';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
 import type { EditableObject } from '../systems/SceneEditor';
 import { launchCurrentSceneDialogue } from '../dialogue/currentSceneSnapshot';
+import {
+  liveSpriteActor,
+  type CurrentSceneDialogueSource,
+  type CurrentSceneLiveActor,
+  type CurrentSceneLiveStage,
+} from '../dialogue/currentSceneLiveStage';
 import {
   BOSS_ENDING_DIALOGUE_RESUMED_EVENT,
   BOSS_ENDING_TIMING,
@@ -63,7 +69,7 @@ type BossEndingPhase = 'charging' | 'projectile' | 'settled' | 'dialogue';
  * collision, scoring, fight structure) lives in `src/game/boss/` so it can be
  * tuned and tested without a running scene.
  */
-export class BossScene extends Phaser.Scene {
+export class BossScene extends Phaser.Scene implements EditableScene, CurrentSceneDialogueSource {
   private rhythmResult!: RhythmResult;
   private seed = 1;
   private director!: BossFightDirector;
@@ -248,6 +254,31 @@ export class BossScene extends Phaser.Scene {
     return {
       route: '/__scene-editor/save-layout',
       body: buildSceneLayoutPayload(this.scene.key),
+    };
+  }
+
+  buildCurrentSceneDialogueStage(): CurrentSceneLiveStage {
+    const editable = this.getEditableObjects();
+    const boss = editable.find((object) => object.id === BOSS_EDITABLE_ID)!;
+    const player = editable.find((object) => object.id === 'player')!;
+    const camera = this.cameras.main;
+    const bossActor: CurrentSceneLiveActor = {
+      id: boss.id,
+      label: boss.label ?? 'BOSS',
+      source: boss,
+      sourceScrollX: camera.scrollX,
+      sourceScrollY: camera.scrollY,
+      create: (scene) => {
+        const clone = this.boss.createDialogueClone(scene);
+        clone.setPosition(clone.x - camera.scrollX, clone.y - camera.scrollY);
+        return clone;
+      },
+      update: (target, now) =>
+        this.boss.updateDialogueClone(target as Phaser.GameObjects.Container, now),
+    };
+    return {
+      actors: [bossActor, liveSpriteActor(this, player)],
+      buildEditorSave: () => this.buildEditorSave(),
     };
   }
 

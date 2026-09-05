@@ -1,5 +1,10 @@
 import type Phaser from 'phaser';
 import type { DialogueScript } from './types';
+import {
+  isCurrentSceneDialogueSource,
+  hideLiveStageSources,
+  type CurrentSceneLiveStage,
+} from './currentSceneLiveStage';
 
 /** One frozen frame handed from gameplay into the shared dialogue stage. */
 export interface CurrentSceneSnapshot {
@@ -8,6 +13,8 @@ export interface CurrentSceneSnapshot {
   height: number;
   /** Distinct editor id, so each conversation keeps its own authored framing. */
   layoutId: string;
+  /** Optional real actors layered over the background-only snapshot. */
+  liveStage?: CurrentSceneLiveStage;
 }
 
 let snapshotSerial = 0;
@@ -22,10 +29,13 @@ let snapshotSerial = 0;
 export function captureCurrentSceneSnapshot(
   scene: Phaser.Scene,
   layoutId: string,
+  liveStage?: CurrentSceneLiveStage,
 ): Promise<CurrentSceneSnapshot> {
   const textureKey = `dialogue-current-scene-${scene.scene.key}-${snapshotSerial += 1}`;
+  const restoreLiveSources = liveStage ? hideLiveStageSources(liveStage) : undefined;
   return new Promise((resolve, reject) => {
     scene.game.renderer.snapshot((result) => {
+      restoreLiveSources?.();
       if (!(result instanceof HTMLImageElement)) {
         reject(new Error(`Could not capture ${scene.scene.key}: renderer returned a pixel sample.`));
         return;
@@ -41,6 +51,7 @@ export function captureCurrentSceneSnapshot(
         width: scene.cameras.main.width,
         height: scene.cameras.main.height,
         layoutId,
+        liveStage,
       });
     }, 'image/png');
   });
@@ -65,9 +76,13 @@ export async function launchCurrentSceneDialogue(
   scene: Phaser.Scene,
   request: CurrentSceneDialogueRequest,
 ): Promise<void> {
+  const liveStage = isCurrentSceneDialogueSource(scene)
+    ? scene.buildCurrentSceneDialogueStage()
+    : undefined;
   const snapshot = await captureCurrentSceneSnapshot(
     scene,
     `current-scene-${request.script.id}`,
+    liveStage,
   );
   const sourceSceneKey = scene.scene.key;
   const dialogueScene = scene.scene.get('DialogueScene');
