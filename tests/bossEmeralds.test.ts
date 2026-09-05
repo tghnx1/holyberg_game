@@ -74,10 +74,14 @@ describe('authored emerald spots', () => {
     expect([...xs].sort((a, b) => a - b)).toEqual(xs);
   });
 
-  it('places every shipped spot inside the arena, at leg height', () => {
+  it('places every shipped spot at leg height, within a sensible spread of the group', () => {
+    // Authored x is relative to the player anchor captured at the telegraph's
+    // start (EmeraldLayer translates the whole group there at runtime), so it
+    // is no longer an absolute arena position — bound it against the arena's
+    // own width instead of its absolute edges.
+    const arenaWidth = arena.maxX - arena.minX;
     for (const spot of authored()) {
-      expect(spot.x).toBeGreaterThanOrEqual(arena.minX);
-      expect(spot.x).toBeLessThanOrEqual(arena.maxX);
+      expect(Math.abs(spot.x)).toBeLessThanOrEqual(arenaWidth / 2);
       // Above the floor but well below the player's head: no jump exists here.
       expect(spot.y).toBeLessThan(BOSS_ARENA.floorY);
       expect(BOSS_ARENA.floorY - spot.y).toBeLessThan(140);

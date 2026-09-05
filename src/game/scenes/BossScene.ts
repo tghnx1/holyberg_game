@@ -86,6 +86,8 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
   private emeralds!: EmeraldLayer;
   /** Editor-only outline of the pickup box; never created outside the editor. */
   private pickupOutline?: Phaser.GameObjects.Graphics;
+  /** Editor-only "EMERALDS: attack-XX" readout of the currently editable window. */
+  private emeraldWindowLabel?: Phaser.GameObjects.Text;
   private bounds!: ArenaBounds;
   /** Canonical boss anchor before editor-authored presentation offsets. */
   private bossX = 0;
@@ -172,6 +174,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.controls = new BossInput(this, this.game.device.input.touch);
     this.hud = new BossHud(this);
     this.emeralds = new EmeraldLayer(this, this.scene.key);
+    this.emeralds.setBounds(this.bounds);
     this.events.on(BOSS_ENDING_DIALOGUE_RESUMED_EVENT, this.showEndingChoices, this);
 
     this.applyAuthoredPresentation();
@@ -310,6 +313,15 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Created here rather than in `create`, so it exists only while editing —
     // and the editor itself is dev-only, so it cannot reach a shipped build.
     this.pickupOutline ??= this.add.graphics().setDepth(BossDepth.UI);
+    // Which telegraph window `P save` will actually write is not otherwise
+    // visible: the editor shows every spot at once regardless of window, so
+    // without this a save can look like it landed somewhere it didn't.
+    const windowId = this.emeralds.activeWindowId;
+    this.emeraldWindowLabel ??= this.add
+      .text(16, 16, '', { fontFamily: 'monospace', fontSize: '14px', color: '#56ffff' })
+      .setDepth(BossDepth.UI)
+      .setScrollFactor(0);
+    this.emeraldWindowLabel.setText(windowId ? `EMERALDS: ${windowId}` : 'EMERALDS: (none active)');
   }
 
   onEditorDisable(): void {
@@ -317,6 +329,8 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.emeralds.setAuthoringVisible(false);
     this.pickupOutline?.destroy();
     this.pickupOutline = undefined;
+    this.emeraldWindowLabel?.destroy();
+    this.emeraldWindowLabel = undefined;
   }
 
   /** Outlines what an emerald is actually collected with, to scale. */
@@ -428,13 +442,16 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       case 'telegraphStarted':
         gameAudio(this).playSfx(bossSfxId(event.kind));
         // The windup is the only time emeralds are collectable, so they are
-        // offered by the event that starts it rather than on a timer.
-        this.emeralds.showWindow(bossTelegraphWindowId(event.attack));
+        // offered by the event that starts it rather than on a timer. The
+        // group is anchored to the player's position right now, not to a
+        // fixed world point.
+        this.emeralds.showWindow(bossTelegraphWindowId(event.attack), this.player.damageHitbox.centerX);
         break;
       case 'attackActivated':
         gameAudio(this).playSfx(bossSfxId(event.kind));
-        // The laser is live: anything not already picked up is lost, now.
-        this.emeralds.hideAll();
+        // The laser is live, but anything not already picked up stays
+        // visible/collectable a beat longer before it's actually gone.
+        this.emeralds.scheduleHide();
         this.boss.pulse();
         break;
       case 'playerHit':

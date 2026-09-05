@@ -16,10 +16,14 @@ import {
   type EmeraldSpot,
 } from './bossEmeraldSpots';
 import { bossEmeraldWindowSceneKey } from './bossEmeraldWindows';
+import type { ArenaBounds } from './types';
 import {
   collectEmeralds,
   type CollectibleBox,
 } from './emeraldField';
+
+/** Remaining, uncollected emeralds stay visible this long after the laser goes live. */
+export const EMERALD_HIDE_DELAY_MS = 1000;
 
 interface LiveEmerald {
   spot: EmeraldSpot;
@@ -51,6 +55,11 @@ export class EmeraldLayer {
   private authoring = false;
   private windowId?: string;
   private windowSceneKey?: string;
+  /** Uniform world-space shift applied to every authored (player-relative) x this window. */
+  private translateDeltaX = 0;
+  private bounds: ArenaBounds = { minX: -Infinity, maxX: Infinity };
+  /** Pending "hide whatever's left" call from the last `attackActivated`. */
+  private hideTimer?: Phaser.Time.TimerEvent;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -75,14 +84,49 @@ export class EmeraldLayer {
     return this.windowId;
   }
 
-  /** Rebuilds exactly the layout authored for this one telegraph occurrence. */
-  showWindow(windowId: string): void {
+  /** Arena walls the current translated group is kept inside of. */
+  setBounds(bounds: ArenaBounds): void {
+    this.bounds = bounds;
+  }
+
+  /**
+   * Rebuilds exactly the layout authored for this one telegraph occurrence,
+   * translated as one composition so it lands near `playerX` — the player's
+   * position at the instant this telegraph starts.
+   *
+   * Authored spot x is stored relative to that anchor, not as an absolute
+   * world point, so the same authored spacing reads close to the player
+   * wherever they were standing. A stale hide from the previous attack must
+   * never fire against this new window's emeralds, so any pending timer is
+   * cancelled here too.
+   */
+  showWindow(windowId: string, playerX: number): void {
+    this.cancelScheduledHide();
     this.clearSprites();
     this.windowId = windowId;
     this.windowSceneKey = bossEmeraldWindowSceneKey(this.sceneKey, windowId);
-    for (const spot of getAuthoredEmeraldSpots(this.windowSceneKey)) this.add(spot);
+    const spots = getAuthoredEmeraldSpots(this.windowSceneKey);
+    this.translateDeltaX = this.computeTranslateDeltaX(playerX, spots);
+    for (const spot of spots) this.add(spot);
     this.offered = this.emeralds.map((emerald) => emerald.spot);
     this.syncVisibility();
+  }
+
+  /**
+   * `playerX` plus a uniform shift only large enough to keep every spot in
+   * the group inside the arena — the group moves together, so one emerald
+   * hanging past a wall shifts all of them, it never restretches the
+   * authored spacing.
+   */
+  private computeTranslateDeltaX(playerX: number, spots: readonly EmeraldSpot[]): number {
+    if (spots.length === 0) return playerX;
+    const rawXs = spots.map((spot) => playerX + spot.x);
+    const minRaw = Math.min(...rawXs);
+    const maxRaw = Math.max(...rawXs);
+    let shift = 0;
+    if (minRaw < this.bounds.minX) shift = this.bounds.minX - minRaw;
+    else if (maxRaw > this.bounds.maxX) shift = this.bounds.maxX - maxRaw;
+    return playerX + shift;
   }
 
   /**
@@ -100,9 +144,29 @@ export class EmeraldLayer {
 
   /** The laser is live: whatever was not collected is gone, now. */
   hideAll(): void {
+    this.cancelScheduledHide();
     this.offered = [];
     this.stopPops();
     this.syncVisibility();
+  }
+
+  /**
+   * The laser just went live: remaining, uncollected emeralds stay visible
+   * and collectable for one more beat before `hideAll` actually runs. Any
+   * telegraph, fight end or teardown that happens before then must cancel
+   * this — `showWindow`, `hideAll` and `destroy` all do.
+   */
+  scheduleHide(delayMs: number = EMERALD_HIDE_DELAY_MS): void {
+    this.cancelScheduledHide();
+    this.hideTimer = this.scene.time.delayedCall(delayMs, () => {
+      this.hideTimer = undefined;
+      this.hideAll();
+    });
+  }
+
+  private cancelScheduledHide(): void {
+    this.hideTimer?.remove(false);
+    this.hideTimer = undefined;
   }
 
   /**
@@ -150,7 +214,10 @@ export class EmeraldLayer {
       onChange: (transform) => {
         emerald.spot = {
           ...emerald.spot,
-          x: transform.x,
+          // Stored authored x is relative to this window's player anchor, so
+          // the editor's absolute drag position has to be un-translated
+          // before it is written back.
+          x: transform.x - this.translateDeltaX,
           y: transform.y,
           scale: this.scaleFromDisplay(emerald.sprite, transform.scaleY),
         };
@@ -195,7 +262,7 @@ export class EmeraldLayer {
 
   private add(spot: EmeraldSpot): LiveEmerald {
     const sprite = this.scene.add
-      .sprite(spot.x, spot.y, EMERALD_ANIMATION.frameKeys[0])
+      .sprite(spot.x + this.translateDeltaX, spot.y, EMERALD_ANIMATION.frameKeys[0])
       .setDepth(BossDepth.COLLECTIBLE)
       // Paste happens after authoring was enabled, so a new sprite must
       // inherit that live visibility immediately.
@@ -273,6 +340,7 @@ export class EmeraldLayer {
   }
 
   destroy(): void {
+    this.cancelScheduledHide();
     this.clearSprites();
     this.windowId = undefined;
     this.windowSceneKey = undefined;
