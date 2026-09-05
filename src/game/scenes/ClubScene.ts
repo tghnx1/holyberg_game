@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
-import { queueCharacterAssets, queueCharacterWalk } from '../characters/characterAssets';
+import { queueCharacterWalk } from '../characters/characterAssets';
 import { footOffset } from '../characters/characterAnimation';
 import {
   resolveLocomotionFrame,
@@ -32,6 +32,7 @@ import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
 import { ClubRuntimeAssetLoader } from '../level/club/ClubRuntimeAssetLoader';
 import { getClubRoomMinimumAssets } from '../level/club/clubRoomAssets';
+import { getClubStoryActorIdleAssets } from '../level/club/clubStoryActorAssets';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
@@ -167,9 +168,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     queueCharacterWalk(this, this.character);
     const minimum = getClubRoomMinimumAssets(this.roomIndex);
     const room = minimum.room;
-    const storySlot = clubStorySlotForRoom(room.id);
-    if (storySlot) {
-      queueCharacterAssets(this, characterForClubStorySlot(this.storyCast, storySlot), ['idle']);
+    for (const asset of getClubStoryActorIdleAssets(room.id, this.storyCast)) {
+      if (!this.textures.exists(asset.key)) this.load.image(asset.key, asset.url);
     }
     for (const image of minimum.images) {
       if (!this.textures.exists(image.key)) this.load.image(image.key, image.url);
@@ -380,7 +380,9 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
           phaseMs: spec.phaseMs,
         }),
       ) ?? [],
-      ...(story ? [liveSpriteActor(this, story)] : []),
+      ...(story && this.storyActor
+        ? [liveSpriteActor(this, story, this.storyActorLiveOptions(this.storyActor))]
+        : []),
       ...(player ? [liveSpriteActor(this, player)] : []),
     ];
     return {
@@ -471,18 +473,35 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.applyWalkFrame(false);
 
     this.loadRoomNpcs(room.id);
-    this.buildStoryActor(room.id);
+    this.materializeStoryActor(room.id);
     this.prefetchNeighbour(roomIndex + 1);
   }
 
-  private buildStoryActor(roomId: string): void {
+  /**
+   * Shows a room's story actor only after Phaser has registered its idle
+   * texture. HTTP prefetch can make this immediate, but direct cold loads use
+   * the same runtime queue and never manufacture Phaser's missing texture.
+   */
+  private materializeStoryActor(roomId: string): void {
+    const slot = clubStorySlotForRoom(roomId);
+    if (this.storyActor?.slot === slot) return;
     this.storyActor?.mask?.destroy();
     this.storyActor?.sprite.destroy();
     this.storyActor = undefined;
-    const slot = clubStorySlotForRoom(roomId);
     if (!slot) return;
     const character = characterForClubStorySlot(this.storyCast, slot);
     const frame = resolveLocomotionFrame(character, 'idle', this.time.now);
+    if (!this.textures.exists(frame.key)) {
+      const assets = getClubStoryActorIdleAssets(roomId, this.storyCast);
+      void this.runtimeAssets?.load(assets).then(() => {
+        // A late room load may complete after the player leaves the room or
+        // Level 2. It must not resurrect an old actor in the new scene.
+        if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
+        if (!assets.every((asset) => this.textures.exists(asset.key))) return;
+        this.materializeStoryActor(roomId);
+      });
+      return;
+    }
     const sprite = this.add
       .sprite(0, 0, frame.key)
       .setOrigin(0.5, 1)
@@ -503,6 +522,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const placement = CLUB_STORY_PLACEMENTS[actor.slot];
     const saved = getSceneObjectLayout(this.scene.key, placement.layoutId);
     const frame = resolveLocomotionFrame(actor.character, 'idle', this.time.now);
+    if (!this.textures.exists(frame.key)) return;
     const baseScale = resolveGameplayScale(actor.character, 'idle');
     const authoredScale = saved?.scale ?? placement.scale;
     const scale = baseScale * authoredScale;
@@ -521,6 +541,26 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     if (!mask) return;
     const waistY = actor.sprite.y - visibleBodyHeight * 0.44;
     mask.clear().fillStyle(0xffffff).fillRect(0, 0, this.cameras.main.width, waistY);
+  }
+
+  /** Carries the corridor bar crop into the live current-scene dialogue clone. */
+  private storyActorLiveOptions(actor: ClubStoryActor): Parameters<typeof liveSpriteActor>[2] {
+    if (!CLUB_STORY_PLACEMENTS[actor.slot].waistCrop) return {};
+    const frame = resolveLocomotionFrame(actor.character, 'idle', this.time.now);
+    const source = actor.sprite.frame;
+    return {
+      crop: {
+        x: 0,
+        y: 0,
+        width: source.realWidth,
+        // Match layoutStoryMask: only the portion above the counter is live.
+        height: Phaser.Math.Clamp(
+          source.realHeight - frame.bodyHeight * 0.44,
+          0,
+          source.realHeight,
+        ),
+      },
+    };
   }
 
   private storyActorEditable(actor: ClubStoryActor): EditableObject {
@@ -554,7 +594,13 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   }
 
   private startStoryDialogue(slot: ClubStorySlot): void {
-    if (this.activeStorySlot || this.completedStorySlots.has(slot) || this.finished) return;
+    if (
+      !this.storyActor
+      || this.storyActor.slot !== slot
+      || this.activeStorySlot
+      || this.completedStorySlots.has(slot)
+      || this.finished
+    ) return;
     this.activeStorySlot = slot;
     this.transitioning = true;
     this.applyWalkFrame(false);

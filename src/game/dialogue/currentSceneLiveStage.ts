@@ -35,6 +35,8 @@ export interface LiveSpriteOptions {
   frameKeys?: readonly string[];
   cycleMs?: number;
   phaseMs?: number;
+  /** Optional source-pixel crop retained by the live clone (e.g. a bar counter). */
+  crop?: { x: number; y: number; width: number; height: number };
 }
 
 /** Builds a live-stage adapter from one already-supported SceneEditor object. */
@@ -53,8 +55,8 @@ export function liveSpriteActor(
     source,
     sourceScrollX: camera.scrollX,
     sourceScrollY: camera.scrollY,
-    create: (dialogue) =>
-      dialogue.add
+    create: (dialogue) => {
+      const clone = dialogue.add
         .sprite(
           sprite.x - camera.scrollX,
           sprite.y - camera.scrollY,
@@ -66,7 +68,10 @@ export function liveSpriteActor(
         .setRotation(sprite.rotation)
         .setFlipX(sprite.flipX)
         .setFlipY(sprite.flipY)
-        .setAlpha(sprite.alpha),
+        .setAlpha(sprite.alpha);
+      if (options.crop) clone.setCrop(options.crop.x, options.crop.y, options.crop.width, options.crop.height);
+      return clone;
+    },
     update:
       keys.length > 1 && cycleMs > 0
         ? (target, now) => {

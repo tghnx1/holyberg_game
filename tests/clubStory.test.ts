@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { CharacterDefinition } from '../src/game/characters/characterManifest';
+import { getPlayableCharacters } from '../src/game/characters/characterRegistry';
 import {
   buildClubRoomDialogue,
+  characterForClubStorySlot,
+  CLUB_STORY_PLACEMENTS,
   buildPostRhythmDialogue,
   resolveClubStoryCast,
 } from '../src/game/level/club/clubStory';
+import { getClubStoryActorIdleAssets } from '../src/game/level/club/clubStoryActorAssets';
 
 const character = (id: string): CharacterDefinition => ({
   id,
@@ -65,5 +69,19 @@ describe('Club dialogue content', () => {
     const after = buildPostRhythmDialogue('c');
     expect(after.id).toBe('club-post-rhythm-dj');
     expect(after.defaultSpeaker).toEqual({ type: 'character', characterId: 'c' });
+  });
+});
+
+describe('Club story actor assets', () => {
+  it('uses each room cast actor idle frame as the minimum story-actor load', () => {
+    const [dj1, barkeeper, dj3] = getPlayableCharacters();
+    const cast = { dj1Id: dj1.id, barkeeperId: barkeeper.id, dj3Id: dj3.id };
+    for (const [slot, placement] of Object.entries(CLUB_STORY_PLACEMENTS) as [
+      keyof typeof CLUB_STORY_PLACEMENTS,
+      (typeof CLUB_STORY_PLACEMENTS)[keyof typeof CLUB_STORY_PLACEMENTS],
+    ][]) {
+      const actor = characterForClubStorySlot(cast, slot);
+      expect(getClubStoryActorIdleAssets(placement.roomId, cast)).toEqual([actor.gameplay.idle]);
+    }
   });
 });
