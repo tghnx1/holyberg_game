@@ -528,7 +528,9 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const transform = resolveClubRoomSceneryTransform(this.scene.key, item);
     let image = this.roomScenery.get(item.editableId);
     if (!image) {
-      image = this.add.image(0, 0, item.textureKey).setOrigin(0.5, 1).setDepth(Depth.ENVIRONMENT);
+      // Above the ambient crowd (Depth.ENVIRONMENT), so the bar/DJ deck reads
+      // as furniture the NPCs stand behind rather than floating over it.
+      image = this.add.image(0, 0, item.textureKey).setOrigin(0.5, 1).setDepth(Depth.ENVIRONMENT + 1);
       this.roomScenery.set(item.editableId, image);
     }
     image
