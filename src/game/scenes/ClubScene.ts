@@ -36,6 +36,7 @@ import { ClubRuntimeAssetLoader } from '../level/club/ClubRuntimeAssetLoader';
 import { getClubRoomMinimumAssets } from '../level/club/clubRoomAssets';
 import {
   CLUB_ROOM_SCENERY_ITEMS,
+  isRoomSceneryPending,
   persistClubRoomScenery,
   resolveClubRoomSceneryTransform,
   type ClubRoomSceneryItem,
@@ -681,6 +682,13 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const actor = this.storyActor;
     if (!actor || this.completedStorySlots.has(actor.slot) || this.activeStorySlot) return;
     if (Math.abs(this.walkX - actor.sprite.x) > STORY_TRIGGER_DISTANCE) return;
+    // The dialogue's left panel is a snapshot of this exact frame, so it must
+    // not fire while this room's scenery is still loading in — otherwise the
+    // dialogue would show the room without its furniture even though
+    // gameplay draws it a moment later. Demand-loading is otherwise
+    // asynchronous with no relation to how fast the player can walk up to
+    // the story actor, so this is the gate that keeps the two in sync.
+    if (isRoomSceneryPending(this.roomIndexId(), new Set(this.roomScenery.keys()))) return;
     this.startStoryDialogue(actor.slot);
   }
 

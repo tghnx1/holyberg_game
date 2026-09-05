@@ -77,3 +77,22 @@ export function persistClubRoomScenery(
     scale: transform.scale,
   });
 }
+
+/** Every item authored for one room. */
+export function getClubRoomSceneryForRoom(roomId: string): readonly ClubRoomSceneryItem[] {
+  return CLUB_ROOM_SCENERY_ITEMS.filter((item) => item.roomId === roomId);
+}
+
+/**
+ * True while any item authored for `roomId` is not yet shown (its `id`
+ * missing from `shownIds`).
+ *
+ * A `currentScene` dialogue's left panel is a snapshot of the live frame, so
+ * a story beat must not trigger while its room's scenery is still
+ * demand-loading in — otherwise the snapshot would be missing furniture that
+ * gameplay draws a moment later. Pure so this gating rule is testable
+ * without a running ClubScene.
+ */
+export function isRoomSceneryPending(roomId: string, shownIds: ReadonlySet<string>): boolean {
+  return getClubRoomSceneryForRoom(roomId).some((item) => !shownIds.has(item.editableId));
+}

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { CLUB_ROOMS } from '../src/game/level/club/clubRooms';
 import {
   CLUB_ROOM_SCENERY_ITEMS,
+  getClubRoomSceneryForRoom,
+  isRoomSceneryPending,
   persistClubRoomScenery,
   resolveClubRoomSceneryTransform,
 } from '../src/game/level/club/clubRoomScenery';
@@ -65,5 +67,26 @@ describe('Club room scenery', () => {
     resetSceneLayout(JSON.parse(JSON.stringify(payload)));
     const reloaded = resolveClubRoomSceneryTransform(SCENE, bar);
     expect(reloaded).toMatchObject({ x: 700, y: 590, scale: 0.65 });
+  });
+
+  describe('room-scenery readiness gate (keeps a story dialogue snapshot matching gameplay)', () => {
+    it('lists exactly the items authored for one room', () => {
+      expect(getClubRoomSceneryForRoom('corridor')).toEqual([bar]);
+      expect(getClubRoomSceneryForRoom('dancefloor')).toEqual([djConsole]);
+      expect(getClubRoomSceneryForRoom('lounge')).toEqual([]);
+    });
+
+    it('is pending until every item authored for that room has been shown', () => {
+      expect(isRoomSceneryPending('corridor', new Set())).toBe(true);
+      expect(isRoomSceneryPending('corridor', new Set([bar.editableId]))).toBe(false);
+    });
+
+    it('is never pending for a room with no authored scenery', () => {
+      expect(isRoomSceneryPending('lounge', new Set())).toBe(false);
+    });
+
+    it('is unaffected by items shown for a different room', () => {
+      expect(isRoomSceneryPending('corridor', new Set([djConsole.editableId]))).toBe(true);
+    });
   });
 });
