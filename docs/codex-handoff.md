@@ -1,89 +1,68 @@
 # Holyberg Game — Codex Handoff
 
-> Repository: `tghnx1/holyberg_game`
->
+> Repository: `tghnx1/holyberg_game`  
 > Stack: Phaser + TypeScript + Vite + Vitest + GitHub Pages
->
-> This is project context, not a substitute for inspecting the repository. If code differs from this file, trust the current repository and report the discrepancy before changing architecture.
 
-## Start every task
+This file contains durable architectural context only.
 
-1. Check `git status`.
-2. Check the current branch.
-3. `git fetch origin`.
-4. Inspect recent commits.
-5. Read the relevant existing modules first.
-6. Reuse existing systems before creating new ones.
-7. Make the smallest focused change.
-8. Run validation.
-9. Commit.
-10. Stop and report unless explicitly asked to continue.
+Use `AGENTS.md` as the primary task router. It tells you which subsystem and files to inspect first. Do not read this whole file for a narrow task unless broader context is actually needed.
 
-For parallel work, do not assume another Codex chat can see this chat. Git branches/commits are the source of truth.
+The current repository and Git history are always the source of truth. If this document disagrees with code, trust the code and report/update stale documentation rather than designing around it.
 
-## Current game flow
+## Campaign shape
+
+High-level gameplay order:
 
 ```text
-BootScene
-→ CharacterSelectScene
-→ DialogueScene
-→ BerlinScene
-→ LevelCompleteScene
-→ ClubScene
-→ LevelCompleteScene
-→ RhythmScene
-→ LevelCompleteScene
-→ BossScene
-→ ResultScene
+Boot
+→ Character Select
+→ opening dialogue
+→ Berlin / Level 1
+→ Club / Level 2
+→ Rhythm / Level 3
+→ Level 4
+→ Boss
+→ final dialogue/result flow
 ```
 
-Direct DEV routes also exist via query params.
+`DialogueScene` and `LevelCompleteScene` are inserted between gameplay stages where the current code requires them.
 
-# Character architecture — COMPLETE
+Direct DEV routes exist via query params. Every later scene must remain independently cold-loadable; previous scenes may warm cache but must never be required for correctness.
 
-Do not redesign this unless explicitly asked.
+## Character architecture
 
-Characters live under:
+Do not redesign this unless explicitly requested.
+
+Playable characters live under:
 
 ```text
 public/assets/players/<CharacterName>/
+  gameplay/
+    idle.png
+    run/01.png ...
+    jump/01.png ...
+    crouch/01.png ...
+    damage/01.png ...
+    walk/01.png ...      # optional/discovered
+  dialogue/
+    portrait/idle.png
+    portrait/talk.png
+    poses/metro_sit.png
+    appear/01.png ...    # optional
 ```
 
-Canonical layout:
+Characters are discovered automatically. Do not add a parallel manual registry.
 
-```text
-gameplay/
-  idle.png
-  run/01.png ...
-  jump/01.png ...
-  crouch/01.png ...
-  damage/01.png ...
-  walk/01.png ...       # optional/discovered
+Core invariants:
 
-dialogue/
-  portrait/idle.png
-  portrait/talk.png
-  poses/metro_sit.png
-  appear/01.png ...     # optional
-```
+- character selection is visual only;
+- no character-specific gameplay stats;
+- reusable gameplay/dialogue code must not hardcode a playable identity;
+- use the existing `CharacterRef`/casting system for player, role, and explicit-character references;
+- story casting belongs in story/casting configuration, not character metadata;
+- preserve authored character presentation metadata such as foot-gap overrides.
 
-Characters are discovered automatically at Vite/build time.
-
-A valid playable character folder should automatically feed Character Select, Berlin, Club, Boss, player-relative dialogue, and the metro seated player.
-
-Existing systems include:
-
-```text
-CharacterRegistry
-CharacterSelection
-CharacterAssetLoader
-CharacterRef
-CastingRules
-CharacterResolver
-generic character animation helpers
-```
-
-Character refs:
+Conceptual `CharacterRef`:
 
 ```ts
 type CharacterRef =
@@ -92,181 +71,145 @@ type CharacterRef =
   | { type: 'character'; characterId: string };
 ```
 
-Meaning:
+Magician casting is an existing story rule; resolve it through the current casting system rather than hardcoding names in reusable rendering.
+
+## Dialogue architecture
+
+Dialogue speaker resolution follows the existing `CharacterRef` path.
+
+Use:
 
 ```text
-player     → currently selected playable character
-role       → story role resolved through casting rules
-character  → explicit concrete character, never recast
+playerRef()             → selected player
+roleRef('magician')     → story role
+characterRef('<id>')    → intentionally fixed concrete character
 ```
 
-Casting is explicit story configuration, not automatic discovery.
+Do not introduce a second dialogue renderer/editor architecture.
 
-Current important story rule:
+Shared left-stage framing belongs to `DialogueStageViewport`; seam/mask/framing bugs should be fixed there rather than with per-dialogue offsets.
+
+Current-scene dialogue may use captured scene content where appropriate, but animated/editable actors should reuse existing character locomotion/editor systems instead of duplicating animation logic.
+
+Dialogue input invariant:
 
 ```text
-magician
-default → Disus
-if player is Disus → Atmos
-allowSameAsPlayer = false
+short SPACE      → same advance path as mobile tap
+hold SPACE ~600ms+ → full-dialogue skip
 ```
 
-Do not put story casting into character metadata.
+One press must not trigger both paths.
 
-Do not add gameplay stats to `CharacterDefinition`.
+## Scene editor and persistence
 
-Character choice must not affect speed, physics, gravity, jump strength, collision body, score, timing, or game balance.
+The shared editor core is the canonical implementation. Reuse it.
 
-Shared animation timing:
+Core rules:
 
-```text
-run cycle = 552 ms
-crouch cycle = 330 ms
-jump airborne animation = 280 ms
-landing hold = 120 ms
-```
+- selection/drag/resize/copy/delete behavior belongs in shared editor mechanisms;
+- scene objects opt into clone/remove capabilities rather than scenes creating custom clipboard/delete implementations;
+- persistent transforms round-trip through the existing scene-layout store/save plugin;
+- delete must remove persistent layout state when an object is truly deleted;
+- do not create bespoke persistence endpoints if the existing layout path can represent the data.
 
-Atmos has authored run foot-gap visual overrides in `character.json`. Preserve them.
+## Coordinate spaces
 
-Do not reintroduce Atmos-specific gameplay constants.
+The game uses `Phaser.Scale.EXPAND` from a 720x720 base.
 
-# Dialogue architecture
+The important invariant is the distinction between world space and screen space.
 
-Main-character dialogue should use:
+### World space
 
-```ts
-playerRef()
-```
+Actors, scenery, triggers, fall zones, camera targets, gameplay limits and authored Level 4/Boss positions must resolve against canonical design space (`src/game/systems/designSpace.ts`), not live `camera.width` / `scale.width`.
 
-Do not hardcode Atmos for protagonist dialogue.
+A wider landscape viewport reveals more world horizontally; it must not move authored world positions.
 
-Story role:
+### Screen space
 
-```ts
-speaker: roleRef('magician')
-```
+HUD, pause controls, touch zones and dialogue panel geometry follow the live viewport.
 
-Fixed concrete NPC only when intentionally required:
+`sceneLayout.json` may store `xRatio`/`yRatio`; the consumer defines what those ratios are relative to. Dialogue layout uses its live panel; world-space consumers use canonical design space.
 
-```ts
-speaker: characterRef('disus')
-```
+A camera stop is stored as the world x-coordinate the frame centers on, not as raw `scrollX`.
 
-Resolution conceptually:
+## Pause / sound
 
-```text
-line speaker
-→ script defaultSpeaker
-→ CharacterRef resolver
-→ CharacterDefinition
-→ portrait/name
-```
-
-Metro cast is generic:
-
-```text
-seatedActor → playerRef()
-arrivingActor → roleRef('magician')
-```
-
-Reusable dialogue/rendering code should not hardcode Atmos/Disus identity.
-
-# Pause / sound system
-
-Global pause infrastructure exists under:
+Global pause infrastructure lives under:
 
 ```text
 src/game/systems/pause/
 ```
 
-It is intentionally automatic.
+It is automatic by default. Non-game scenes opt out explicitly.
 
-Do not add a hardcoded scene-name allowlist.
+Do not introduce hardcoded scene-name allowlists.
 
-Default: scenes are pausable. Non-game screens explicitly opt out, e.g. `static pausable = false`.
+Rhythm has special pause/resume handling because its Web Audio lifecycle is outside the normal Phaser scene update loop.
 
-Pause menu:
+Mute is session/global state.
 
-```text
-RESUME
-RESTART
-SOUND ON/OFF
-```
+## Asset loading and prefetch
 
-Keyboard:
+Asset loading is demand-driven and idempotent.
+
+Important invariant:
 
 ```text
-ESC / P
+prefetch = optimization
+scene preload = correctness
 ```
 
-Visible pause + sound HUD controls exist.
+A scene must work on a cold direct route even if no previous scene prefetched anything.
 
-Rhythm has special pause/resume hooks because its raw Web Audio lives outside the Phaser scene update loop.
+Campaign prefetch should primarily warm browser HTTP cache for future stages. Avoid eagerly decoding/registering the entire future campaign into Phaser textures or keeping multiple future video decoders alive.
 
-Mute is global/session-wide.
+For Club specifically:
 
-Current HUD intent:
+- selected walking player needs only the locomotion assets the scene actually uses;
+- stationary story NPCs should not require full gameplay bundles;
+- first-visible room content may be blocking/critical;
+- later animation frames and future-room assets may load progressively;
+- poster fallback must make video startup non-blocking.
 
-```text
-top-right:
-SCORE   pause   sound
+## Club / Level 2
 
-mobile:
-larger touch controls
+Room/NPC/story definitions are data-driven. Reuse the existing Club modules and placement mechanisms rather than adding room-specific logic in `ClubScene`.
 
-desktop fullscreen:
-whole HUD group shifted left enough to avoid the fullscreen exit X
-```
+Club video/background startup must not block scene playability. A missing or failed background prefetch must not prevent Level 2 from entering `create()` and becoming usable.
 
-# Dialogue input
+## Level 4
 
-```text
-short SPACE → same path as mobile tap
-hold SPACE ~600 ms+ → full dialogue skip
-```
+Level 4 uses canonical world coordinates and shared editor/persistence infrastructure.
 
-One press must not trigger both.
+Preserve existing door, NPC, magician, gap/ending and camera-flow behavior unless the task explicitly changes it.
 
-# Level 2 / Club
+Do not derive Level 4 world positions from live viewport width.
 
-Existing room assets include:
+## Boss
 
-```text
-public/assets/level_2/
-  animation_1.mp4
-  animation_2.mp4
-  animation_3.mp4
-  room_1_poster.webp
-  room_2_poster.webp
-```
+Preserve the existing Boss attack director/timing/collision architecture unless a task explicitly changes combat behavior.
 
-# Coordinate spaces
+Boss emeralds are authored scene objects whose runtime visibility/lifecycle is driven by attack telegraph/active events. Any per-window authoring must use the existing stable attack/window identity and canonical persistence path; avoid fallback/global/random paths that can leak or duplicate authored objects.
 
-The game runs `Phaser.Scale.EXPAND` from a 720x720 base (`src/game/config.ts`).
-For any landscape viewport the logical height is therefore pinned at
-`DESIGN_HEIGHT` (720) and the logical *width* comes out as
-`720 * aspectRatio` — 1280 at 16:9, ~1560 on a landscape phone. The camera is
-what absorbs a change of aspect ratio: a wider screen reveals more world
-horizontally, it does not rescale or reposition anything.
+## Validation policy
 
-That makes exactly one rule matter, and breaking it is what made Level 4
-reframe itself on mobile:
+Choose validation proportional to the task.
 
-- **World-space** values — actors, scenery, triggers, fall zones, camera focus
-  points, walk limits — must never be derived from `camera.width` /
-  `scale.width`. Resolve them against the canonical box in
-  `src/game/systems/designSpace.ts` (`DESIGN_SPACE`, i.e. `DESIGN_WIDTH` x
-  `DESIGN_HEIGHT`). One design unit is one rendered logical unit on every
-  supported viewport, so these are world pixels and mean the same physical
-  place on every device.
-- **Screen-space** values — HUD, pause, touch zones, the dialogue's panel
-  layout — should and do follow the live viewport.
+For focused changes, prefer targeted tests plus typecheck/lint where appropriate. Run full tests/build when the task or final integration warrants it.
 
-`sceneLayout.json` stores both kinds as `xRatio`/`yRatio`; what the ratio is a
-fraction *of* is the consumer's choice. `DialogueStageViewport` divides its
-live panel (screen-space, correct); `level4Layout.ts` and
-`playerPresentation.ts` divide `DESIGN_SPACE` (world-space, correct).
+Do not spend time on browser automation or screenshot/manual visual verification unless explicitly requested; the user may perform visual/runtime verification separately.
 
-A camera "stop" is stored as the world x the frame **centres** on, never as a
-raw `scrollX` — a left edge frames a different composition at every width. See
-`resolveCameraStopScroll` in `src/game/level/level4/level4Layout.ts`.
+## Documentation discipline
+
+Keep this file short and durable.
+
+Do not add:
+
+- current branch names;
+- temporary agent/worktree state;
+- one-off bug status;
+- historical validation logs;
+- commit-by-commit progress;
+- transient asset counts or timings.
+
+Those belong in Git history, issues, or task reports. Update this file only when a durable architectural rule changes.
