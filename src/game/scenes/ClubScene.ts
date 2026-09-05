@@ -28,8 +28,10 @@ import {
   type ClubRoomEdge,
 } from '../level/club/clubRooms';
 import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
-import { collectClubNpcFirstFrames, collectClubNpcFrames } from '../level/club/clubNpcAssets';
+import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
+import { ClubRuntimeAssetLoader } from '../level/club/ClubRuntimeAssetLoader';
+import { getClubRoomMinimumAssets } from '../level/club/clubRoomAssets';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
 import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
@@ -144,6 +146,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
   private devRoomId?: string;
   private devDialogue = false;
   private preloadStartedAt = 0;
+  /** The one owner of Phaser's mutable post-create loader queue. */
+  private runtimeAssets?: ClubRuntimeAssetLoader;
 
   constructor() {
     super('ClubScene');
@@ -155,15 +159,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     // nothing, and a direct ?scene=club still loads what it needs.
     this.character = getSelectedCharacter();
     queueCharacterWalk(this, this.character);
-    for (const slot of ['dj1', 'barkeeper', 'dj3'] as const) {
-      queueCharacterAssets(this, characterForClubStorySlot(this.storyCast, slot), ['idle']);
+    const minimum = getClubRoomMinimumAssets(this.roomIndex);
+    const room = minimum.room;
+    const storySlot = clubStorySlotForRoom(room.id);
+    if (storySlot) {
+      queueCharacterAssets(this, characterForClubStorySlot(this.storyCast, storySlot), ['idle']);
     }
-    const room = CLUB_ROOMS[this.roomIndex];
-    if (!this.textures.exists(room.posterKey)) {
-      this.load.image(room.posterKey, room.posterUrl);
-    }
-    for (const frame of collectClubNpcFirstFrames(getRoomNpcGroups(room.id))) {
-      if (!this.textures.exists(frame.key)) this.load.image(frame.key, frame.url);
+    for (const image of minimum.images) {
+      if (!this.textures.exists(image.key)) this.load.image(image.key, image.url);
     }
   }
 
@@ -187,8 +190,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     this.cameras.main.setBackgroundColor('#07040d');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
 
+    this.runtimeAssets = new ClubRuntimeAssetLoader(this);
+
     this.poster = this.add
-      .image(0, 0, CLUB_ROOMS[0].posterKey)
+      .image(0, 0, CLUB_ROOMS[this.roomIndex].posterKey)
       .setOrigin(0.5, 0.5)
       .setDepth(Depth.FAR_BACKGROUND - 1)
       .setVisible(false);
@@ -557,40 +562,29 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
     if (!npcs) return;
     npcs.setRoom(roomId);
 
-    const missing = collectClubNpcFrames(getRoomNpcGroups(roomId)).filter(
-      (frame) => !this.textures.exists(frame.key),
-    );
-    if (missing.length === 0) {
+    const frames = collectClubNpcFrames(getRoomNpcGroups(roomId));
+    if (frames.every((frame) => this.textures.exists(frame.key))) {
       this.prepareNeighbourNpcs(this.roomIndex + 1);
       return;
     }
 
-    for (const frame of missing) this.load.image(frame.key, frame.url);
-    this.load.once(Phaser.Loader.Events.COMPLETE, () => {
+    void this.runtimeAssets?.load(frames).then(() => {
       // The player may have walked on, or left Level 2 entirely, while this
       // was in flight; rebuilding then would populate the wrong room.
       if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
       npcs.setRoom(roomId);
       this.prepareNeighbourNpcs(this.roomIndex + 1);
     });
-    this.load.start();
   }
 
   /** Decode/register only the adjacent room while this room is being played. */
   private prepareNeighbourNpcs(roomIndex: number): void {
     const room = CLUB_ROOMS[roomIndex];
     if (!room) return;
-    if (this.load.isLoading()) {
-      this.load.once(Phaser.Loader.Events.COMPLETE, () => this.prepareNeighbourNpcs(roomIndex));
-      return;
-    }
-    const missing = collectClubNpcFrames(getRoomNpcGroups(room.id)).filter(
-      (frame) => !this.textures.exists(frame.key),
-    );
-    if (!this.textures.exists(room.posterKey)) this.load.image(room.posterKey, room.posterUrl);
-    if (missing.length === 0 && this.load.list.size === 0) return;
-    for (const frame of missing) this.load.image(frame.key, frame.url);
-    this.load.start();
+    void this.runtimeAssets?.load([
+      { key: room.posterKey, url: room.posterUrl },
+      ...collectClubNpcFrames(getRoomNpcGroups(room.id)),
+    ]);
   }
 
   /** Id of the room currently being shown. */
@@ -773,6 +767,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene {
   }
 
   private cleanup(): void {
+    this.runtimeAssets?.destroy();
+    this.runtimeAssets = undefined;
     this.releaseVideo();
     this.npcs?.destroy();
     this.npcs = undefined;
