@@ -34,6 +34,14 @@ import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
 import { ClubRuntimeAssetLoader } from '../level/club/ClubRuntimeAssetLoader';
 import { getClubRoomMinimumAssets } from '../level/club/clubRoomAssets';
+import {
+  CLUB_ROOM3_SCENERY_EDITABLE_ID,
+  CLUB_ROOM3_SCENERY_ROOM_ID,
+  CLUB_ROOM3_SCENERY_TEXTURE_KEY,
+  CLUB_ROOM3_SCENERY_URL,
+  persistClubRoom3Scenery,
+  resolveClubRoom3SceneryTransform,
+} from '../level/club/clubRoomScenery';
 import { getClubStoryActorIdleAssets } from '../level/club/clubStoryActorAssets';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
@@ -148,6 +156,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   private finished = false;
   /** Ambient crowd for the current room; scenery only, never consulted by gameplay. */
   private npcs?: ClubNpcLayer;
+  /** Decorative-only DJ console; exists only in the dancefloor room. */
+  private roomScenery?: Phaser.GameObjects.Image;
   private storyCast!: ClubStoryCast;
   private storyActor?: ClubStoryActor;
   private completedStorySlots = new Set<ClubStorySlot>();
@@ -346,6 +356,9 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       // set of groups is editable without this scene knowing what is in it.
       ...(this.npcs?.getEditableObjects() ?? []),
       ...(this.storyActor ? [this.storyActorEditable(this.storyActor)] : []),
+      ...(this.roomIndexId() === CLUB_ROOM3_SCENERY_ROOM_ID && this.roomScenery
+        ? [this.roomSceneryEditable(this.roomScenery)]
+        : []),
       createPlayerEditable(this, {
         sprite: this.playerSprite,
         getAnchor: () => this.playerAnchor(frame.footGap, baseScale()),
@@ -478,7 +491,64 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
 
     this.loadRoomNpcs(room.id);
     this.materializeStoryActor(room.id);
+    this.updateRoomScenery(room.id);
     this.prefetchNeighbour(roomIndex + 1);
+  }
+
+  /**
+   * Shows the DJ console prop only in the dancefloor — the final Club room —
+   * and hides it in every other room. Demand-loaded the same way the story
+   * actor's idle art is: nothing about it is needed until the player actually
+   * reaches that room.
+   */
+  private updateRoomScenery(roomId: string): void {
+    if (roomId !== CLUB_ROOM3_SCENERY_ROOM_ID) {
+      this.roomScenery?.setVisible(false);
+      return;
+    }
+    if (this.textures.exists(CLUB_ROOM3_SCENERY_TEXTURE_KEY)) {
+      this.showRoomScenery();
+      return;
+    }
+    void this.runtimeAssets
+      ?.load([{ key: CLUB_ROOM3_SCENERY_TEXTURE_KEY, url: CLUB_ROOM3_SCENERY_URL }])
+      .then(() => {
+        // The player may have left this room, or Level 2 entirely, while this
+        // was in flight; showing it then would place it in the wrong room.
+        if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
+        this.showRoomScenery();
+      });
+  }
+
+  private showRoomScenery(): void {
+    const transform = resolveClubRoom3SceneryTransform(this.scene.key);
+    const image = this.roomScenery ??= this.add
+      .image(0, 0, CLUB_ROOM3_SCENERY_TEXTURE_KEY)
+      .setOrigin(0.5, 1)
+      .setDepth(Depth.ENVIRONMENT);
+    image
+      .setTexture(CLUB_ROOM3_SCENERY_TEXTURE_KEY)
+      .setPosition(transform.x, transform.y)
+      .setScale(transform.scale)
+      .setVisible(true);
+  }
+
+  private roomSceneryEditable(image: Phaser.GameObjects.Image): EditableObject {
+    return {
+      id: CLUB_ROOM3_SCENERY_EDITABLE_ID,
+      label: 'DJ console (dancefloor scenery)',
+      target: image,
+      resizable: true,
+      getNativeSize: () => ({ width: image.width, height: image.height }),
+      onChange: (transform) => {
+        persistClubRoom3Scenery(this.scene.key, {
+          x: transform.x,
+          y: transform.y,
+          scale: transform.scaleY,
+        });
+        image.setPosition(transform.x, transform.y).setScale(transform.scaleY);
+      },
+    };
   }
 
   /**
@@ -878,6 +948,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.storyActor?.mask?.destroy();
     this.storyActor?.sprite.destroy();
     this.storyActor = undefined;
+    this.roomScenery?.destroy();
+    this.roomScenery = undefined;
     this.events.off(CLUB_DIALOGUE_RESUMED_EVENT, this.onStoryDialogueComplete, this);
     // Leaving Level 2: every room file is done with, and a retry re-warms
     // from the HTTP cache rather than the network.
