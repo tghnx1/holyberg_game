@@ -21,6 +21,15 @@ export interface CurrentSceneLiveActor {
 export interface CurrentSceneLiveStage {
   actors: readonly CurrentSceneLiveActor[];
   buildEditorSave?: () => EditorSavePayload | readonly EditorSavePayload[] | undefined;
+  /**
+   * Optional real arrival sequence (e.g. a character walking/materializing
+   * on), run once the panels have slid in and before the first line types.
+   * Must call `onComplete` itself once the entrance has actually finished —
+   * `CurrentSceneView.playArrival` falls back to a fixed short delay when
+   * this is absent, which is unchanged behaviour for every stage that
+   * doesn't provide one.
+   */
+  playArrival?: (onComplete: () => void) => void;
 }
 
 export interface CurrentSceneDialogueSource {

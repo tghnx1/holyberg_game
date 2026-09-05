@@ -49,7 +49,18 @@ export class CurrentSceneView {
     this.viewport.resize(width, height, framingWidth);
   }
 
+  /**
+   * Most current-scene dialogues have nothing to animate in, so the default
+   * is the fixed short delay this always was. A stage that needs a real
+   * entrance (e.g. a character appearing) provides its own `playArrival` and
+   * owns calling `onComplete` when it's actually done.
+   */
   playArrival(onComplete: () => void): void {
+    const arrival = this.snapshot.liveStage?.playArrival;
+    if (arrival) {
+      arrival(onComplete);
+      return;
+    }
     this.scene.time.delayedCall(120, onComplete);
   }
 

@@ -11,9 +11,12 @@ import { BossPlayer } from '../boss/BossPlayer';
 import { EmeraldLayer } from '../boss/EmeraldLayer';
 import { getBossAssetUrls } from '../boss/bossAssets';
 import { BOSS_ART } from '../boss/bossAssets';
-import { BOSS_SCORING } from '../boss/bossConfig';
-import { queueCharacterGameplay } from '../characters/characterAssets';
+import { BOSS_ARENA, BOSS_SCORING } from '../boss/bossConfig';
+import { queueCharacterAssets, queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
+import { footOffset } from '../characters/characterAnimation';
+import { resolveCharacterRef, roleRef } from '../characters/characterRef';
+import { stepAppearFrames } from '../dialogue/characterAppearAnimation';
 import { BossRenderer } from '../boss/BossRenderer';
 import { BossDepth, BossPalette } from '../boss/bossConstants';
 import type { ArenaBounds } from '../boss/types';
@@ -50,6 +53,10 @@ import { bossTelegraphWindowId } from '../boss/bossEmeraldWindows';
 
 /** Editable id for the boss's own presentation. */
 const BOSS_EDITABLE_ID = 'boss';
+/** Editable id for Disus's presentation in the final dialogue only. */
+const MAGICIAN_EDITABLE_ID = 'boss-final-magician';
+/** Matches the opening metro dialogue's entrance pacing. */
+const MAGICIAN_APPEAR_FRAME_MS = 90;
 
 /** Upper bound on a single simulated frame, in milliseconds. */
 const MAX_FRAME_DELTA_MS = 50;
@@ -101,6 +108,12 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
   private endingProjectile?: Phaser.GameObjects.Sprite;
   private bossResult?: RhythmResult;
   private devEnding = false;
+  /**
+   * Invisible editor anchor for Disus's final-dialogue presentation. Never
+   * shown in normal gameplay — only its authored transform matters, read by
+   * `buildCurrentSceneDialogueStage` when it builds the real dialogue clone.
+   */
+  private magicianAnchor?: Phaser.GameObjects.Sprite;
 
   constructor() {
     super('BossScene');
@@ -141,6 +154,10 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Demand-driven and idempotent, so a direct ?scene=boss works even
     // though Berlin was never entered.
     queueCharacterGameplay(this, getSelectedCharacter());
+    // Disus is a live actor only in the final dialogue, staged over this
+    // scene's own captured frame; his entrance needs the same asset groups
+    // the opening metro dialogue does.
+    queueCharacterAssets(this, resolveCharacterRef(roleRef('magician')), ['appear', 'idle']);
     queueSceneAudio(this, 'BossScene');
     EmeraldLayer.queueAssets(this);
     const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
@@ -175,6 +192,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.hud = new BossHud(this);
     this.emeralds = new EmeraldLayer(this, this.scene.key);
     this.emeralds.setBounds(this.bounds);
+    this.magicianAnchor = this.buildMagicianAnchor();
     this.events.on(BOSS_ENDING_DIALOGUE_RESUMED_EVENT, this.showEndingChoices, this);
 
     this.applyAuthoredPresentation();
@@ -207,6 +225,36 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       scale: boss?.scale ?? 1,
     });
     this.player.setPresentation(getPlayerVisualOffset(this.scene.key));
+  }
+
+  /**
+   * Builds Disus's invisible editor anchor: an absolute design-space point
+   * (not a displacement from a gameplay anchor, since he doesn't move) that
+   * only the final dialogue's `buildCurrentSceneDialogueStage` ever reads.
+   */
+  private buildMagicianAnchor(): Phaser.GameObjects.Sprite {
+    const magician = resolveCharacterRef(roleRef('magician'));
+    const idleFrame = magician.gameplay.idle!;
+    const layout = getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID);
+    const point = designPointFromLayout(layout, {
+      x: this.cameras.main.width / 2,
+      y: BOSS_ARENA.floorY,
+    });
+    return this.add
+      .sprite(point.x, point.y, idleFrame.key)
+      .setOrigin(0.5, 1)
+      .setScale(layout?.scale ?? 1)
+      .setFlipX(layout?.flipX === true)
+      .setVisible(false);
+  }
+
+  /** Re-applies Disus's persisted transform after an editor change. */
+  private applyMagicianPresentation(): void {
+    const anchor = this.magicianAnchor;
+    if (!anchor) return;
+    const layout = getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID);
+    const point = designPointFromLayout(layout, { x: anchor.x, y: anchor.y });
+    anchor.setPosition(point.x, point.y).setScale(layout?.scale ?? 1).setFlipX(layout?.flipX === true);
   }
 
   /**
@@ -288,10 +336,109 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       update: (target, now) =>
         this.boss.updateDialogueClone(target as Phaser.GameObjects.Container, now),
     };
+
+    const magicianActor = this.buildMagicianActor(camera);
+
     return {
-      actors: [bossActor, liveSpriteActor(this, player)],
+      actors: [bossActor, liveSpriteActor(this, player), magicianActor.actor],
       buildEditorSave: () => this.buildEditorSave(),
+      playArrival: (onComplete) => magicianActor.playArrival(onComplete),
     };
+  }
+
+  /**
+   * Disus, live only for the final dialogue: hidden until `playArrival` runs
+   * his appear frames (same ~90ms/frame pacing as the opening metro
+   * dialogue), then settles on `gameplay/idle.png`. His transform is a real
+   * `CurrentSceneLiveActor`, editable/persisted the same way the boss and
+   * player are, via the invisible `magicianAnchor` created in `create()`.
+   */
+  private buildMagicianActor(camera: Phaser.Cameras.Scene2D.Camera): {
+    actor: CurrentSceneLiveActor;
+    playArrival: (onComplete: () => void) => void;
+  } {
+    const anchor = this.magicianAnchor!;
+    const magician = resolveCharacterRef(roleRef('magician'));
+    const appearFrames = magician.dialogue.appear;
+    const idleFrame = magician.gameplay.idle!;
+    // The floor line every frame's own foot gap is measured from, taken from
+    // the anchor's authored (settled/idle) position, exactly as the metro
+    // dialogue derives its own arrival floor from its settled pose.
+    const floorY = anchor.y - footOffset(idleFrame.footGap, anchor.scaleY);
+    const floorForFrame = (frame: typeof idleFrame): number =>
+      floorY + footOffset(frame.footGap, anchor.scaleY);
+
+    const source: EditableObject = {
+      id: MAGICIAN_EDITABLE_ID,
+      label: 'DISUS',
+      target: anchor,
+      resizable: true,
+      getNativeSize: () => ({ width: anchor.frame.realWidth, height: anchor.frame.realHeight }),
+      onChange: (transform) => {
+        setSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID, {
+          ...layoutRatiosFromDesignPoint({ x: transform.x, y: transform.y }),
+          scale: transform.scaleY,
+          flipX: getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID)?.flipX === true,
+        });
+        this.applyMagicianPresentation();
+      },
+      flipHorizontal: () => {
+        const current = getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID);
+        setSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID, {
+          ...current,
+          flipX: current?.flipX !== true,
+        });
+        this.applyMagicianPresentation();
+      },
+    };
+
+    let sprite: Phaser.GameObjects.Sprite | undefined;
+    const actor: CurrentSceneLiveActor = {
+      id: MAGICIAN_EDITABLE_ID,
+      label: 'DISUS',
+      source,
+      sourceScrollX: camera.scrollX,
+      sourceScrollY: camera.scrollY,
+      create: (scene) => {
+        const startFrame = appearFrames[0];
+        sprite = scene.add
+          .sprite(
+            anchor.x - camera.scrollX,
+            floorForFrame(startFrame) - camera.scrollY,
+            startFrame.key,
+          )
+          .setOrigin(0.5, 1)
+          .setScale(anchor.scaleX, anchor.scaleY)
+          .setFlipX(anchor.flipX)
+          // Hidden until the line-gated entrance plays; never baked into the
+          // captured snapshot, which is taken before this actor exists.
+          .setVisible(false);
+        return sprite;
+      },
+    };
+
+    const playArrival = (onComplete: () => void): void => {
+      if (!sprite) {
+        onComplete();
+        return;
+      }
+      const live = sprite;
+      gameAudio(this).playSfx('disusAppearDisappear');
+      live.setVisible(true);
+      stepAppearFrames({
+        frames: appearFrames,
+        settledFrame: idleFrame,
+        frameDurationMs: MAGICIAN_APPEAR_FRAME_MS,
+        onShowFrame: (frame) => {
+          live.setTexture(frame.key);
+          live.setY(floorForFrame(frame) - camera.scrollY);
+        },
+        schedule: (delayMs, callback) => this.time.delayedCall(delayMs, callback),
+        onComplete,
+      });
+    };
+
+    return { actor, playArrival };
   }
 
   /**

@@ -17,6 +17,7 @@ import { DIALOGUE_STATION_TEXTURE_KEYS } from './stationAssets';
 import { footOffset } from '../characters/characterAnimation';
 import type { CharacterAssetRef } from '../characters/characterManifest';
 import type { ResolvedSceneCast } from './dialogueCast';
+import { stepAppearFrames } from './characterAppearAnimation';
 
 /**
  * Fixed canonical box the station composition is authored and laid out
@@ -266,23 +267,17 @@ export class StationSceneView {
   private playArrivalAnimation(onComplete: () => void): void {
     gameAudio(this.scene).playSfx('disusAppearDisappear');
     this.arriving.setVisible(true);
-    let frameIndex = 0;
-    const showFrame = (): void => {
-      const frame = this.appearFrames[frameIndex];
-      this.arriving.setTexture(frame.key);
-      this.arriving.setY(this.floorForFrame(frame));
-      frameIndex += 1;
-      if (frameIndex < this.appearFrames.length) {
-        this.scene.time.delayedCall(APPEAR_FRAME_DURATION_MS, showFrame);
-        return;
-      }
-      this.scene.time.delayedCall(APPEAR_FRAME_DURATION_MS, () => {
-        this.arriving.setTexture(this.settledFrame.key);
-        this.arriving.setY(this.floorForFrame(this.settledFrame));
-        onComplete();
-      });
-    };
-    showFrame();
+    stepAppearFrames({
+      frames: this.appearFrames,
+      settledFrame: this.settledFrame,
+      frameDurationMs: APPEAR_FRAME_DURATION_MS,
+      onShowFrame: (frame) => {
+        this.arriving.setTexture(frame.key);
+        this.arriving.setY(this.floorForFrame(frame));
+      },
+      schedule: (delayMs, callback) => this.scene.time.delayedCall(delayMs, callback),
+      onComplete,
+    });
   }
 
   /**
