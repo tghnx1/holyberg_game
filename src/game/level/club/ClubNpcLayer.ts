@@ -42,6 +42,13 @@ export class ClubNpcLayer {
   private instances: NpcInstance[] = [];
   private pendingPlacements: { placement: ClubNpcPlacement; index: number }[] = [];
   private roomId = '';
+  /**
+   * Keeps an editor save live for the rest of this scene run. The dev save
+   * endpoint persists the same data to JSON, but a room can be revisited
+   * before the page is reloaded, so it must not fall back to the module's
+   * original imported placement object in that case.
+   */
+  private savedPlacementsByRoom = new Map<string, readonly ClubNpcPlacement[]>();
   /** Suffix counter, so a duplicated group never collides with an existing id. */
   private cloneCount = 0;
 
@@ -62,7 +69,8 @@ export class ClubNpcLayer {
   setRoom(roomId: string): void {
     this.clear();
     this.roomId = roomId;
-    this.pendingPlacements = getRoomNpcPlacements(roomId).map((placement, index) => ({
+    const placements = this.savedPlacementsByRoom.get(roomId) ?? getRoomNpcPlacements(roomId);
+    this.pendingPlacements = placements.map((placement, index) => ({
       placement,
       index,
     }));
@@ -72,7 +80,8 @@ export class ClubNpcLayer {
 
   /** True once every placement in the current room has a sprite. */
   isComplete(): boolean {
-    return this.instances.length === getRoomNpcPlacements(this.roomId).length;
+    const placements = this.savedPlacementsByRoom.get(this.roomId) ?? getRoomNpcPlacements(this.roomId);
+    return this.instances.length === placements.length;
   }
 
   /**
@@ -274,7 +283,7 @@ export class ClubNpcLayer {
   ): ClubNpcPlacement[] {
     const camera = this.scene.cameras.main;
     const byId = new Map(snapshot.map((entry) => [entry.id, entry]));
-    return this.instances.map((instance) => {
+    const placements = this.instances.map((instance) => {
       const entry = byId.get(instance.id);
       if (!entry) return instance.placement;
       return toClubNpcPlacement(
@@ -288,6 +297,11 @@ export class ClubNpcLayer {
         camera.height,
       );
     });
+    // Keep this room's edited coordinates active immediately. The HTTP save
+    // is authoritative after reload, but revisiting a room in this session
+    // must show the same placement the editor just saved.
+    this.savedPlacementsByRoom.set(this.roomId, placements);
+    return placements;
   }
 
   /** Room id the current instances belong to; the key to save them under. */

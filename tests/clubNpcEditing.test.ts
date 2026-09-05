@@ -173,6 +173,25 @@ describe('editing the ambient club crowd', () => {
     expect(saved.length).toBeLessThan(getRoomNpcPlacements(ROOM).length);
   });
 
+  it('keeps saved coordinates when the room is rebuilt in the same session', () => {
+    const { layer, sprites } = buildLayer(ROOM);
+    const objects = layer.getEditableObjects();
+    const snapshot = objects.map((object, index) => ({
+      id: object.id,
+      x: 100 + index * 10,
+      y: 200,
+      scaleX: 1,
+      scaleY: 1,
+    }));
+
+    layer.buildLayoutFromSnapshot(snapshot);
+    layer.setRoom(ROOM);
+
+    const rebuilt = sprites.filter((sprite) => !sprite.destroyed);
+    expect(rebuilt[0].x).toBe(100);
+    expect(rebuilt[1].x).toBe(110);
+  });
+
   it('removes only the selected group', () => {
     const { layer } = buildLayer(ROOM);
     const objects = layer.getEditableObjects();
