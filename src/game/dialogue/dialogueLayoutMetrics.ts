@@ -8,6 +8,14 @@
  */
 import { DialogueLayout } from './dialogueConstants';
 
+/** Width available to body copy inside the shared dialogue bottom bar. */
+export function dialogueBodyTextWidth(
+  viewportWidth: number,
+  paddingX = DialogueLayout.textPaddingX,
+): number {
+  return Math.max(1, viewportWidth - paddingX * 2);
+}
+
 export interface DialoguePanelRect {
   x: number;
   y: number;

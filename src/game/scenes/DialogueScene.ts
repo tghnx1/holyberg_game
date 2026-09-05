@@ -4,6 +4,7 @@ import { DialoguePanels } from '../dialogue/DialoguePanels';
 import {
   buildDiagonalStripPoints,
   computeDialogueLayout,
+  dialogueBodyTextWidth,
   type DialogueLayoutMetrics,
 } from '../dialogue/dialogueLayoutMetrics';
 import { getDialogueScript, METRO_MAGICIAN_DIALOGUE } from '../dialogue/dialogueScripts';
@@ -478,6 +479,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
         color: DialoguePalette.text,
         lineSpacing: 5,
       })
+      .setWordWrapWidth(dialogueBodyTextWidth(width))
       .setOrigin(0, 0);
     this.bottomBarContainer = this.add
       .container(0, this.layout.bottomBar.y, [this.bottomBarShape, this.speakerText, this.bodyText])
@@ -526,6 +528,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     });
 
     this.bottomBarShape.setSize(layout.bottomBar.width, layout.bottomBar.height);
+    this.bodyText.setWordWrapWidth(dialogueBodyTextWidth(layout.width));
     this.panels.updateGeometry('bottomBar', {
       restX: 0,
       restY: layout.bottomBar.y,

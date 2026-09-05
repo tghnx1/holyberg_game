@@ -7,9 +7,15 @@ import {
   computeCoverFit,
   computeContainFit,
   computeDialogueLayout,
+  dialogueBodyTextWidth,
 } from '../src/game/dialogue/dialogueLayoutMetrics';
 
 describe('dialogue layout metrics', () => {
+  it('keeps body copy inside the responsive dialogue bar margins', () => {
+    expect(dialogueBodyTextWidth(1280)).toBe(1168);
+    expect(dialogueBodyTextWidth(320)).toBe(208);
+    expect(dialogueBodyTextWidth(80, 56)).toBe(1);
+  });
   it('stacks the top bar, body and bottom bar with no gaps or overlap', () => {
     const layout = computeDialogueLayout(1280, 720);
     expect(layout.topBar.y).toBe(0);
