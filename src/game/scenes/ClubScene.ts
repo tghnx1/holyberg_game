@@ -82,7 +82,7 @@ interface ClubStoryActor {
 }
 
 const CLUB_DIALOGUE_RESUMED_EVENT = 'club-story-dialogue-complete';
-const STORY_TRIGGER_DISTANCE = 84;
+const STORY_TRIGGER_DISTANCE = 300;
 
 /**
  * How far inside the edge the player is placed on entering a room, and how
