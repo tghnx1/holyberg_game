@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { Connect, Plugin } from 'vite';
 
@@ -62,6 +63,35 @@ export function defineEditorSaveTarget<T>(target: EditorSaveTarget<T>): EditorSa
   return target as EditorSaveTarget<unknown>;
 }
 
+/**
+ * Builds the complete file value before anything is written. A merged target
+ * must validate both the incoming slice and every preserved sibling entry;
+ * replacement targets still go through the same final validation path.
+ */
+export function buildEditorSaveOutput(
+  target: EditorSaveTarget<unknown>,
+  incoming: unknown,
+  existingText?: string,
+): unknown {
+  const validatedIncoming = target.validate(incoming);
+  const existing = target.merge
+    ? JSON.parse(existingText ?? '{}') as unknown
+    : undefined;
+  const merged = target.merge ? target.merge(existing, validatedIncoming) : validatedIncoming;
+  return target.validate(merged);
+}
+
+/** Writes JSON without ever truncating the currently valid file. */
+export async function writeJsonAtomically(file: string, value: unknown): Promise<void> {
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await rename(temporary, file);
+  } finally {
+    await unlink(temporary).catch(() => undefined);
+  }
+}
+
 export function editorSavePlugin(targets: readonly EditorSaveTarget<unknown>[]): Plugin {
   return {
     name: 'holyberg-editor-save',
@@ -82,11 +112,11 @@ export function editorSavePlugin(targets: readonly EditorSaveTarget<unknown>[]):
           void (async () => {
             try {
               const body = await readBody(request);
-              const validated = target.validate(JSON.parse(body) as unknown);
-              const output = target.merge
-                ? target.merge(JSON.parse(await readFile(file, 'utf8')) as unknown, validated)
-                : validated;
-              await writeFile(file, `${JSON.stringify(output, null, 2)}\n`, 'utf8');
+              const incoming = JSON.parse(body) as unknown;
+              const existingText = target.merge ? await readFile(file, 'utf8') : undefined;
+              const output = buildEditorSaveOutput(target, incoming, existingText);
+              await writeJsonAtomically(file, output);
+              const validated = target.validate(incoming);
               const detail = target.describe?.(validated) ?? '';
               server.config.logger.info(
                 `[${target.name}] wrote ${detail ? `${detail} to ` : ''}${target.file}`,
