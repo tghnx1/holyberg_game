@@ -147,7 +147,7 @@ export class LevelEditorSystem {
       .setVisible(false);
 
     this.core = new SceneEditorCore(this.scene, {
-      title: 'LEVEL EDITOR  —  E exit   P save to berlinLevel.generated.json',
+      title: 'LEVEL EDITOR',
       onSave: () => this.saveConfig(),
       onEnable: () => this.onEditorEnable(),
       onDisable: () => this.onEditorDisable(),

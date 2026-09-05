@@ -85,6 +85,18 @@ export interface SceneEditorCoreOptions {
   describe?: () => string[];
 }
 
+/** Short, capability-aware controls shown for the current selection. */
+export function editorActionHelp(item?: EditableItem): string {
+  if (!item) return 'click object to select · drag empty space to pan · wheel to zoom';
+
+  const actions = ['drag move', 'arrows nudge'];
+  if (isResizable(item)) actions.push('handles resize · Shift = keep ratio');
+  if (isCloneable(item)) actions.push('C copy · V paste');
+  if (isRemovable(item)) actions.push('Del delete');
+  if (item.bringToFront || item.sendToBack) actions.push('[ / ] layer');
+  return actions.join(' · ');
+}
+
 interface DragState {
   item: EditableItem;
   startPointer: EditorPoint;
@@ -695,25 +707,11 @@ export class SceneEditorCore {
   }
 
   private panelText(): string {
-    const lines = [
-      this.options.title ?? 'SCENE EDITOR  —  E exit   P save',
-      'click select · drag move · arrows 1px · shift+arrows 10px',
-      'drag handles resize · Shift aspect · Esc cancel',
-      '+/- proportional resize (shift = coarse) · C copy · V paste · del remove',
-      'drag empty space to scroll · wheel to zoom · arrows scroll when nothing selected',
-    ];
-    lines.push(...(this.options.describe?.() ?? []));
-    if (this.status) lines.push(this.status);
-    if (this.camera) {
-      lines.push(
-        `view x ${Math.round(this.camera.scrollX)}-${Math.round(this.camera.scrollX + this.camera.width / this.zoom)}` +
-          `   zoom ${this.zoom.toFixed(2)}`,
-      );
-    }
-
+    const lines = [this.options.title ?? 'SCENE EDITOR', 'E exit · P save'];
     const item = this.selectedItem();
     if (!item) {
-      lines.push('', 'no selection');
+      if (this.status) lines.push(this.status);
+      lines.push('click object to select', editorActionHelp());
       return lines.join('\n');
     }
     const bounds = item.getBounds();
@@ -721,13 +719,11 @@ export class SceneEditorCore {
     const centreX = (bounds.left + bounds.right) / 2;
     const centreY = (bounds.top + bounds.bottom) / 2;
     lines.push(
-      '',
       item.kind ? `${item.label ?? item.id}  (${item.kind})` : `${item.label ?? item.id}`,
-      `x ${Math.round(centreX)}   y ${Math.round(centreY)}`,
-      `w ${Math.round(size.width)}   h ${Math.round(size.height)}`,
+      editorActionHelp(item),
+      this.status ||
+        `x ${Math.round(centreX)} · y ${Math.round(centreY)} · w ${Math.round(size.width)} · h ${Math.round(size.height)}`,
     );
-    if (!isCloneable(item)) lines.push('(not cloneable)');
-    lines.push(...(item.describe?.() ?? []));
     return lines.join('\n');
   }
 

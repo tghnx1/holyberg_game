@@ -64,7 +64,7 @@ export class SceneEditor {
       onEnable: options.onEnable,
       onDisable: options.onDisable,
       describe: options.describe,
-      title: 'SCENE EDITOR  —  E exit   P save',
+      title: 'SCENE EDITOR',
       onSave: () => {
         void Promise.resolve(options.onSave?.(this.getSnapshot()))
           .then(() => this.core.flash('LAYOUT SAVED'))

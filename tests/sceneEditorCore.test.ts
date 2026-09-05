@@ -42,7 +42,7 @@ vi.mock('../src/game/systems/sceneEditorState', () => ({
   setSceneEditorActive: vi.fn(),
 }));
 
-const { SceneEditorCore } = await import('../src/game/systems/editor/SceneEditorCore');
+const { SceneEditorCore, editorActionHelp } = await import('../src/game/systems/editor/SceneEditorCore');
 import type { EditableItem } from '../src/game/systems/editor/editorItem';
 import type { ResizeBounds } from '../src/game/systems/levelEditorResize';
 
@@ -163,6 +163,24 @@ describe('shared editor core', () => {
 
   beforeEach(() => {
     harness = createScene();
+  });
+
+  it('shows only contextual actions for the selected capabilities', () => {
+    expect(editorActionHelp()).toContain('pan');
+    expect(
+      editorActionHelp(
+        makeItem('plain', { left: 0, top: 0, right: 50, bottom: 50 }, { resizable: false }),
+      ),
+    ).toBe('drag move · arrows nudge');
+    expect(
+      editorActionHelp(
+        makeItem('full', { left: 0, top: 0, right: 50, bottom: 50 }, {
+          clone: () => 'copy',
+          remove: () => {},
+          bringToFront: () => {},
+        }),
+      ),
+    ).toContain('C copy · V paste');
   });
 
   function build(options = {}) {
