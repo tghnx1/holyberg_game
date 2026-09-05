@@ -4,6 +4,7 @@ import {
   DIALOGUE_STAGE_CANONICAL_HEIGHT,
   DIALOGUE_STAGE_CANONICAL_WIDTH,
   DIALOGUE_STAGE_RENDER_OVERLAP,
+  computeSceneSeamUnderlap,
 } from '../src/game/dialogue/DialogueStageViewport';
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../src/game/constants';
 import { DialogueLayout } from '../src/game/dialogue/dialogueConstants';
@@ -27,6 +28,11 @@ describe('the shared canonical box', () => {
     expect(DIALOGUE_STAGE_RENDER_OVERLAP).toBe(
       DialogueLayout.dividerSkew + DialogueLayout.dividerThickness,
     );
+  });
+
+  it('extends only the missing right-edge strip under the divider', () => {
+    expect(computeSceneSeamUnderlap(717, 813)).toEqual({ x: 717, width: 96 });
+    expect(computeSceneSeamUnderlap(820, 813)).toBeUndefined();
   });
 });
 

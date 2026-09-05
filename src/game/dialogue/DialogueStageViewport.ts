@@ -70,6 +70,19 @@ export interface DialogueStageFit {
 }
 
 /**
+ * Returns the narrow strip needed to carry a scene's right edge underneath
+ * the diagonal seam.  The scene image itself is never stretched: callers
+ * render this strip from its last source column instead.
+ */
+export function computeSceneSeamUnderlap(
+  imageRight: number,
+  targetRight: number,
+): { x: number; width: number } | undefined {
+  const width = targetRight - imageRight;
+  return width > 0 ? { x: imageRight, width } : undefined;
+}
+
+/**
  * The universal framing rule, uniform in both axes:
  *
  * - the complete canonical composition fits vertically inside the dialogue
@@ -132,8 +145,13 @@ export class DialogueStageViewport {
   readonly canonicalHeight: number;
 
   private readonly mask: Phaser.GameObjects.Graphics;
+  private readonly seamExtensions: {
+    image: Phaser.GameObjects.Image;
+    extension: Phaser.GameObjects.Image;
+  }[] = [];
   private panelWidth = 0;
   private panelHeight = 0;
+  private renderWidth = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -160,11 +178,30 @@ export class DialogueStageViewport {
 
   private syncMask(): void {
     this.mask.setPosition(this.root.x, this.root.y);
+    this.syncSceneSeamExtensions();
   }
 
   /** Puts the stage's own objects into the framed content container. */
   add(children: Phaser.GameObjects.GameObject[]): void {
-    this.content.add(children);
+    for (const child of children) {
+      this.content.add(child);
+      // Dialogue backdrops are Images with a top-left origin.  Add a tiny
+      // source-column extension after each such image, before actors are
+      // added, so the artwork—not the portrait colour—owns the seam.
+      const image = child as Phaser.GameObjects.Image;
+      if (child.type !== 'Image' || image.originX !== 0 || image.originY !== 0) continue;
+      const source = image.texture.getSourceImage() as { width?: number; height?: number };
+      if (!source.width || !source.height) continue;
+      const extension = this.scene.add.image(0, 0, image.texture.key).setOrigin(0, 0);
+      extension
+        .setCrop(source.width - 1, 0, 1, source.height)
+        .setVisible(image.visible);
+      this.content.add(extension);
+      this.seamExtensions.push({
+        image,
+        extension,
+      });
+    }
   }
 
   /**
@@ -181,12 +218,30 @@ export class DialogueStageViewport {
     // remain based on the nominal frame width so resizing does not shift art.
     this.panelWidth = framingWidth;
     this.panelHeight = height;
+    this.renderWidth = width;
     this.mask
       .clear()
       .fillStyle(0xffffff)
       .fillRect(0, 0, width + DIALOGUE_STAGE_RENDER_OVERLAP, height);
     this.syncMask();
     this.applyComposition();
+  }
+
+  private syncSceneSeamExtensions(): void {
+    if (this.renderWidth <= 0 || this.content.scaleX === 0) return;
+    const targetRight = (this.renderWidth - this.content.x) / this.content.scaleX;
+    for (const seam of this.seamExtensions) {
+      const imageRight = seam.image.x + seam.image.displayWidth;
+      const strip = computeSceneSeamUnderlap(imageRight, targetRight);
+      if (!strip) {
+        seam.extension.setVisible(false);
+        continue;
+      }
+      seam.extension
+        .setVisible(seam.image.visible)
+        .setPosition(strip.x, seam.image.y)
+        .setDisplaySize(strip.width, seam.image.displayHeight);
+    }
   }
 
   private applyComposition(): void {
@@ -233,6 +288,7 @@ export class DialogueStageViewport {
     this.scene.events.off(SCENE_UPDATE_EVENT, this.syncMask, this);
     this.root.clearMask(true);
     this.mask.destroy();
+    for (const seam of this.seamExtensions) seam.extension.destroy();
     this.root.destroy(true);
   }
 }
