@@ -36,7 +36,7 @@ export const CLUB_ROOM_SCENERY_ITEMS: readonly ClubRoomSceneryItem[] = [
     editableId: 'room3-scenery-dj-console',
     roomId: 'dancefloor',
     textureKey: 'club-room3-scenery-dj-console',
-    url: 'assets/level_2/dj-console-scenery.jpg',
+    url: 'assets/level_2/dj-deck.png',
     defaultPoint: { x: 1040, y: 600 },
     defaultScale: 0.5,
   },
