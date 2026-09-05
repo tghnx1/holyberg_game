@@ -56,9 +56,9 @@ function attachSceneEditor(scene: Phaser.Scene & EditableScene): void {
   const onUpdate = (): void => {
     if (Phaser.Input.Keyboard.JustDown(toggleKey)) {
       const active = ensureEditor();
-      // Re-registered on every toggle so a scene that has rebuilt its contents
-      // since the last edit exposes the objects that exist now.
-      if (!active.active) for (const object of scene.getEditableObjects()) active.register(object);
+      // Reconciled on every open so a scene that has rebuilt its contents
+      // exposes exactly the objects that exist now, with no stale handles.
+      if (!active.active) active.replaceObjects(scene.getEditableObjects());
       active.toggle();
     }
     editor?.update();

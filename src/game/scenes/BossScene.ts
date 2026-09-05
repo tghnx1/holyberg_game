@@ -8,12 +8,12 @@ import { BossPlayer } from '../boss/BossPlayer';
 import { EmeraldLayer } from '../boss/EmeraldLayer';
 import { getBossAssetUrls } from '../boss/bossAssets';
 import { BOSS_ART } from '../boss/bossAssets';
-import { BOSS_EMERALDS, BOSS_SCORING } from '../boss/bossConfig';
+import { BOSS_SCORING } from '../boss/bossConfig';
 import { queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { BossRenderer } from '../boss/BossRenderer';
 import { BossDepth, BossPalette } from '../boss/bossConstants';
-import type { ActiveAttack, ArenaBounds } from '../boss/types';
+import type { ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
@@ -43,6 +43,7 @@ import {
   getSceneObjectLayout,
   setSceneObjectLayout,
 } from '../systems/sceneLayout';
+import { bossTelegraphWindowId } from '../boss/bossEmeraldWindows';
 
 /** Editable id for the boss's own presentation. */
 const BOSS_EDITABLE_ID = 'boss';
@@ -250,11 +251,14 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     ];
   }
 
-  buildEditorSave(): EditorSavePayload {
-    return {
+  buildEditorSave(): EditorSavePayload[] {
+    const payloads: EditorSavePayload[] = [{
       route: '/__scene-editor/save-layout',
       body: buildSceneLayoutPayload(this.scene.key),
-    };
+    }];
+    const emeraldWindow = this.emeralds.buildEditorSave();
+    if (emeraldWindow) payloads.push(emeraldWindow);
+    return payloads;
   }
 
   buildCurrentSceneDialogueStage(): CurrentSceneLiveStage {
@@ -418,7 +422,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       case 'telegraphStarted':
         // The windup is the only time emeralds are collectable, so they are
         // offered by the event that starts it rather than on a timer.
-        this.offerEmeraldsFor(event.attack);
+        this.emeralds.showWindow(bossTelegraphWindowId(event.attack));
         break;
       case 'attackActivated':
         // The laser is live: anything not already picked up is lost, now.
@@ -444,24 +448,6 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       default:
         break;
     }
-  }
-
-  /**
-   * Offers the authored emeralds this telegraph puts within reach.
-   *
-   * Nothing is generated: the spots are wherever they were placed in the
-   * editor, so the same arena offers the same emeralds every run. Which of
-   * them a given telegraph shows still depends on where the player is
-   * standing and how long the windup grants them.
-   */
-  private offerEmeraldsFor(attack: ActiveAttack): void {
-    const playerBox = this.player.collectibleBox;
-    this.emeralds.offer({
-      reachable: this.player.reachableCenterBounds(this.bounds),
-      playerCenterX: playerBox.centerX,
-      telegraphMs: attack.timing.telegraphMs,
-      pickupReachPx: playerBox.halfWidth + BOSS_EMERALDS.halfSizePx,
-    });
   }
 
   private collectEmeralds(): void {

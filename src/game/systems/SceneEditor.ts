@@ -110,6 +110,17 @@ export class SceneEditor {
     this.core.unregister(id);
   }
 
+  /**
+   * Reconciles the editor with objects that exist at the moment it opens.
+   * Dynamic scenes (notably one Boss telegraph window after another) must not
+   * retain handles for sprites destroyed since the previous editing session.
+   */
+  replaceObjects(objects: EditableObject[]): void {
+    for (const id of this.objects.keys()) this.core.unregister(id);
+    this.objects.clear();
+    for (const object of objects) this.register(object);
+  }
+
   toggle(): void {
     this.core.toggle();
   }

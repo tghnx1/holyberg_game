@@ -4,7 +4,8 @@ import {
   EMERALD_ANIMATION,
   getCollectibleAnimationAssetUrls,
 } from '../collectibles/collectibleAnimations';
-import { removeSceneObjectLayout } from '../systems/sceneLayout';
+import { buildSceneLayoutPayload, removeSceneObjectLayout } from '../systems/sceneLayout';
+import type { EditorSavePayload } from '../systems/editableSceneContract';
 import type { EditableObject } from '../systems/SceneEditor';
 import { BOSS_EMERALDS } from './bossConfig';
 import { BossDepth } from './bossConstants';
@@ -14,11 +15,10 @@ import {
   persistEmeraldSpot,
   type EmeraldSpot,
 } from './bossEmeraldSpots';
+import { bossEmeraldWindowSceneKey } from './bossEmeraldWindows';
 import {
   collectEmeralds,
-  selectTelegraphEmeralds,
   type CollectibleBox,
-  type EmeraldSelectionRequest,
 } from './emeraldField';
 
 interface LiveEmerald {
@@ -29,11 +29,9 @@ interface LiveEmerald {
 /**
  * The arena's authored emeralds: drawn, picked up, and editable.
  *
- * Every authored spot owns a sprite for the whole life of the scene, and the
- * fight only changes which of them are *visible*. That is what lets the same
- * objects be dragged, copied and deleted in SceneEditor — an emerald that only
- * existed during a telegraph would vanish the moment the editor paused the
- * fight, which is exactly when you want to arrange it.
+ * Each stable telegraph occurrence owns one independent scene-layout slice.
+ * Its exact authored sprites are created when that telegraph starts, which is
+ * what the editor exposes while fight progression is frozen.
  *
  * The lifecycle is still the attack's and owns no timer of its own: `offer` is
  * called when a telegraph starts and `hideAll` when the laser goes live, both
@@ -41,8 +39,8 @@ interface LiveEmerald {
  * next telegraph rather than destroying it — a spot is a place an emerald
  * appears, not a single pickup, so it comes back for the next attack.
  *
- * Selection and pickup geometry live in `emeraldField`; the authored data in
- * `bossEmeraldSpots`. This class is only the sprites and the editor bindings.
+ * Pickup geometry lives in `emeraldField`; authored data in
+ * `bossEmeraldSpots`. This class is only lifecycle, sprites and editor binding.
  */
 export class EmeraldLayer {
   private readonly emeralds: LiveEmerald[] = [];
@@ -51,13 +49,14 @@ export class EmeraldLayer {
   /** Mid-pickup animation: visible, but no longer offered and not to be reset. */
   private readonly popping = new Set<string>();
   private authoring = false;
+  private windowId?: string;
+  private windowSceneKey?: string;
 
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly sceneKey: string,
   ) {
     createCollectibleAnimations(scene);
-    for (const spot of getAuthoredEmeraldSpots(sceneKey)) this.add(spot);
   }
 
   /** Demand-driven, idempotent: a direct `?scene=boss` still gets the art. */
@@ -72,12 +71,17 @@ export class EmeraldLayer {
     return this.offered.length;
   }
 
-  /** Shows the authored spots this telegraph puts within reach. */
-  offer(request: EmeraldSelectionRequest): void {
-    this.offered = selectTelegraphEmeralds(
-      this.emeralds.map((emerald) => emerald.spot),
-      request,
-    );
+  get activeWindowId(): string | undefined {
+    return this.windowId;
+  }
+
+  /** Rebuilds exactly the layout authored for this one telegraph occurrence. */
+  showWindow(windowId: string): void {
+    this.clearSprites();
+    this.windowId = windowId;
+    this.windowSceneKey = bossEmeraldWindowSceneKey(this.sceneKey, windowId);
+    for (const spot of getAuthoredEmeraldSpots(this.windowSceneKey)) this.add(spot);
+    this.offered = this.emeralds.map((emerald) => emerald.spot);
     this.syncVisibility();
   }
 
@@ -107,9 +111,16 @@ export class EmeraldLayer {
    */
   setAuthoringVisible(visible: boolean): void {
     this.authoring = visible;
-    if (!visible) this.offered = [];
     this.stopPops();
     this.syncVisibility();
+  }
+
+  buildEditorSave(): EditorSavePayload | undefined {
+    if (!this.windowSceneKey) return undefined;
+    return {
+      route: '/__scene-editor/save-layout',
+      body: buildSceneLayoutPayload(this.windowSceneKey),
+    };
   }
 
   // ------------------------------------------------------------- editing
@@ -173,11 +184,11 @@ export class EmeraldLayer {
     this.offered = this.offered.filter((spot) => spot.id !== emerald.spot.id);
     this.scene.tweens.killTweensOf(emerald.sprite);
     emerald.sprite.destroy();
-    removeSceneObjectLayout(this.sceneKey, emerald.spot.id);
+    if (this.windowSceneKey) removeSceneObjectLayout(this.windowSceneKey, emerald.spot.id);
   }
 
   private persist(spot: EmeraldSpot): void {
-    persistEmeraldSpot(this.sceneKey, spot);
+    if (this.windowSceneKey) persistEmeraldSpot(this.windowSceneKey, spot);
   }
 
   // ------------------------------------------------------------- sprites
@@ -262,6 +273,12 @@ export class EmeraldLayer {
   }
 
   destroy(): void {
+    this.clearSprites();
+    this.windowId = undefined;
+    this.windowSceneKey = undefined;
+  }
+
+  private clearSprites(): void {
     for (const emerald of this.emeralds) {
       this.scene.tweens.killTweensOf(emerald.sprite);
       emerald.sprite.destroy();
