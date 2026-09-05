@@ -42,7 +42,7 @@ export const CLUB_ROOM_SCENERY_ITEMS: readonly ClubRoomSceneryItem[] = [
   },
   {
     editableId: 'room2-scenery-bar',
-    roomId: 'backstage',
+    roomId: 'corridor',
     textureKey: 'club-room2-scenery-bar',
     url: 'assets/level_2/bar.jpg',
     defaultPoint: { x: 960, y: 610 },

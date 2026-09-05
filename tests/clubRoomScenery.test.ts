@@ -10,7 +10,7 @@ import { buildSceneLayoutPayload, resetSceneLayout } from '../src/game/systems/s
 const SCENE = 'ClubSceneryTest';
 
 const djConsole = CLUB_ROOM_SCENERY_ITEMS.find((item) => item.roomId === 'dancefloor')!;
-const bar = CLUB_ROOM_SCENERY_ITEMS.find((item) => item.roomId === 'backstage')!;
+const bar = CLUB_ROOM_SCENERY_ITEMS.find((item) => item.roomId === 'corridor')!;
 
 describe('Club room scenery', () => {
   afterEach(() => resetSceneLayout());
@@ -21,10 +21,10 @@ describe('Club room scenery', () => {
     expect(index).toBe(CLUB_ROOMS.length - 1);
   });
 
-  it('the bar names the backstage room, the second-to-last (penultimate) Club room', () => {
-    expect(bar.roomId).toBe('backstage');
+  it('the bar names the corridor room, the second Club room', () => {
+    expect(bar.roomId).toBe('corridor');
     const index = CLUB_ROOMS.findIndex((room) => room.id === bar.roomId);
-    expect(index).toBe(CLUB_ROOMS.length - 2);
+    expect(index).toBe(1);
   });
 
   it('every item names a room only once, and every id/texture key is unique', () => {
