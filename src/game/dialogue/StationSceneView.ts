@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { gameAudio } from '../audio/GameAudio';
 import type { EditableObject, EditableTransform } from '../systems/SceneEditor';
 import {
   DIALOGUE_STAGE_CANONICAL_HEIGHT,
@@ -245,6 +246,7 @@ export class StationSceneView {
    */
   playArrival(onComplete: () => void): void {
     this.scene.time.delayedCall(STATIONARY_PAUSE_MS, () => {
+      gameAudio(this.scene).playSfx('trainDeparture');
       let arrivalTriggered = false;
       this.scene.tweens.add({
         targets: this.train,
@@ -262,6 +264,7 @@ export class StationSceneView {
   }
 
   private playArrivalAnimation(onComplete: () => void): void {
+    gameAudio(this.scene).playSfx('disusAppearDisappear');
     this.arriving.setVisible(true);
     let frameIndex = 0;
     const showFrame = (): void => {

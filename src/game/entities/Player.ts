@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { jumpSfxId } from '../audio/gameplaySfx';
 import {
   Depth,
   GROUND_Y,
@@ -110,6 +111,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Both impulses are the same strength; there is no weaker second jump.
     if (jumpedThisFrame) this.setVelocityY(JUMP_VELOCITY);
     this.didJumpThisFrame = jumpedThisFrame;
+    // Input may be buffered/rejected, so emit only after the shared physics
+    // resolver accepted and applied a real impulse.
+    const jumpSfx = jumpSfxId(jumpedThisFrame, this.jumpCount);
+    if (jumpSfx) this.scene.events.emit('player-jump-sfx', jumpSfx);
 
     if (jumpedThisFrame && this.airHolding) {
       // Jumping out of the hold: gravity must be back before the pin below,

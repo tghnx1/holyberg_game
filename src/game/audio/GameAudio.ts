@@ -68,7 +68,13 @@ class GameAudio {
   }
 
   startSceneMusic(sceneId: GameAudioScene): void {
-    this.soundtrack.start(sceneAudioConfig(sceneId).soundtrack);
+    try {
+      this.soundtrack.start(sceneAudioConfig(sceneId).soundtrack);
+    } catch {
+      // Music is atmospheric only. A failed load/decode must not prevent a
+      // scene from becoming playable, and leaves no half-active track behind.
+      this.soundtrack.stop();
+    }
   }
 
   stopMusic(): void {

@@ -618,6 +618,12 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.activeStorySlot = slot;
     this.transitioning = true;
     this.applyWalkFrame(false);
+    if (slot === 'dj3') {
+      // Rhythm follows this final beat, so the shared score stops here and
+      // never restarts underneath its dedicated track.
+      gameAudio(this).stopMusic();
+      gameAudio(this).playSfx('clubDjMusicStop');
+    }
     const character = characterForClubStorySlot(this.storyCast, slot);
     void launchCurrentSceneDialogue(this, {
       script: buildClubRoomDialogue(slot, character.id),

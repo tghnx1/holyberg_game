@@ -1561,6 +1561,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
   }
 
   private closeDoorThenWait(): void {
+    gameAudio(this).playSfx('level4Door');
     // Made visible again before the tween starts: it was hidden outright at
     // the end of the previous open pose (see `openDoorAndExit`), and the
     // closing swing has to actually be seen.
@@ -1620,6 +1621,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
    * as the extra ground needs.
    */
   private disappearMagician(): void {
+    gameAudio(this).playSfx('disusAppearDisappear');
     // The pair are no longer parked on the zone, so authoring it must stop
     // dragging them around mid-exit.
     this.stallSettled = false;

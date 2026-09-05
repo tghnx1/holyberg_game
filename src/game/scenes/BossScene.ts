@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { gameAudio } from '../audio/GameAudio';
 import { queueSceneAudio } from '../audio/gameAudioCatalog';
+import { bossSfxId } from '../audio/gameplaySfx';
 import { AttackRenderer } from '../boss/AttackRenderer';
 import { BossArena } from '../boss/BossArena';
 import { BossFightDirector, type BossFightEvent } from '../boss/BossFightDirector';
@@ -391,6 +392,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       this.boss.update(now, this.bossX, this.player.damageHitbox.centerX, false);
       if (this.introPhase === 'playerFall' && this.player.isEntranceComplete(now)) {
         this.introPhase = 'bossSpawn';
+        gameAudio(this).playSfx('bossIntro');
         this.boss.startSpawn(now);
       } else if (this.introPhase === 'bossSpawn' && this.boss.spawnComplete) {
         this.introPhase = 'instructions';
@@ -424,16 +426,19 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
   private handleFightEvent(event: BossFightEvent): void {
     switch (event.kind) {
       case 'telegraphStarted':
+        gameAudio(this).playSfx(bossSfxId(event.kind));
         // The windup is the only time emeralds are collectable, so they are
         // offered by the event that starts it rather than on a timer.
         this.emeralds.showWindow(bossTelegraphWindowId(event.attack));
         break;
       case 'attackActivated':
+        gameAudio(this).playSfx(bossSfxId(event.kind));
         // The laser is live: anything not already picked up is lost, now.
         this.emeralds.hideAll();
         this.boss.pulse();
         break;
       case 'playerHit':
+        gameAudio(this).playSfx(bossSfxId(event.kind));
         this.player.onHit(this.time.now, event.beamCenterX);
         this.cameras.main.flash(120, 255, 71, 126).shake(180, 0.01);
         this.hud.flash(`-${BOSS_SCORING.hitPenalty}`, '#ff477e');
@@ -456,6 +461,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
 
   private collectEmeralds(): void {
     for (const emerald of this.emeralds.collect(this.player.collectibleBox)) {
+      gameAudio(this).playSfx('token');
       this.director.collectEmerald();
       this.hud.popScore(emerald.x, emerald.y, BOSS_SCORING.emeraldScore);
     }

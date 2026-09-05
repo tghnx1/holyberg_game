@@ -690,6 +690,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   private endLevel(): void {
     if (this.finished) return;
     this.finished = true; this.playing = false; this.clock.stop(); this.audio.stop();
+    gameAudio(this).playSfx('rhythmGameEnd');
     this.boothAnimation.stop();
     const completeText = this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5);
     const overlay = this.add.container(this.centerX, 0, [completeText]).setDepth(RhythmDepth.UI);

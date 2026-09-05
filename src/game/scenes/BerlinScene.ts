@@ -127,6 +127,7 @@ export class BerlinScene extends Phaser.Scene {
     if (import.meta.env.DEV) console.debug('[BerlinScene] after buildBerlinWorld');
     if (import.meta.env.DEV) console.debug('[BerlinScene] before Player creation');
     this.player = new Player(this, 230, getSelectedCharacter());
+    this.events.on('player-jump-sfx', this.playJumpSfx, this);
     if (import.meta.env.DEV) console.debug('[BerlinScene] after Player creation');
     this.layers.gameplay.add(this.player);
     GROUND_SEGMENTS.forEach((segment) => {
@@ -380,9 +381,14 @@ export class BerlinScene extends Phaser.Scene {
   }
 
   private applyCollectible(config: CollectibleConfig): void {
+    gameAudio(this).playSfx('token');
     this.scoreSystem.addCollectible(config.score);
     this.syncScore();
     this.hud.flash(`${config.label}  +${config.score}`, 900);
+  }
+
+  private playJumpSfx(id: 'jump' | 'doubleJump'): void {
+    gameAudio(this).playSfx(id);
   }
 
   private finish(): void {
@@ -533,6 +539,7 @@ export class BerlinScene extends Phaser.Scene {
    */
   private teardown(): void {
     this.shuttingDown = true;
+    this.events.off('player-jump-sfx', this.playJumpSfx, this);
     this.clearFinishTransitionTimer();
     // Listeners on the *game* emitter outlive the scene, so these must go.
     this.hud.destroy();
