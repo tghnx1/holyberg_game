@@ -55,13 +55,15 @@ export function buildDiagonalStripPoints(
 
 /**
  * Clip polygon for the portrait panel's own content (gradient, glow, noise,
- * the figure itself): everything to the right of the diagonal divider's left
- * edge, local to the same origin the divider itself is drawn against, so the
- * two always line up exactly.
+ * the figure itself). The portrait deliberately remains rectangular behind
+ * the diagonal divider instead of being cut to the divider's left edge.
  *
- * Without this the panel's rectangular mask lets its content render into the
- * wedge the diagonal cuts away at the bottom of the seam, showing through
- * past the divider and into the scene panel underneath it.
+ * The scene panel's artwork is framed, not stretched: its mask can extend
+ * under the seam, but a canonical image may naturally end before the full
+ * skew. Cutting the portrait to the same diagonal then leaves neither panel
+ * drawing that wedge, exposing the black scene clear colour. A rectangular
+ * underlap guarantees coverage; the opaque divider drawn above both panels
+ * remains the visible boundary and preserves the existing framing.
  */
 export function buildPortraitClipPoints(
   panelWidth: number,
@@ -69,9 +71,9 @@ export function buildPortraitClipPoints(
   thickness: number,
   skew: number,
 ): number[] {
-  const leftAtTop = -thickness / 2;
-  const leftAtBottom = skew - thickness / 2;
-  return [leftAtTop, 0, panelWidth, 0, panelWidth, panelHeight, leftAtBottom, panelHeight];
+  void skew;
+  const underlapX = -thickness / 2;
+  return [underlapX, 0, panelWidth, 0, panelWidth, panelHeight, underlapX, panelHeight];
 }
 
 /**

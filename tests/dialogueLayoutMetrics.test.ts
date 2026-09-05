@@ -76,14 +76,26 @@ describe('portrait clip polygon', () => {
     expect(clip[1]).toBe(0);
   });
 
-  it('excludes the wedge left of the diagonal at the bottom of the panel', () => {
+  it('underlaps the diagonal at the bottom so no black wedge can be exposed', () => {
     const clip = buildPortraitClipPoints(300, 400, 20, 90);
     const divider = buildDiagonalStripPoints(20, 90, 400);
-    // Bottom-left x matches the divider band's own left edge at y=height.
-    expect(clip[6]).toBe(divider[6]);
+    // The portrait remains behind the complete diagonal while the divider is
+    // the visible boundary; it must start left of the divider's bottom edge.
+    expect(clip[6]).toBe(clip[0]);
+    expect(clip[6]).toBeLessThan(divider[6]);
     expect(clip[7]).toBe(400);
-    // The clip has drifted right by the skew, same as the divider.
-    expect(clip[6]).toBeGreaterThan(clip[0]);
+  });
+
+  it('keeps the underlap invariant across responsive panel sizes', () => {
+    for (const [width, height] of [[220, 180], [700, 420], [1200, 900]]) {
+      const clip = buildPortraitClipPoints(width, height, 26, 96);
+      const divider = buildDiagonalStripPoints(26, 96, height);
+      expect(clip[0]).toBe(clip[6]);
+      expect(clip[0]).toBeLessThanOrEqual(divider[0]);
+      expect(clip[6]).toBeLessThan(divider[6]);
+      expect(clip[2]).toBe(width);
+      expect(clip[4]).toBe(width);
+    }
   });
 
   it('always covers the full right edge of the panel', () => {
