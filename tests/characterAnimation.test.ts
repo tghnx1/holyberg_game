@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   airborneFrameCount,
   CROUCH_CYCLE_MS,
+  DAMAGE_CYCLE_MS,
+  damageFrameIndex,
   footOffset,
   JUMP_AIRBORNE_MS,
   JUMP_LANDING_HOLD_MS,
@@ -244,9 +246,54 @@ describe('character data carries no gameplay values', () => {
     }
   });
 
-  it('uses only the first damage frame, leaving the rest discovered but unplayed', () => {
+  it('discovers every damage frame on disk, all of them now playable through damageFrameIndex', () => {
     const atmos = getCharacter('atmos');
     expect(atmos.gameplay.damage.length).toBeGreaterThan(1);
     expect(atmos.gameplay.damage[0].key).toBe('character:atmos:gameplay:damage:01');
+  });
+});
+
+describe('damage frame resolution', () => {
+  it('starts on the first frame', () => {
+    expect(damageFrameIndex(0, 4)).toBe(0);
+  });
+
+  it('steps through every frame once across DAMAGE_CYCLE_MS, for any count', () => {
+    for (const count of [1, 2, 4, 6]) {
+      const seen = new Set<number>();
+      for (let elapsed = 0; elapsed < DAMAGE_CYCLE_MS; elapsed += 5) {
+        seen.add(damageFrameIndex(elapsed, count));
+      }
+      expect(seen.size).toBe(count);
+      expect(Math.min(...seen)).toBe(0);
+      expect(Math.max(...seen)).toBe(count - 1);
+    }
+  });
+
+  it('never advances past the last frame — it holds, it does not loop', () => {
+    expect(damageFrameIndex(DAMAGE_CYCLE_MS, 4)).toBe(3);
+    expect(damageFrameIndex(DAMAGE_CYCLE_MS * 10, 4)).toBe(3);
+    expect(damageFrameIndex(100_000, 4)).toBe(3);
+  });
+
+  it('is frame 0 for a single-frame damage set, however much time passes', () => {
+    expect(damageFrameIndex(0, 1)).toBe(0);
+    expect(damageFrameIndex(DAMAGE_CYCLE_MS, 1)).toBe(0);
+  });
+
+  it('is safe against no frames, and against negative/non-finite elapsed time', () => {
+    expect(damageFrameIndex(0, 0)).toBe(0);
+    expect(damageFrameIndex(-50, 4)).toBe(0);
+    expect(damageFrameIndex(Number.NaN, 4)).toBe(0);
+    expect(damageFrameIndex(Infinity, 4)).toBe(0);
+  });
+
+  it('advances in frame order, never skipping backwards', () => {
+    let previous = -1;
+    for (let elapsed = 0; elapsed <= DAMAGE_CYCLE_MS; elapsed += 5) {
+      const index = damageFrameIndex(elapsed, 4);
+      expect(index).toBeGreaterThanOrEqual(previous);
+      previous = index;
+    }
   });
 });

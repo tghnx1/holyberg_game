@@ -104,6 +104,29 @@ export function jumpFrameIndex(elapsedMs: number, jumpFrameCount: number): numbe
 }
 
 /**
+ * Total time a damage reaction takes to step through every discovered
+ * `gameplay/damage` frame once. One shared duration rather than tuned per
+ * context, so a 2-frame and a 4-frame damage set both read as one hit
+ * instead of a character with more frames looking sluggish; a caller whose
+ * own hold window runs longer just keeps showing the last frame for the
+ * remainder (the same "hold the end" idea as `jumpFrameIndex`'s landing
+ * pose).
+ */
+export const DAMAGE_CYCLE_MS = 240;
+
+/**
+ * Damage frame `elapsedMs` into a hit reaction. Steps through every
+ * discovered frame once, then holds the last — a hit-flash that looped would
+ * read as a glitch, not an impact.
+ */
+export function damageFrameIndex(elapsedMs: number, frameCount: number): number {
+  if (frameCount <= 0) return 0;
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return 0;
+  const perFrame = DAMAGE_CYCLE_MS / frameCount;
+  return Math.min(frameCount - 1, Math.floor(elapsedMs / perFrame));
+}
+
+/**
  * The settled pose used when a character is standing about rather than
  * running — the middle of the run cycle, which is Atmos's frame 3 of 6 and
  * generalises to any count.

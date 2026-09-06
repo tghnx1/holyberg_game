@@ -1,4 +1,5 @@
 import {
+  damageFrameIndex,
   loopedFrameIndex,
   RUN_CYCLE_MS,
   staticRunFrameIndex,
@@ -58,17 +59,25 @@ export function resolveLocomotionPose(
   return hasWalkFrames(character) ? 'walk' : 'run';
 }
 
-/** The frame to draw for `motion` at wall-clock `now`. */
+/**
+ * The frame to draw for `motion` at wall-clock `now`.
+ *
+ * `damageStartedAtMs` is only read for `motion === 'damage'`: every
+ * discovered damage frame plays once from that moment (see
+ * `damageFrameIndex`), then holds the last for however long the caller keeps
+ * `motion` at `'damage'`. Defaults to `now` — i.e. frame 0 — for a caller
+ * that does not track when the reaction began.
+ */
 export function resolveLocomotionFrame(
   character: CharacterDefinition,
   motion: LocomotionMotion,
   now: number,
+  damageStartedAtMs: number = now,
 ): CharacterAssetRef {
   const { idle, run, walk, damage } = character.gameplay;
   if (motion === 'damage') {
-    // A static pose, not a cycle: the fall is meant to hold on one frame of
-    // hurt for its whole duration, not loop the Berlin hit-flash animation.
-    return damage[0] ?? idle ?? run[staticRunFrameIndex(run.length)];
+    if (damage.length === 0) return idle ?? run[staticRunFrameIndex(run.length)];
+    return damage[damageFrameIndex(now - damageStartedAtMs, damage.length)];
   }
   if (motion === 'walk') {
     if (hasWalkFrames(character)) {

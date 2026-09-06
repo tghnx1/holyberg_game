@@ -354,6 +354,8 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
   private fallHorizontalVelocity = 0;
   /** `player.y` at the moment FALLING began; COMPLETE waits for a real drop past this, not a fixed world-y. */
   private fallStartY = 0;
+  /** Wall-clock time FALLING began, so the damage pose steps through its frames from the start of the fall. */
+  private fallStartedAtMs = -Infinity;
   /** Thin draggable world-x lines, visible only while the editor is open. */
   private autoWalkTriggerHandle!: Phaser.GameObjects.Rectangle;
   private autoWalkTriggerLine!: Phaser.GameObjects.Rectangle;
@@ -393,6 +395,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     this.fallVelocityY = 0;
     this.fallHorizontalVelocity = 0;
     this.fallStartY = 0;
+    this.fallStartedAtMs = -Infinity;
   }
 
   preload(): void {
@@ -835,7 +838,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
   }
 
   private resolveActorFrame(actor: Level4Actor, now: number): CharacterAssetRef {
-    return resolveLocomotionFrame(actor.character, actor.motion, now);
+    // Only the player ever enters 'damage' (the auto-fall), and only then does
+    // the animation need to start from the fall itself rather than from now.
+    const damageStartedAtMs = actor === this.player ? this.fallStartedAtMs : now;
+    return resolveLocomotionFrame(actor.character, actor.motion, now, damageStartedAtMs);
   }
 
   private syncActor(actor: Level4Actor, now: number): void {
@@ -1424,6 +1430,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     this.fallVelocityY = 0;
     this.fallHorizontalVelocity = this.cutsceneConfig.autoWalkSpeed * FALL_HORIZONTAL_RETENTION;
     this.fallStartY = this.player.y;
+    this.fallStartedAtMs = this.time.now;
     // The existing damage pose, resolved through the same
     // CharacterRegistry-backed locomotion module every other pose in this
     // scene already goes through — nothing here names a character, and every

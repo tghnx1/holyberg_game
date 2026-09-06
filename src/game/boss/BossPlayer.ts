@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  damageFrameIndex,
   footOffset,
   loopedFrameIndex,
   RUN_CYCLE_MS,
@@ -44,6 +45,8 @@ export class BossPlayer {
   /** Cached with the presentation; only those two inputs can change it. */
   private visibleHalfWidth = 0;
   private damageFrameUntilMs = -Infinity;
+  /** When the current hit reaction started, so damage frames play in order. */
+  private damageFrameStartedAtMs = -Infinity;
   private currentPose: BossPlayerPose = 'idle';
   private entranceStartedAtMs?: number;
   private defeated = false;
@@ -96,6 +99,7 @@ export class BossPlayer {
   onHit(nowMs: number, beamCenterX: number): void {
     this.motion = applyKnockback(this.motion, nowMs, beamCenterX);
     this.damageFrameUntilMs = nowMs + BOSS_PLAYER.knockbackDurationMs;
+    this.damageFrameStartedAtMs = nowMs;
     this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.setAlpha(1);
     this.scene.tweens.add({
@@ -248,10 +252,16 @@ export class BossPlayer {
   ): { frame: CharacterAssetRef; pose: BossPlayerPose } {
     const { idle, run, damage } = this.character.gameplay;
     if (!this.isEntranceComplete(nowMs) && this.entranceStartedAtMs !== undefined && damage.length > 0) {
-      return { frame: damage[0], pose: 'damage' };
+      return {
+        frame: damage[damageFrameIndex(nowMs - this.entranceStartedAtMs, damage.length)],
+        pose: 'damage',
+      };
     }
     if (nowMs < this.damageFrameUntilMs && damage.length > 0) {
-      return { frame: damage[0], pose: 'damage' };
+      return {
+        frame: damage[damageFrameIndex(nowMs - this.damageFrameStartedAtMs, damage.length)],
+        pose: 'damage',
+      };
     }
     if (direction === 0 && this.motion.velocityX === 0 && idle) {
       return { frame: idle, pose: 'idle' };

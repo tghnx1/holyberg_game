@@ -20,6 +20,7 @@ import {
 import type { PlayerAnimationState } from '../level/berlin/types';
 import {
   CROUCH_CYCLE_MS,
+  damageFrameIndex,
   footOffset,
   JUMP_LANDING_HOLD_MS,
   jumpFrameIndex,
@@ -64,6 +65,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private wasGrounded = true;
   /** Shows the damage pose for the duration of the existing knockback. */
   private hitAnimUntil = -Infinity;
+  /** When the current hit reaction started, so damage frames play in order. */
+  private hitAnimStartedAt = -Infinity;
 
   private readonly character: CharacterDefinition;
 
@@ -198,9 +201,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private resolveVisualFrame(now: number): CharacterAssetRef {
     const { run, jump, crouch, damage, idle } = this.character.gameplay;
     // Obstacle knockback pre-empts whatever pose run()/crouch would show.
-    // Only the first damage frame is used, as before; the rest stay
-    // discovered but unplayed until a damage animation is designed.
-    if (now < this.hitAnimUntil && damage.length > 0) return damage[0];
+    // Every discovered damage frame plays once from the start of the hit
+    // reaction, then holds the last for whatever remains of the window.
+    if (now < this.hitAnimUntil && damage.length > 0) {
+      return damage[damageFrameIndex(now - this.hitAnimStartedAt, damage.length)];
+    }
     switch (this.animationState) {
       case 'run':
         if (this.frozen && idle) return idle;
@@ -273,6 +278,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hitSlowUntil = now + HIT_SLOW_DURATION;
     this.hitInputsLockedUntil = now + HIT_INPUT_LOCK_MS;
     this.hitAnimUntil = now + HIT_KNOCKBACK_DURATION + 100;
+    this.hitAnimStartedAt = now;
     this.setVelocityX(HIT_KNOCKBACK_SPEED);
     this.scene.time.delayedCall(HIT_KNOCKBACK_DURATION, () => {
       this.speed = HIT_SLOW_SPEED;

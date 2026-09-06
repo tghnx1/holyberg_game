@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getCharacter } from '../src/game/characters/characterRegistry';
-import { WALK_CYCLE_MS, RUN_CYCLE_MS } from '../src/game/characters/characterAnimation';
+import { DAMAGE_CYCLE_MS, WALK_CYCLE_MS, RUN_CYCLE_MS } from '../src/game/characters/characterAnimation';
 import {
   resolveLocomotionFrame,
   resolveLocomotionPose,
@@ -55,18 +55,42 @@ describe('walking in the connective levels', () => {
     expect(resolveLocomotionPose(klaus, 'walk')).toBe('run');
   });
 
-  it('holds the damage pose for every playable character, without naming one', () => {
+  it('holds on the first damage frame for every playable character when no reaction start time is given', () => {
     // playable gates on having at least one damage frame, so this must hold
-    // for every playable character, not just one hand-picked example.
+    // for every playable character, not just one hand-picked example. No 4th
+    // argument defaults `damageStartedAtMs` to `now`, i.e. elapsed 0 — this
+    // is the "just show me the pose" call shape, distinct from an animated
+    // reaction (see the next test).
     for (const character of ['atmos', 'klaus', 'doctor-doms'] as const) {
       const def = getCharacter(character);
       expect(def.capabilities.playable).toBe(true);
       expect(resolveLocomotionPose(def, 'damage')).toBe('damage');
       const frame = resolveLocomotionFrame(def, 'damage', 999);
       expect(frame.key).toBe(def.gameplay.damage[0].key);
-      // Static: unlike walk/run it must not advance with time.
       expect(resolveLocomotionFrame(def, 'damage', 5000).key).toBe(frame.key);
     }
+  });
+
+  it('animates through every discovered damage frame once the reaction start time is passed', () => {
+    const atmos = getCharacter('atmos');
+    expect(atmos.gameplay.damage.length).toBeGreaterThan(1);
+    const damageKeys = new Set(atmos.gameplay.damage.map((frame) => frame.key));
+    const startedAt = 1000;
+
+    const seen = new Set<string>();
+    for (let now = startedAt; now < startedAt + DAMAGE_CYCLE_MS; now += 10) {
+      const frame = resolveLocomotionFrame(atmos, 'damage', now, startedAt);
+      expect(damageKeys.has(frame.key)).toBe(true);
+      seen.add(frame.key);
+    }
+    expect(seen.size).toBe(atmos.gameplay.damage.length);
+    expect(resolveLocomotionFrame(atmos, 'damage', startedAt, startedAt).key).toBe(
+      atmos.gameplay.damage[0].key,
+    );
+    // Holds the last frame rather than looping once the cycle has finished.
+    expect(resolveLocomotionFrame(atmos, 'damage', startedAt + 10_000, startedAt).key).toBe(
+      atmos.gameplay.damage.at(-1)!.key,
+    );
   });
 
   it('falls back to run frames rather than freezing without a walk set', () => {
