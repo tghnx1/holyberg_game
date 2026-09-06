@@ -3,6 +3,7 @@ import { Depth } from '../constants';
 import { SoundManager } from '../audio/SoundManager';
 import { SfxManager } from '../audio/SfxManager';
 import { PAUSE_SCENE_KEY, resumeFromPause, restartFromPause, type PauseSceneData } from '../systems/pause/PauseCoordinator';
+import { UI_COLORS, UI_FONTS, uiButtonStyle, uiHeadingStyle } from '../ui/theme';
 
 const PANEL_WIDTH = 360;
 const PANEL_HEIGHT = 520;
@@ -43,16 +44,12 @@ export class PauseScene extends Phaser.Scene {
       .setInteractive(); // Swallows clicks so they can't reach the frozen scene underneath.
 
     this.add
-      .rectangle(centerX, centerY, PANEL_WIDTH, PANEL_HEIGHT, 0x1a0f26, 0.96)
-      .setStrokeStyle(2, 0xffdf57, 0.8)
+      .rectangle(centerX, centerY, PANEL_WIDTH, PANEL_HEIGHT, UI_COLORS.panelNumber, 0.96)
+      .setStrokeStyle(2, UI_COLORS.accentNumber, 0.9)
       .setDepth(Depth.UI + 91);
 
     this.add
-      .text(centerX, centerY - 220, 'PAUSED', {
-        fontFamily: 'Archivo Black',
-        fontSize: '32px',
-        color: '#ffdf57',
-      })
+      .text(centerX, centerY - 220, 'PAUSED', uiHeadingStyle('32px'))
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92);
 
@@ -108,18 +105,19 @@ export class PauseScene extends Phaser.Scene {
   private createButton(x: number, y: number, label: string, onActivate: () => void): Phaser.GameObjects.Text {
     const text = this.add
       .text(x, y, label, {
-        fontFamily: 'Archivo Black',
+        fontFamily: UI_FONTS.body,
         fontSize: '22px',
-        color: '#ffffff',
-        backgroundColor: '#3a2650',
+        fontStyle: 'bold',
+        color: UI_COLORS.textPrimary,
+        backgroundColor: UI_COLORS.panelRaised,
         padding: { x: 20, y: 10 },
       })
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92)
       .setInteractive({ useHandCursor: true });
     text.on('pointerup', onActivate);
-    text.on('pointerover', () => text.setColor('#ffdf57'));
-    text.on('pointerout', () => text.setColor('#ffffff'));
+    text.on('pointerover', () => text.setColor(UI_COLORS.accentBright));
+    text.on('pointerout', () => text.setColor(UI_COLORS.textPrimary));
     return text;
   }
 
@@ -132,9 +130,10 @@ export class PauseScene extends Phaser.Scene {
   ): Phaser.GameObjects.Text {
     const value = this.add
       .text(x, y, label, {
-        fontFamily: 'Archivo Black',
+        fontFamily: UI_FONTS.body,
         fontSize: '16px',
-        color: '#ffffff',
+        fontStyle: 'bold',
+        color: UI_COLORS.textPrimary,
       })
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92);
@@ -145,13 +144,7 @@ export class PauseScene extends Phaser.Scene {
 
   private createSmallButton(x: number, y: number, label: '-' | '+', onActivate: () => void): Phaser.GameObjects.Text {
     const button = this.add
-      .text(x, y, label, {
-        fontFamily: 'Archivo Black',
-        fontSize: '22px',
-        color: '#ffdf57',
-        backgroundColor: '#3a2650',
-        padding: { x: 12, y: 4 },
-      })
+      .text(x, y, label, uiButtonStyle('22px', { padding: { x: 12, y: 4 } }))
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92)
       .setInteractive({ useHandCursor: true });

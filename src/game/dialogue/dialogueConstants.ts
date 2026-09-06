@@ -1,4 +1,11 @@
-/** Layout and palette for the Hotline Miami-style dialogue presentation. */
+/**
+ * Layout and palette for the Hotline Miami-style dialogue presentation.
+ *
+ * Colors are the same values as `ui/theme.ts`'s `UI_COLORS`, copied rather
+ * than imported: this file is also type-checked from the Node/Vite build
+ * context (see tsconfig.node.json's explicit file list), which `ui/theme.ts`
+ * is not part of.
+ */
 
 export const DialogueDepth = {
   SCENE: 10,
@@ -29,11 +36,11 @@ export const DialogueLayout = {
 } as const;
 
 export const DialoguePalette = {
-  bar: 0x000000,
-  speaker: '#ff477e',
-  text: '#ffffff',
-  skipHint: '#8a7fa0',
+  bar: 0x060806,
+  speaker: '#39ff14',
+  text: '#eef5ea',
+  skipHint: '#93a191',
   glitch: 0xffffff,
-  dividerCore: 0x0a0612,
-  dividerAccent: 0x9dff6c,
+  dividerCore: 0x060806,
+  dividerAccent: 0x39ff14,
 } as const;

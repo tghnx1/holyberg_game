@@ -72,6 +72,7 @@ import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
 import { transformOf } from '../systems/editor/transformItem';
+import { UI_COLORS, uiSecondaryStyle } from '../ui/theme';
 
 export interface ClubSceneData {
   /** Running total carried in from Berlin; Level 2 does not change it. */
@@ -293,11 +294,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     if (!this.game.device.input.touch) return;
 
     this.hint = this.add
-      .text(0, 0, 'HOLD LEFT / RIGHT TO WALK', {
-        fontFamily: 'Space Mono',
-        fontSize: '15px',
-        color: '#ffdf57',
-      })
+      .text(0, 0, 'HOLD LEFT / RIGHT TO WALK', uiSecondaryStyle('15px', { color: UI_COLORS.accent }))
       .setOrigin(0.5, 1)
       .setAlpha(0.85)
       .setScrollFactor(0)

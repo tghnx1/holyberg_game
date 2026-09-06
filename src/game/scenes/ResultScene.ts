@@ -19,6 +19,14 @@ import { computeResultFit } from './resultLayout';
 import { combineAllScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
 import type { RhythmResult } from '../rhythm/types';
 import { releaseKeyboardCaptureWhileFocused } from '../systems/textInputKeyboardRelease';
+import {
+  UI_COLORS,
+  UI_FONTS,
+  uiBodyStyle,
+  uiButtonStyle,
+  uiHeadingStyle,
+  uiTextActionStyle,
+} from '../ui/theme';
 
 const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
 
@@ -69,12 +77,12 @@ export class ResultScene extends Phaser.Scene {
 
   create(): void {
     attachFullscreenExitControl(this);
-    this.cameras.main.setBackgroundColor('#090611');
+    this.cameras.main.setBackgroundColor(UI_COLORS.background);
     this.root = this.add.container(0, 0);
 
     for (let index = 0; index < 12; index += 1) {
       this.root.add(
-        this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, 0x22112e),
+        this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, UI_COLORS.panelNumber),
       );
     }
 
@@ -86,33 +94,16 @@ export class ResultScene extends Phaser.Scene {
     this.storedInstagram = readStoredInstagram(window.localStorage);
     const grade = getPerformanceGrade(this.result.accuracy);
     this.root.add(
+      this.add.text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', uiHeadingStyle('54px')).setOrigin(0.5),
+    );
+    this.root.add(
       this.add
-        .text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', {
-          fontFamily: 'Archivo Black',
-          fontSize: '54px',
-          color: '#ffdf57',
-          stroke: '#55145e',
-          strokeThickness: 9,
-        })
+        .text(280, 134, `YOUR SET RATING: ${grade}`, uiHeadingStyle('27px', { strokeThickness: 5 }))
         .setOrigin(0.5),
     );
     this.root.add(
       this.add
-        .text(280, 134, `YOUR SET RATING: ${grade}`, {
-          fontFamily: 'Archivo Black',
-          fontSize: '27px',
-          color: '#ff9f43',
-        })
-        .setOrigin(0.5),
-    );
-    this.root.add(
-      this.add
-        .text(92, 188, this.formatBreakdown(), {
-          fontFamily: 'Space Mono',
-          fontSize: '18px',
-          color: '#ffffff',
-          lineSpacing: 4,
-        })
+        .text(92, 188, this.formatBreakdown(), uiBodyStyle('18px', { lineSpacing: 4 }))
         .setOrigin(0, 0),
     );
 
@@ -179,23 +170,14 @@ export class ResultScene extends Phaser.Scene {
   private createLeaderboardPanel(): void {
     const showClaimUi = shouldShowClaimUi(this.storedInstagram);
     this.root.add(
-      this.add.rectangle(902, 380, 620, 570, 0x120a1b, 0.94).setStrokeStyle(4, 0xff477e, 0.9),
+      this.add
+        .rectangle(902, 380, 620, 570, UI_COLORS.panelNumber, 0.94)
+        .setStrokeStyle(2, UI_COLORS.accentNumber, 0.9),
     );
     this.root.add(
-      this.add
-        .text(902, 116, 'LEADERBOARD', {
-          fontFamily: 'Archivo Black',
-          fontSize: '32px',
-          color: '#ffdf57',
-        })
-        .setOrigin(0.5),
+      this.add.text(902, 116, 'LEADERBOARD', uiHeadingStyle('32px')).setOrigin(0.5),
     );
-    this.leaderboardText = this.add.text(625, 154, 'LOADING TOP 10…', {
-      fontFamily: 'Space Mono',
-      fontSize: '17px',
-      color: '#ffffff',
-      lineSpacing: 5,
-    });
+    this.leaderboardText = this.add.text(625, 154, 'LOADING TOP 10…', uiBodyStyle('17px', { lineSpacing: 5 }));
     this.root.add(this.leaderboardText);
     this.playerRowText = this.add.text(
       625,
@@ -204,32 +186,30 @@ export class ResultScene extends Phaser.Scene {
         ? `—   CLAIM YOUR SPOT       ${this.totalScore}`
         : this.formatPlayerRow(undefined, this.storedInstagram, this.totalScore),
       {
-        fontFamily: 'Space Mono',
+        fontFamily: UI_FONTS.body,
         fontSize: '18px',
         fontStyle: 'bold',
-        color: '#ff9f43',
-        backgroundColor: '#2b1238',
+        color: UI_COLORS.accentBright,
+        backgroundColor: UI_COLORS.panelRaised,
         padding: { x: 10, y: 8 },
       },
     );
     this.root.add(this.playerRowText);
     this.leaderboardStatus = this.add
-      .text(902, 471, showClaimUi ? 'CALCULATING YOUR POSITION…' : 'UPDATING YOUR BEST SCORE…', {
-        fontFamily: 'Space Mono',
-        fontSize: '16px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-        align: 'center',
-        wordWrap: { width: 540 },
-      })
+      .text(
+        902,
+        471,
+        showClaimUi ? 'CALCULATING YOUR POSITION…' : 'UPDATING YOUR BEST SCORE…',
+        uiBodyStyle('16px', { fontStyle: 'bold', align: 'center', wordWrap: { width: 540 } }),
+      )
       .setOrigin(0.5, 0);
     this.root.add(this.leaderboardStatus);
     this.instagramInput = this.add
       .text(902, 523, '[@____________]', {
-        fontFamily: 'Space Mono',
+        fontFamily: UI_FONTS.body,
         fontSize: '18px',
-        color: '#ffffff',
-        backgroundColor: '#090611',
+        color: UI_COLORS.textPrimary,
+        backgroundColor: UI_COLORS.background,
         padding: { x: 18, y: 9 },
       })
       .setOrigin(0.5)
@@ -265,14 +245,7 @@ export class ResultScene extends Phaser.Scene {
     action: () => void,
   ): Phaser.GameObjects.Text {
     const button = this.add
-      .text(x, y, label, {
-        fontFamily: 'Space Mono',
-        fontSize: '17px',
-        fontStyle: 'bold',
-        color: '#090611',
-        backgroundColor: '#ffdf57',
-        padding: { x: 14, y: 8 },
-      })
+      .text(x, y, label, uiButtonStyle('17px'))
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     button.on('pointerdown', action);
@@ -289,16 +262,12 @@ export class ResultScene extends Phaser.Scene {
     action: () => void,
   ): Phaser.GameObjects.Text {
     const actionText = this.add
-      .text(x, y, label, {
-        fontFamily: 'Space Mono',
-        fontSize: '14px',
-        color: '#ffb0bf',
-      })
+      .text(x, y, label, uiTextActionStyle('14px'))
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     actionText.on('pointerdown', action);
-    actionText.on('pointerover', () => actionText.setColor('#ffffff'));
-    actionText.on('pointerout', () => actionText.setColor('#ffb0bf'));
+    actionText.on('pointerover', () => actionText.setColor(UI_COLORS.accentBright));
+    actionText.on('pointerout', () => actionText.setColor(UI_COLORS.textSecondary));
     this.root.add(actionText);
     return actionText;
   }

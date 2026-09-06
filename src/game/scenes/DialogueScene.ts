@@ -43,6 +43,7 @@ import { getDialoguePresentation } from '../dialogue/dialoguePresentation';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { PausableScene } from '../systems/pause/PausableScene';
+import { UI_COLORS, UI_FONTS, uiHeadingStyle } from '../ui/theme';
 
 export interface DialogueSceneData {
   /** Id from dialogueScripts; defaults to the metro/Magician dialogue. */
@@ -194,7 +195,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
 
   create(): void {
     attachFullscreenExitControl(this);
-    this.cameras.main.setBackgroundColor('#000000');
+    this.cameras.main.setBackgroundColor(UI_COLORS.background);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
 
     this.layout = computeDialogueLayout(this.cameras.main.width, this.cameras.main.height);
@@ -447,11 +448,12 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     const { width, height } = this.layout.topBar;
     this.topBarShape = this.add.rectangle(0, 0, width, height, DialoguePalette.bar).setOrigin(0, 0);
     this.topBarTitle = this.add
-      .text(DialogueLayout.textPaddingX, height / 2, this.script.title ?? 'BERLIN — UNDERGROUND', {
-        fontFamily: 'Archivo Black',
-        fontSize: '30px',
-        color: '#ffdf57',
-      })
+      .text(
+        DialogueLayout.textPaddingX,
+        height / 2,
+        this.script.title ?? 'BERLIN — UNDERGROUND',
+        uiHeadingStyle('30px'),
+      )
       .setOrigin(0, 0.5);
     this.topBarContainer = this.add
       .container(0, 0, [this.topBarShape, this.topBarTitle])
@@ -471,14 +473,14 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     this.speakerText = this.add
       // Filled by applySpeakerForCurrentLine before the first line shows.
       .text(DialogueLayout.textPaddingX, DialogueLayout.speakerOffsetY, '', {
-        fontFamily: 'Archivo Black',
+        fontFamily: UI_FONTS.display,
         fontSize: '22px',
         color: DialoguePalette.speaker,
       })
       .setOrigin(0, 0);
     this.bodyText = this.add
       .text(DialogueLayout.textPaddingX, DialogueLayout.textOffsetY, '', {
-        fontFamily: 'Archivo Black',
+        fontFamily: UI_FONTS.body,
         fontSize: '26px',
         color: DialoguePalette.text,
         lineSpacing: 5,
@@ -509,7 +511,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
       .setDepth(DialogueDepth.SKIP);
     // Fills left-to-right while SPACE is held, so the skip is never a surprise.
     this.skipFill = this.add
-      .rectangle(width - DialogueLayout.textPaddingX, height - 20, 0, 3, 0xffdf57)
+      .rectangle(width - DialogueLayout.textPaddingX, height - 20, 0, 3, UI_COLORS.accentNumber)
       .setOrigin(1, 0)
       .setDepth(DialogueDepth.SKIP);
   }

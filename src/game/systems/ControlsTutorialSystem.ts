@@ -15,6 +15,7 @@ import {
 } from '../level/berlin/controlsTutorial';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { BerlinEntity } from '../level/berlin/types';
+import { UI_COLORS, UI_FONTS, uiButtonStyle, uiHeadingStyle } from '../ui/theme';
 
 /** Fraction of the width the crouch zone occupies; mirrors HudSystem. */
 const DUCK_ZONE_FRACTION = 0.35;
@@ -69,27 +70,20 @@ export class ControlsTutorialSystem {
     this.triggerX = duckTriggerX(entities);
 
     const depth = Depth.UI - 3;
-    this.tint = scene.add.rectangle(0, 0, 1, 1, 0x53ffe0, TINT_ALPHA).setOrigin(0, 0);
+    this.tint = scene.add.rectangle(0, 0, 1, 1, UI_COLORS.accentNumber, TINT_ALPHA).setOrigin(0, 0);
     this.border = scene.add
       .rectangle(0, 0, 1, 1)
       .setOrigin(0, 0)
       .setFillStyle(0x000000, 0)
-      .setStrokeStyle(4, 0xffe36d, 0.9);
+      .setStrokeStyle(4, UI_COLORS.accentNumber, 0.9);
     this.arrow = scene.add
-      .text(0, 0, '', { fontFamily: 'Archivo Black', fontSize: '72px', color: '#ffe36d' })
+      .text(0, 0, '', { fontFamily: UI_FONTS.display, fontSize: '72px', color: UI_COLORS.accent })
       .setOrigin(0.5);
     this.word = scene.add
-      .text(0, 0, '', { fontFamily: 'Archivo Black', fontSize: '30px', color: '#ffffff', align: 'center' })
+      .text(0, 0, '', uiHeadingStyle('30px', { align: 'center' }))
       .setOrigin(0.5);
     this.banner = scene.add
-      .text(0, 0, '', {
-        fontFamily: 'Archivo Black',
-        fontSize: '34px',
-        color: '#120b1d',
-        backgroundColor: '#ffe36d',
-        padding: { x: 18, y: 10 },
-        align: 'center',
-      })
+      .text(0, 0, '', uiButtonStyle('34px', { padding: { x: 18, y: 10 }, align: 'center' }))
       .setOrigin(0.5)
       .setVisible(false);
 
@@ -175,7 +169,7 @@ export class ControlsTutorialSystem {
 
     if (this.state.duckPromptActive) {
       // Pressed-looking zone and a downward drift while the hold is building.
-      this.tint.setFillStyle(0x53ffe0, crouching ? TINT_ALPHA * 2 : TINT_ALPHA);
+      this.tint.setFillStyle(UI_COLORS.accentNumber, crouching ? TINT_ALPHA * 2 : TINT_ALPHA);
       if (crouching && this.state.duckHeldMs === 0) this.callbacks.setPlayerFrozen(false);
       if (updateDuckHold(this.state, crouching, deltaMs)) {
         this.callbacks.setPlayerFrozen(false);
@@ -272,11 +266,11 @@ export class ControlsTutorialSystem {
     const zoneWidth = !this.touch ? width : stage === 'duck' ? duckWidth : width - duckWidth;
 
     this.tint.setPosition(zoneX, 0).setSize(zoneWidth, height);
-    this.tint.setFillStyle(0x53ffe0, this.touch ? TINT_ALPHA : TINT_ALPHA * 0.55);
+    this.tint.setFillStyle(UI_COLORS.accentNumber, this.touch ? TINT_ALPHA : TINT_ALPHA * 0.55);
     this.border
       .setPosition(zoneX + margin / 2, margin / 2)
       .setSize(zoneWidth - margin, height - margin);
-    this.border.setStrokeStyle(4, 0xffe36d, 0.9);
+    this.border.setStrokeStyle(4, UI_COLORS.accentNumber, 0.9);
 
     const centreX = zoneX + zoneWidth / 2;
     this.arrow.setPosition(centreX, height * 0.46);

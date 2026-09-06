@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
+import { UI_COLORS, UI_FONTS, uiHeadingStyle, uiSecondaryStyle } from '../ui/theme';
 
 /**
  * Reusable post-level score screen, shown after a gameplay level finishes
@@ -97,7 +98,7 @@ export class LevelCompleteScene extends Phaser.Scene {
 
   create(): void {
     attachFullscreenExitControl(this);
-    this.cameras.main.setBackgroundColor('#090611');
+    this.cameras.main.setBackgroundColor(UI_COLORS.background);
 
     this.buildUi();
     // Built before the controller, because OrientationController runs its
@@ -108,25 +109,13 @@ export class LevelCompleteScene extends Phaser.Scene {
   }
 
   private buildUi(): void {
-    this.titleText = this.add
-      .text(0, 0, 'LEVEL COMPLETE', {
-        fontFamily: 'Archivo Black',
-        fontSize: '52px',
-        color: '#ffdf57',
-        stroke: '#55145e',
-        strokeThickness: 9,
-      })
-      .setOrigin(0.5);
+    this.titleText = this.add.text(0, 0, 'LEVEL COMPLETE', uiHeadingStyle('52px')).setOrigin(0.5);
 
     if (this.isNonScoring) {
       // One centred line, not three segments: there is no earned/maximum
       // pair to show, so nothing here should read as though there were.
       this.scoreLabel = this.add
-        .text(0, 0, 'THIS LEVEL DOES NOT AWARD SCORE', {
-          fontFamily: 'Space Mono',
-          fontSize: '20px',
-          color: '#a99bc0',
-        })
+        .text(0, 0, 'THIS LEVEL DOES NOT AWARD SCORE', uiSecondaryStyle('20px'))
         .setOrigin(0.5);
       this.scoreValue = this.add.text(0, 0, '', {}).setOrigin(0, 0.5).setVisible(false);
       this.scoreMax = this.add.text(0, 0, '', {}).setOrigin(0, 0.5).setVisible(false);
@@ -135,34 +124,37 @@ export class LevelCompleteScene extends Phaser.Scene {
       // string, so the earned score can read visually stronger than the
       // label and the maximum while the whole line still measures and
       // centres as one unit.
-      this.scoreLabel = this.add
-        .text(0, 0, 'SCORE', { fontFamily: 'Space Mono', fontSize: '22px', color: '#a99bc0' })
-        .setOrigin(0, 0.5);
+      this.scoreLabel = this.add.text(0, 0, 'SCORE', uiSecondaryStyle('22px')).setOrigin(0, 0.5);
       this.scoreValue = this.add
         .text(0, 0, `${this.levelData.score}`, {
-          fontFamily: 'Archivo Black',
+          fontFamily: UI_FONTS.body,
           fontSize: '36px',
-          color: '#ffdf57',
+          fontStyle: 'bold',
+          color: UI_COLORS.accent,
         })
         .setOrigin(0, 0.5);
       this.scoreMax = this.add
-        .text(0, 0, `/ ${this.levelData.maxScore}`, {
-          fontFamily: 'Space Mono',
-          fontSize: '22px',
-          color: '#9c8fb0',
-        })
+        .text(0, 0, `/ ${this.levelData.maxScore}`, uiSecondaryStyle('22px'))
         .setOrigin(0, 0.5);
     }
 
-    this.retryButton = this.createButton('RETRY', '#ff477e', () => {
+    // CONTINUE is the primary action (filled accent green); RETRY stays a
+    // quieter dark panel button rather than a second bright color competing
+    // with it.
+    this.retryButton = this.createButton('RETRY', UI_COLORS.panelRaised, UI_COLORS.textPrimary, () => {
       for (const key of this.levelData.retryCleanupTextureKeys ?? []) {
         if (this.textures.exists(key)) this.textures.remove(key);
       }
       this.scene.start(this.levelData.retryScene, this.levelData.retryData);
     });
-    this.continueButton = this.createButton('CONTINUE', '#ffdf57', () => {
-      this.scene.start(this.levelData.continueScene, this.levelData.continueData);
-    });
+    this.continueButton = this.createButton(
+      'CONTINUE',
+      UI_COLORS.accent,
+      UI_COLORS.background,
+      () => {
+        this.scene.start(this.levelData.continueScene, this.levelData.continueData);
+      },
+    );
   }
 
   /**
@@ -252,10 +244,16 @@ export class LevelCompleteScene extends Phaser.Scene {
    * non-interactive, so taps over the text fall through to the rect and the
    * whole visible button is tappable.
    */
-  private createButton(label: string, color: string, action: () => void): LevelCompleteButton {
+  private createButton(
+    label: string,
+    fillColor: string,
+    textColor: string,
+    action: () => void,
+  ): LevelCompleteButton {
     const background = this.add
-      .rectangle(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT, Phaser.Display.Color.HexStringToColor(color).color)
+      .rectangle(0, 0, BUTTON_WIDTH, BUTTON_HEIGHT, Phaser.Display.Color.HexStringToColor(fillColor).color)
       .setOrigin(0.5)
+      .setStrokeStyle(2, UI_COLORS.accentNumber, 0.8)
       .setInteractive({
         // Local hit-area coordinates are origin-adjusted, so (0,0) is the
         // rect's top-left; the padding grows it evenly on all four sides.
@@ -270,9 +268,10 @@ export class LevelCompleteScene extends Phaser.Scene {
       });
     const text = this.add
       .text(0, 0, label, {
-        fontFamily: 'Archivo Black',
+        fontFamily: UI_FONTS.body,
         fontSize: '24px',
-        color: '#090611',
+        fontStyle: 'bold',
+        color: textColor,
       })
       .setOrigin(0.5);
     const button: LevelCompleteButton = { background, text };

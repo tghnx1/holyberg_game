@@ -16,6 +16,7 @@ import { selectCharacter } from '../characters/characterSelection';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
+import { UI_COLORS, UI_FONTS, uiHeadingStyle, uiSecondaryStyle } from '../ui/theme';
 
 const CARD_WIDTH = 236;
 const CARD_HEIGHT = 304;
@@ -90,7 +91,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.index = 0;
     this.confirmed = false;
     this.cards = [];
-    this.cameras.main.setBackgroundColor('#090611');
+    this.cameras.main.setBackgroundColor(UI_COLORS.background);
     attachFullscreenExitControl(this);
 
     this.buildBackdrop();
@@ -110,7 +111,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   /** A soft vignette so the cards sit on something, matching the game's palette. */
   private buildBackdrop(): void {
     const glow = this.add.graphics().setDepth(Depth.FAR_BACKGROUND);
-    glow.fillStyle(0x55145e, 0.34);
+    glow.fillStyle(UI_COLORS.accentDimNumber, 0.22);
     glow.fillCircle(0, 0, 420);
     glow.setPosition(0, 0);
     this.add.existing(glow);
@@ -119,22 +120,12 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   private buildTitle(): void {
     this.title = this.add
-      .text(0, 0, 'CHOOSE YOUR RUNNER', {
-        fontFamily: 'Archivo Black',
-        fontSize: '44px',
-        color: '#ffdf57',
-        stroke: '#55145e',
-        strokeThickness: 8,
-      })
+      .text(0, 0, 'CHOOSE YOUR RUNNER', uiHeadingStyle('44px', { strokeThickness: 7 }))
       .setOrigin(0.5)
       .setDepth(Depth.UI);
 
     this.hint = this.add
-      .text(0, 0, '', {
-        fontFamily: 'Space Mono',
-        fontSize: '15px',
-        color: '#a99bc0',
-      })
+      .text(0, 0, '', uiSecondaryStyle('15px'))
       .setOrigin(0.5)
       .setDepth(Depth.UI);
   }
@@ -143,14 +134,15 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.track = this.add.container(0, 0).setDepth(Depth.GAMEPLAY);
     this.characters.forEach((character, index) => {
       const frame = this.add
-        .rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x140c22)
-        .setStrokeStyle(3, 0x3a2450);
+        .rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, UI_COLORS.panelNumber)
+        .setStrokeStyle(3, UI_COLORS.accentDimNumber);
       const preview = this.add.image(0, 0, character.gameplay.idle?.key ?? '').setOrigin(0.5, 1);
       const name = this.add
         .text(0, 0, character.name.toUpperCase(), {
-          fontFamily: 'Archivo Black',
+          fontFamily: UI_FONTS.body,
           fontSize: '20px',
-          color: '#ffffff',
+          fontStyle: 'bold',
+          color: UI_COLORS.textPrimary,
         })
         .setOrigin(0.5, 0.5);
       const root = this.add.container(0, 0, [frame, preview, name]);
@@ -175,8 +167,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   private buildConfirm(): void {
     this.confirmBackground = this.add
-      .rectangle(0, 0, CONFIRM_WIDTH, CONFIRM_HEIGHT, 0xffdf57)
+      .rectangle(0, 0, CONFIRM_WIDTH, CONFIRM_HEIGHT, UI_COLORS.accentNumber)
       .setOrigin(0.5)
+      .setStrokeStyle(2, UI_COLORS.accentBrightNumber, 0.9)
       .setDepth(Depth.UI)
       .setInteractive({
         hitArea: new Phaser.Geom.Rectangle(
@@ -190,9 +183,10 @@ export class CharacterSelectScene extends Phaser.Scene {
       });
     this.confirmLabel = this.add
       .text(0, 0, 'SELECT', {
-        fontFamily: 'Archivo Black',
+        fontFamily: UI_FONTS.body,
         fontSize: '24px',
-        color: '#090611',
+        fontStyle: 'bold',
+        color: UI_COLORS.background,
       })
       .setOrigin(0.5)
       .setDepth(Depth.UI + 1);
@@ -214,9 +208,9 @@ export class CharacterSelectScene extends Phaser.Scene {
   private buildArrows(): void {
     if (this.characters.length < 2) return;
     const style = {
-      fontFamily: 'Archivo Black',
+      fontFamily: UI_FONTS.display,
       fontSize: '34px',
-      color: '#ffdf57',
+      color: UI_COLORS.accent,
     } as const;
     const make = (label: string, delta: number): Phaser.GameObjects.Text =>
       this.add
@@ -432,11 +426,14 @@ export class CharacterSelectScene extends Phaser.Scene {
    * through hover, so touch users see the same state as mouse users.
    */
   private styleCard(card: CharacterCard, selected: boolean): void {
-    card.frame.setStrokeStyle(selected ? 4 : 3, selected ? 0xffdf57 : 0x3a2450);
-    card.frame.setFillStyle(selected ? 0x1d1130 : 0x140c22);
+    card.frame.setStrokeStyle(
+      selected ? 4 : 3,
+      selected ? UI_COLORS.accentBrightNumber : UI_COLORS.accentDimNumber,
+    );
+    card.frame.setFillStyle(selected ? UI_COLORS.panelRaisedNumber : UI_COLORS.panelNumber);
     card.root.setScale(selected ? 1 : 0.92);
     card.root.setAlpha(selected ? 1 : 0.66);
-    card.name.setColor(selected ? '#ffdf57' : '#c9b6e4');
+    card.name.setColor(selected ? UI_COLORS.accentBright : UI_COLORS.textSecondary);
     card.name.setPosition(0, CARD_HEIGHT / 2 - 30);
 
     // Fit the idle still inside the card without distorting it.
