@@ -21,15 +21,18 @@ function loaderHarness() {
   const events = new FakeEmitter();
   const loaderEvents = new FakeEmitter();
   const loaded = new Set<string>();
-  const queued: { key: string; url: string }[] = [];
+  const queued: { key: string; url: string; type: 'image' | 'audio' }[] = [];
+  const audio = new Set<string>();
   let loading = false;
   let starts = 0;
   const scene = {
     textures: { exists: (key: string) => loaded.has(key) },
+    cache: { audio: { exists: (key: string) => audio.has(key) } },
     events,
     load: {
       isLoading: () => loading,
-      image: (key: string, url: string) => queued.push({ key, url }),
+      image: (key: string, url: string) => queued.push({ key, url, type: 'image' }),
+      audio: (key: string, url: string) => queued.push({ key, url, type: 'audio' }),
       once: (event: string, listener: () => void) => loaderEvents.once(event, listener),
       start: () => {
         loading = true;
@@ -42,7 +45,10 @@ function loaderHarness() {
     queued,
     get starts() { return starts; },
     complete() {
-      for (const asset of queued) loaded.add(asset.key);
+      for (const asset of queued) {
+        if (asset.type === 'audio') audio.add(asset.key);
+        else loaded.add(asset.key);
+      }
       queued.length = 0;
       loading = false;
       loaderEvents.emit('complete');
@@ -89,7 +95,17 @@ describe('Club cold-load requirements', () => {
       { key: 'cold', url: 'cold.webp' },
     ]);
     await flushQueue();
-    expect(harness.queued).toEqual([{ key: 'cold', url: 'cold.webp' }]);
+    expect(harness.queued).toEqual([{ key: 'cold', url: 'cold.webp', type: 'image' }]);
+    harness.complete();
+    await done;
+  });
+
+  it('serializes a deferred audio registration through the same runtime loader', async () => {
+    const harness = loaderHarness();
+    const runtime = new ClubRuntimeAssetLoader(harness.scene as never);
+    const done = runtime.load([{ key: 'club-sting', url: 'club.mp3', type: 'audio' }]);
+    await flushQueue();
+    expect(harness.queued).toEqual([{ key: 'club-sting', url: 'club.mp3', type: 'audio' }]);
     harness.complete();
     await done;
   });

@@ -1,8 +1,10 @@
 import type Phaser from 'phaser';
 
-export interface ClubRuntimeImageAsset {
+export interface ClubRuntimeAsset {
   key: string;
   url: string;
+  /** Images are the default because all existing Club runtime callers use them. */
+  type?: 'image' | 'audio';
 }
 
 /**
@@ -19,15 +21,15 @@ export class ClubRuntimeAssetLoader {
 
   constructor(private readonly scene: Phaser.Scene) {}
 
-  load(assets: readonly ClubRuntimeImageAsset[]): Promise<void> {
+  load(assets: readonly ClubRuntimeAsset[]): Promise<void> {
     const run = async (): Promise<void> => {
       if (this.destroyed) return;
       await this.waitUntilIdle();
       if (this.destroyed) return;
 
-      const missing = assets.filter((asset) => !this.scene.textures.exists(asset.key));
+      const missing = assets.filter((asset) => !this.isRegistered(asset));
       if (missing.length === 0) return;
-      for (const asset of missing) this.scene.load.image(asset.key, asset.url);
+      for (const asset of missing) this.queue(asset);
       await this.startQueuedBatch();
     };
     const result = this.tail.then(run, run);
@@ -38,6 +40,17 @@ export class ClubRuntimeAssetLoader {
 
   destroy(): void {
     this.destroyed = true;
+  }
+
+  private isRegistered(asset: ClubRuntimeAsset): boolean {
+    return asset.type === 'audio'
+      ? this.scene.cache.audio.exists(asset.key)
+      : this.scene.textures.exists(asset.key);
+  }
+
+  private queue(asset: ClubRuntimeAsset): void {
+    if (asset.type === 'audio') this.scene.load.audio(asset.key, asset.url);
+    else this.scene.load.image(asset.key, asset.url);
   }
 
   private waitUntilIdle(): Promise<void> {

@@ -70,14 +70,18 @@ export function sceneAudioConfig(scene: GameAudioScene): SceneAudioConfig {
   return SCENE_AUDIO[scene];
 }
 
-/** Queues only assets the current scene can use; no Boot-wide audio preload. */
-export function queueSceneAudio(scene: Phaser.Scene, sceneId: GameAudioScene): void {
+/** Resolves a scene's optional Phaser audio files without queuing them. */
+export function getSceneAudioAssets(sceneId: GameAudioScene): readonly GameAudioAsset[] {
   const config = sceneAudioConfig(sceneId);
   const assetIds = [config.soundtrack?.track, ...config.requiredSfx].filter(
     (id): id is GameAudioId => id !== undefined,
   );
-  for (const id of assetIds) {
-    const asset = GAME_AUDIO[id];
+  return assetIds.map((id) => GAME_AUDIO[id]);
+}
+
+/** Queues only assets the current scene can use; no Boot-wide audio preload. */
+export function queueSceneAudio(scene: Phaser.Scene, sceneId: GameAudioScene): void {
+  for (const asset of getSceneAudioAssets(sceneId)) {
     if (!scene.cache.audio.exists(asset.key)) scene.load.audio(asset.key, asset.url);
   }
 }

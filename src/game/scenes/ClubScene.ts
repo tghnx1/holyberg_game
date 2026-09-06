@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import { gameAudio } from '../audio/GameAudio';
-import { queueSceneAudio } from '../audio/gameAudioCatalog';
 import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
 import { queueCharacterWalk } from '../characters/characterAssets';
 import { footOffset } from '../characters/characterAnimation';
@@ -34,6 +33,7 @@ import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
 import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
 import { ClubRuntimeAssetLoader } from '../level/club/ClubRuntimeAssetLoader';
+import { warmClubOptionalAudio } from '../level/club/clubOptionalAudio';
 import { getClubRoomMinimumAssets } from '../level/club/clubRoomAssets';
 import {
   CLUB_ROOM_SCENERY_ITEMS,
@@ -179,7 +179,6 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Demand-driven and idempotent: after Berlin has run, this queues
     // nothing, and a direct ?scene=club still loads what it needs.
     this.character = getSelectedCharacter();
-    queueSceneAudio(this, 'ClubScene');
     queueCharacterWalk(this, this.character);
     const minimum = getClubRoomMinimumAssets(this.roomIndex);
     const room = minimum.room;
@@ -214,6 +213,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
 
     this.runtimeAssets = new ClubRuntimeAssetLoader(this);
+    this.warmOptionalAudio();
 
     this.poster = this.add
       .image(0, 0, CLUB_ROOMS[this.roomIndex].posterKey)
@@ -265,6 +265,20 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       clubStoryCast: this.storyCast,
     });
 
+  }
+
+  /**
+   * Club audio is useful but never a creation prerequisite. The common
+   * soundtrack remains alive when Berlin already started it; a cold direct
+   * Club route starts it only once this detached runtime batch succeeds.
+   */
+  private warmOptionalAudio(): void {
+    const loader = this.runtimeAssets;
+    if (!loader) return;
+    warmClubOptionalAudio(loader, () => {
+      if (!this.scene.isActive()) return;
+      gameAudio(this).startSceneMusic('ClubScene');
+    });
   }
 
   // ---------------------------------------------------------------- input
