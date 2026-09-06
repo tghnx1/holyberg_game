@@ -16,6 +16,7 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import { OrientationController } from '../responsive/OrientationController';
 import { combineAllScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
 import type { RhythmResult } from '../rhythm/types';
+import { releaseKeyboardCaptureWhileFocused } from '../systems/textInputKeyboardRelease';
 
 const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
 
@@ -37,6 +38,8 @@ export class ResultScene extends Phaser.Scene {
   private modal?: HTMLDivElement;
   private modalPromise?: Promise<string | null>;
   private modalResolver?: (value: string | null) => void;
+  /** Restores Phaser's normal key capture; set while the claim modal's input exists. */
+  private releaseInstagramInputCapture?: () => void;
   private claimed?: { instagram: string; bestScore: number; rank: number };
   private playerRank?: number;
   private storedInstagram = '';
@@ -432,6 +435,15 @@ export class ResultScene extends Phaser.Scene {
       });
       if (input instanceof HTMLInputElement) {
         input.value = initialValue;
+        // While this input has focus, Phaser must not preventDefault() any
+        // key it has captured for gameplay/editor shortcuts (A, D, S, E, C,
+        // V, P, Space, ...) — that capture happens regardless of DOM focus,
+        // and would otherwise silently drop those characters while typing a
+        // handle. Restored on blur, and defensively in removeClaimModal too.
+        this.releaseInstagramInputCapture = releaseKeyboardCaptureWhileFocused(
+          this.input.keyboard,
+          input,
+        );
         input.focus();
         input.select();
       }
@@ -440,6 +452,8 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private removeClaimModal(): void {
+    this.releaseInstagramInputCapture?.();
+    this.releaseInstagramInputCapture = undefined;
     this.modal?.remove();
     this.modal = undefined;
   }
