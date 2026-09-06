@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { START_TIME } from '../src/game/constants';
 import { CLEAN_SECTION_BONUS } from '../src/game/systems/BerlinScoreSystem';
 import { BERLIN_ENTITIES, BERLIN_SECTIONS } from '../src/game/level/berlin/berlinLevelConfig';
 import { getBerlinMaxScore } from '../src/game/level/berlin/berlinMaxScore';
@@ -12,10 +11,8 @@ describe('getBerlinMaxScore', () => {
   it('matches a from-scratch calculation using only existing config/constants', () => {
     const collectibles = BERLIN_ENTITIES.filter(isCollectible);
     const maxCollectibleScore = collectibles.reduce((sum, entity) => sum + entity.score, 0);
-    // No collectible adds time, so the best reachable clock is the starting one.
-    const maxTimeBonus = Math.ceil(START_TIME) * 20;
     const maxCleanSectionBonus = (BERLIN_SECTIONS.length - 1) * CLEAN_SECTION_BONUS;
-    const expected = maxCollectibleScore + maxTimeBonus + maxCleanSectionBonus;
+    const expected = maxCollectibleScore + maxCleanSectionBonus;
 
     expect(getBerlinMaxScore()).toBe(expected);
   });
@@ -29,5 +26,15 @@ describe('getBerlinMaxScore', () => {
 
   it('is deterministic', () => {
     expect(getBerlinMaxScore()).toBe(getBerlinMaxScore());
+  });
+
+  it('regression: no longer includes any time bonus — clearing the level early is not worth more', () => {
+    const collectibles = BERLIN_ENTITIES.filter(isCollectible);
+    const maxCollectibleScore = collectibles.reduce((sum, entity) => sum + entity.score, 0);
+    const maxCleanSectionBonus = (BERLIN_SECTIONS.length - 1) * CLEAN_SECTION_BONUS;
+
+    // A from-scratch max with no time component whatsoever must match
+    // exactly — proving nothing derived from a clock leaked back in.
+    expect(getBerlinMaxScore()).toBe(maxCollectibleScore + maxCleanSectionBonus);
   });
 });

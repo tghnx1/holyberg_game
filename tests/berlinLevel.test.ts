@@ -73,24 +73,44 @@ describe('Berlin level config', () => {
 });
 
 describe('Berlin scoring and sections', () => {
-  it('tracks pickups, hits, clean sections and final time separately', () => {
+  it('tracks pickups, hits and clean sections separately', () => {
     const scoring = new BerlinScoreSystem();
     scoring.addCollectible(500);
     scoring.hitObstacle();
     scoring.awardCleanSection();
-    expect(scoring.finish(3.1)).toBe(730);
+    expect(scoring.finish()).toBe(650);
     expect(scoring.breakdown).toEqual({
       base: 0,
       collectibles: 500,
       cleanSections: 250,
       penalties: -100,
-      timeBonus: 80,
     });
   });
   it('does not let an obstacle produce a negative total', () => {
     const scoring = new BerlinScoreSystem();
     scoring.hitObstacle();
     expect(scoring.score).toBe(0);
+  });
+  it('regression: finish() adds nothing on top of the running score — no hidden time bonus', () => {
+    const scoring = new BerlinScoreSystem();
+    scoring.addCollectible(500);
+    scoring.awardCleanSection();
+    const scoreBeforeFinish = scoring.score;
+
+    expect(scoring.finish()).toBe(scoreBeforeFinish);
+    expect(scoring.score).toBe(scoreBeforeFinish);
+    expect(scoring.breakdown).not.toHaveProperty('timeBonus');
+  });
+  it('regression: a score of 1000 visible in the HUD stays 1000 after finish()', () => {
+    const scoring = new BerlinScoreSystem();
+    scoring.addCollectible(750);
+    scoring.awardCleanSection();
+    scoring.hitObstacle();
+    expect(scoring.score).toBe(900);
+    scoring.addCollectible(100);
+    expect(scoring.score).toBe(1000);
+
+    expect(scoring.finish()).toBe(1000);
   });
   it('awards only undamaged forward section crossings', () => {
     const tracker = new SectionTracker();

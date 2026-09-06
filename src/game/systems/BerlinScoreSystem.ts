@@ -3,7 +3,6 @@ export interface BerlinScoreBreakdown {
   collectibles: number;
   cleanSections: number;
   penalties: number;
-  timeBonus: number;
 }
 
 export const CLEAN_SECTION_BONUS = 250;
@@ -15,7 +14,6 @@ export class BerlinScoreSystem {
     collectibles: 0,
     cleanSections: 0,
     penalties: 0,
-    timeBonus: 0,
   };
   get score(): number {
     return Math.max(
@@ -32,8 +30,14 @@ export class BerlinScoreSystem {
   awardCleanSection(): void {
     this.breakdown.cleanSections += CLEAN_SECTION_BONUS;
   }
-  finish(seconds: number): number {
-    this.breakdown.timeBonus = Math.ceil(Math.max(0, seconds)) * 20;
+  /**
+   * Settles the run. Berlin has no running countdown any more (the clock
+   * shown in the HUD is display-only), so this must not add anything on top
+   * of `score` — doing so used to add a flat time bonus derived from the
+   * unchanging start time, which silently bumped the score at the exact
+   * moment the player stopped watching it update live.
+   */
+  finish(): number {
     return this.score;
   }
 }

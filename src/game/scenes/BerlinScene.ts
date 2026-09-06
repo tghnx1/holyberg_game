@@ -392,7 +392,7 @@ export class BerlinScene extends Phaser.Scene {
     if (this.finishTriggered || this.progress.state !== 'running') return;
     this.finishTriggered = true;
     this.progress.state = 'won';
-    this.progress.score = this.scoreSystem.finish(this.progress.seconds);
+    this.progress.score = this.scoreSystem.finish();
     // LevelCompleteScene owns the result presentation. Starting it in the
     // same completion turn avoids exposing a halted Berlin frame while a
     // wall-clock handoff waits in the background.
