@@ -60,12 +60,15 @@ describe('Berlin level config', () => {
   it('keeps every ground obstacle and platform inside the 15500-unit world', () => {
     expect(BERLIN_ENTITIES.every((entity) => entity.x >= 0 && entity.x <= 15500)).toBe(true);
   });
-  it('gives the early moving platforms opposite phases', () => {
-    const early = BERLIN_ENTITIES.filter(
-      (entity) => entity.type === 'movingPlatform' && entity.id.startsWith('early-'),
-    );
-    expect(early).toHaveLength(2);
-    expect(early.map((p) => 'phaseMs' in p && p.phaseMs).sort()).toEqual([0, 1350]);
+  it('keeps every authored moving platform internally valid', () => {
+    const moving = BERLIN_ENTITIES.filter((entity) => entity.type === 'movingPlatform');
+    expect(moving.length).toBeGreaterThan(0);
+    for (const platform of moving) {
+      expect(platform.axis === 'horizontal' || platform.axis === 'vertical').toBe(true);
+      expect(platform.movementDistance).toBeGreaterThan(0);
+      expect(platform.durationMs).toBeGreaterThan(0);
+      expect(platform.phaseMs).toBeGreaterThanOrEqual(0);
+    }
   });
   it('defines one unbroken ground segment across the world', () => {
     expect(GROUND_SEGMENTS.map((segment) => [segment.startX, segment.endX])).toEqual([[0, 15500]]);

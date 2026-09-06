@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AntiMashSystem, applyBadTap, LaneInputGuard } from '../src/game/rhythm/InputPenaltySystem';
+import { LANE_INPUT_COOLDOWN_MS } from '../src/game/rhythm/constants';
 import { applyJudgement, initialScoreState } from '../src/game/rhythm/ScoreSystem';
 
 describe('bad taps and anti-mash', () => {
@@ -8,10 +9,10 @@ describe('bad taps and anti-mash', () => {
     expect(guard.beginPointer(1, 0, 100)).toBe(true);
     expect(guard.beginPointer(1, 1, 200)).toBe(false);
     guard.endPointer(1);
-    expect(guard.beginPointer(1, 0, 150)).toBe(false);
+    expect(guard.beginPointer(1, 0, 100 + LANE_INPUT_COOLDOWN_MS - 1)).toBe(false);
     guard.endPointer(1);
-    expect(guard.beginPointer(1, 0, 181)).toBe(true);
-    expect(guard.beginPointer(2, 1, 181)).toBe(true);
+    expect(guard.beginPointer(1, 0, 100 + LANE_INPUT_COOLDOWN_MS)).toBe(true);
+    expect(guard.beginPointer(2, 1, 100 + LANE_INPUT_COOLDOWN_MS)).toBe(true);
   });
   it('penalizes an empty press without creating a miss', () => {
     const state = applyBadTap({ ...initialScoreState(), score: 30, combo: 12 });

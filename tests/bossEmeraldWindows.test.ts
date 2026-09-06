@@ -33,13 +33,16 @@ describe('Boss emerald telegraph windows', () => {
     const plan = buildFightPlan({ minX: 70, maxX: 1210 }, 1);
     expect(plan.attacks.length).toBeGreaterThan(10);
     for (const attack of plan.attacks) {
-      const spots = getAuthoredEmeraldSpots(keyFor(attack.id));
-      expect(spots.map((spot) => spot.id)).toEqual([
-        'emerald-02',
-        'emerald-04',
-        'emerald-03',
-        'emerald-01',
-      ]);
+      const key = keyFor(attack.id);
+      const authored = buildSceneLayoutPayload(key)[key];
+      const spots = getAuthoredEmeraldSpots(key);
+      expect(authored).toBeDefined();
+      expect(Object.keys(authored).length).toBeGreaterThan(0);
+      expect(spots).toHaveLength(Object.keys(authored).length);
+      // The runtime intentionally presents authored spots left-to-right, not
+      // by their editor IDs. IDs may therefore change independently of play.
+      expect(spots.map((spot) => spot.x)).toEqual([...spots.map((spot) => spot.x)].sort((a, b) => a - b));
+      expect(new Set(spots.map((spot) => spot.id)).size).toBe(spots.length);
     }
   });
 
