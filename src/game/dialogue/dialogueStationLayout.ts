@@ -40,6 +40,14 @@ export interface StationPixelTransform {
   scale: number;
 }
 
+export interface StationLayoutSnapshotEntry {
+  id: string;
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+}
+
 /** Ratio -> absolute pixels for the panel currently being laid out. */
 export function resolveStationTransform(
   layout: StationObjectLayout,
@@ -66,4 +74,39 @@ export function toStationObjectLayout(
     yRatio: panelHeight > 0 ? transform.y / panelHeight : 0,
     heightRatio: panelHeight > 0 ? (nativeHeight * transform.scale) / panelHeight : 0,
   };
+}
+
+/**
+ * Produces the persisted rest-pose layout from a SceneEditor snapshot.
+ *
+ * Animated stage objects may have a live transform that differs from the
+ * authored one while their tween is running. Callers provide that object's
+ * tracked rest transform so saving never bakes animation progress into the
+ * next run's layout.
+ */
+export function buildStationLayoutFromSnapshot(
+  layout: DialogueStationLayoutConfig,
+  snapshot: readonly StationLayoutSnapshotEntry[],
+  nativeHeights: Record<StationObjectKey, number>,
+  panelWidth: number,
+  panelHeight: number,
+  restTransforms: Partial<Record<StationObjectKey, StationPixelTransform>> = {},
+): DialogueStationLayoutConfig {
+  const next: DialogueStationLayoutConfig = structuredClone(layout);
+  for (const entry of snapshot) {
+    const id = entry.id as StationObjectKey;
+    if (!(id in nativeHeights)) continue;
+    const transform = restTransforms[id] ?? {
+      x: entry.x,
+      y: entry.y,
+      scale: entry.scaleY,
+    };
+    next[id] = toStationObjectLayout(
+      transform,
+      panelWidth,
+      panelHeight,
+      nativeHeights[id],
+    );
+  }
+  return next;
 }

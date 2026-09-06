@@ -7,11 +7,12 @@ import {
   DialogueStageViewport,
 } from './DialogueStageViewport';
 import {
+  buildStationLayoutFromSnapshot,
   DEFAULT_STATION_LAYOUT,
   resolveStationTransform,
-  toStationObjectLayout,
   type DialogueStationLayoutConfig,
   type StationObjectKey,
+  type StationPixelTransform,
 } from './dialogueStationLayout';
 import { DIALOGUE_STATION_TEXTURE_KEYS } from './stationAssets';
 import { footOffset } from '../characters/characterAnimation';
@@ -87,7 +88,9 @@ export class StationSceneView {
   private readonly foreground?: Phaser.GameObjects.Image;
   private readonly seated: Phaser.GameObjects.Image;
   private readonly arriving: Phaser.GameObjects.Sprite;
-  /** Recomputed from the train's current rest transform on every edit. */
+  /** Authored pose; intentionally independent of the live departure tween. */
+  private trainRestTransform: StationPixelTransform = { x: 0, y: 0, scale: 1 };
+  /** Recomputed from the train's authored rest transform on every edit. */
   private trainDepartX = 0;
   /** Recomputed from the arriving actor's settled rest transform on every edit. */
   private arrivingFloorY = 0;
@@ -132,6 +135,7 @@ export class StationSceneView {
     if (this.background) children.push(this.background);
 
     this.train = this.buildTrain();
+    this.trainRestTransform = this.readTransform(this.train);
     this.recomputeTrainDeparture();
     children.push(this.train);
 
@@ -196,6 +200,20 @@ export class StationSceneView {
     return image;
   }
 
+  private readTransform(image: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite): StationPixelTransform {
+    return { x: image.x, y: image.y, scale: image.scaleY };
+  }
+
+  /** Called only for deliberate editor edits, never while the departure tween advances. */
+  private updateTrainRestTransform(transform: EditableTransform): void {
+    this.trainRestTransform = {
+      x: transform.x,
+      y: transform.y,
+      scale: transform.scaleY,
+    };
+    this.recomputeTrainDeparture();
+  }
+
   /** The seated actor, present for the whole scene. */
   /** Whoever the cast seats here; the renderer does not choose. */
   private buildSeatedActor(): Phaser.GameObjects.Image {
@@ -215,7 +233,7 @@ export class StationSceneView {
     return sprite;
   }
 
-  /** Train's departure target follows its current rest position/scale, so editing it live stays correct. */
+  /** Train departure target follows its authored rest scale, so editing it live stays correct. */
   private recomputeTrainDeparture(): void {
     this.trainDepartX = STATION_CANONICAL_WIDTH + this.train.displayWidth;
   }
@@ -287,7 +305,7 @@ export class StationSceneView {
   getEditableObjects(): EditableObject[] {
     const entries: { id: StationObjectKey; label: string; target?: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite; nativeHeight: number; onChange?: (t: EditableTransform) => void }[] = [
       { id: 'background', label: 'background_metro', target: this.background, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.background, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
-      { id: 'train', label: 'train', target: this.train, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT), onChange: () => this.recomputeTrainDeparture() },
+      { id: 'train', label: 'train', target: this.train, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.train, CHARACTER_CANVAS_HEIGHT), onChange: (transform) => this.updateTrainRestTransform(transform) },
       { id: 'foreground', label: 'first_plan_metro', target: this.foreground, nativeHeight: this.nativeHeightOf(DIALOGUE_STATION_TEXTURE_KEYS.foreground, BACKDROP_NATIVE_HEIGHT_FALLBACK) },
       { id: 'seated', label: 'Seated actor', target: this.seated, nativeHeight: CHARACTER_CANVAS_HEIGHT },
       { id: 'arriving', label: 'Arriving actor', target: this.arriving, nativeHeight: CHARACTER_CANVAS_HEIGHT, onChange: () => this.recomputeArrivingFloor() },
@@ -320,18 +338,18 @@ export class StationSceneView {
       seated: CHARACTER_CANVAS_HEIGHT,
       arriving: CHARACTER_CANVAS_HEIGHT,
     };
-    const next: DialogueStationLayoutConfig = structuredClone(this.layout);
-    for (const entry of snapshot) {
-      const id = entry.id as StationObjectKey;
-      if (!(id in heightById)) continue;
-      next[id] = toStationObjectLayout(
-        { x: entry.x, y: entry.y, scale: entry.scaleY },
-        STATION_CANONICAL_WIDTH,
-        STATION_CANONICAL_HEIGHT,
-        heightById[id],
-      );
-    }
-    return next;
+    return buildStationLayoutFromSnapshot(
+      this.layout,
+      snapshot,
+      heightById,
+      STATION_CANONICAL_WIDTH,
+      STATION_CANONICAL_HEIGHT,
+      {
+        // The visible train may be far off-screen after departure. Persist
+        // its authored rest pose instead so a P-save cannot erase it next run.
+        train: this.trainRestTransform,
+      },
+    );
   }
 
   destroy(): void {
