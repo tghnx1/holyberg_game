@@ -462,6 +462,7 @@ export class BerlinScene extends Phaser.Scene {
         this.cameras.main.stopFollow();
       },
       restoreCamera: () => this.followPlayer(),
+      presentationObjects: [this.player.getEditablePresentation()],
     });
     this.editor = layoutEditor;
     // P is the shared editor core's save key now, bound only while edit mode

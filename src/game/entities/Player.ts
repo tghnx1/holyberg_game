@@ -35,6 +35,8 @@ import {
   type CharacterDefinition,
   type CharacterGameplayPose,
 } from '../characters/characterManifest';
+import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import type { EditableObject } from '../systems/SceneEditor';
 
 // Re-exported so existing importers (BootScene) keep one import site while the
 // frame data itself lives in a Phaser-free module shared with the boss arena.
@@ -88,10 +90,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.currentVisualFrameKey = idle.key;
     this.visual = scene.add.sprite(x, GROUND_Y, idle.key);
     this.visual.setOrigin(0.5, 1);
-    const idleScale = this.resolveVisualScale('idle');
-    this.visual.setScale(idleScale);
-    this.visual.y = GROUND_Y + footOffset(idle.footGap, idleScale) + 10;
     this.visual.setDepth(Depth.PLAYER);
+    this.syncVisual(this.scene.time.now);
   }
 
   run(now: number): void {
@@ -160,15 +160,46 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // (the body only resyncs on Phaser's next automatic preUpdate).
     const frame = this.resolveVisualFrame(now);
     const scale = this.resolveVisualScale(this.resolveVisualPose(now));
-    this.visual.x = this.x;
-    this.visual.y = this.y + footOffset(frame.footGap, scale) + 10;
+    const anchor = this.visualAnchor(frame, scale);
+    const presentation = getPlayerVisualOffset(this.scene.scene.key);
+    this.visual.x = anchor.x + presentation.offsetX;
+    this.visual.y = anchor.y + presentation.offsetY;
     if (frame.key !== this.currentVisualFrameKey) {
       this.visual.setTexture(frame.key);
       this.currentVisualFrameKey = frame.key;
     }
-    this.visual.setScale(scale);
+    this.visual.setScale(scale * presentation.scale);
+    this.visual.setFlipX(presentation.flipX);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);
+  }
+
+  /** Where gameplay normally anchors the visual before its authored offset. */
+  private visualAnchor(frame: CharacterAssetRef, baseScale: number): { x: number; y: number } {
+    return { x: this.x, y: this.y + footOffset(frame.footGap, baseScale) + 10 };
+  }
+
+  /**
+   * Exposes only the drawn sprite to the editor. The invisible Arcade sprite
+   * remains untouched, so presentation edits cannot affect physics or spawn.
+   */
+  getEditablePresentation(): EditableObject {
+    const currentPresentation = (): { frame: CharacterAssetRef; scale: number } => {
+      const now = this.scene.time.now;
+      return {
+        frame: this.resolveVisualFrame(now),
+        scale: this.resolveVisualScale(this.resolveVisualPose(now)),
+      };
+    };
+    return createPlayerEditable(this.scene, {
+      sprite: this.visual,
+      getAnchor: () => {
+        const { frame, scale } = currentPresentation();
+        return this.visualAnchor(frame, scale);
+      },
+      getBaseScale: () => currentPresentation().scale,
+      refresh: () => this.syncVisual(this.scene.time.now),
+    });
   }
 
   private resolveVisualPose(now: number): CharacterGameplayPose {

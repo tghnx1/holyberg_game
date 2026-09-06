@@ -7,11 +7,13 @@ import { SceneEditorCore } from './editor/SceneEditorCore';
 import { uniqueEditorId } from './editor/editorClipboard';
 import { expandFromVisual, narrowToVisual, type VisualFraction } from './editor/editorGeometry';
 import type { EditableItem, EditorMarker, EditorPoint } from './editor/editorItem';
+import { toEditableItem, type EditableObject } from './editor/transformItem';
 import {
   resizeBoundsSize,
   type MinimumResizeSize,
   type ResizeBounds,
 } from './levelEditorResize';
+import { buildSceneLayoutPayload } from './sceneLayout';
 
 /** Entity kinds the editor lets you move; the `finish` trigger is excluded. */
 const EDITABLE_TYPES = new Set(['obstacle', 'collectible', 'platform', 'movingPlatform', 'scenery']);
@@ -69,6 +71,8 @@ export interface LevelEditorHooks {
   releaseCamera: () => void;
   /** Reattaches the gameplay camera and resets the view. */
   restoreCamera: () => void;
+  /** Singleton visual-only scene objects, e.g. the playable character. */
+  presentationObjects?: readonly EditableObject[];
 }
 
 /**
@@ -90,6 +94,7 @@ export interface LevelEditorHooks {
  */
 export class LevelEditorSystem {
   private readonly entities: EditableEntity[];
+  private readonly presentationObjects: readonly EditableObject[];
   /** Authored positions, kept so a saved layout can report what changed. */
   private readonly authored = new Map<string, { x: number; y: number; movementDistance?: number }>();
   private readonly core: SceneEditorCore;
@@ -113,6 +118,7 @@ export class LevelEditorSystem {
     built: readonly BuiltEntity[],
     private readonly hooks: LevelEditorHooks,
   ) {
+    this.presentationObjects = hooks.presentationObjects ?? [];
     this.entities = built
       .filter(({ config }) => EDITABLE_TYPES.has(config.type))
       .map(({ config, artwork, zone }) => ({
@@ -154,6 +160,7 @@ export class LevelEditorSystem {
       describe: () => (this.deleted.length ? [`${this.deleted.length} deleted`] : []),
     });
     for (const entity of this.entities) this.core.register(this.itemFor(entity));
+    for (const object of this.presentationObjects) this.core.register(toEditableItem(object));
 
     // The generated JSON is the level. A localStorage backup is per-browser,
     // so applying it automatically would make the same build show a different
@@ -538,14 +545,24 @@ export class LevelEditorSystem {
 
     this.saving = true;
     this.flash('SAVING…');
-    void fetch(SAVE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: json,
-    })
-      .then(async (response) => {
+    const saves = [
+      { route: SAVE_ENDPOINT, body: json },
+      ...(this.presentationObjects.length > 0
+        ? [{ route: '/__scene-editor/save-layout', body: buildSceneLayoutPayload(this.scene.scene.key) }]
+        : []),
+    ];
+    void Promise.all(
+      saves.map(async ({ route, body }) => {
+        const response = await fetch(route, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: typeof body === 'string' ? body : JSON.stringify(body),
+        });
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+        if (!response.ok) throw new Error(payload.error ?? `${route} returned HTTP ${response.status}`);
+      }),
+    )
+      .then(() => {
         this.flash('CONFIG SAVED TO FILE');
       })
       .catch((error: unknown) => {

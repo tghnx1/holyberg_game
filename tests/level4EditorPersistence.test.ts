@@ -181,6 +181,44 @@ describe('PLAYER: rightward move + resize survives save + reload', () => {
     expect(reloaded?.scale).toBeCloseTo(saved!.scale!, 6);
   });
 
+  it('uses the same visual-only adapter for Berlin, including authored horizontal flip', () => {
+    const anchor = { x: 230, y: 610 };
+    const baseScale = 0.8;
+    const target = fakeTarget(anchor.x, anchor.y, baseScale, baseScale, 0.5, 1) as FakeTarget & {
+      frame: { realWidth: number; realHeight: number };
+    };
+    target.frame = { realWidth: 64, realHeight: 96 };
+    const object = createPlayerEditable(
+      { scene: { key: 'BerlinScene' } } as never,
+      {
+        sprite: target as never,
+        getAnchor: () => anchor,
+        getBaseScale: () => baseScale,
+        refresh: () => undefined,
+      },
+    );
+    const item = toEditableItem(object as never);
+    const before = item.getBounds();
+    item.setBounds({
+      left: before.left + 48,
+      right: before.right + 72,
+      top: before.top + 12,
+      bottom: before.bottom + 36,
+    });
+    item.flipHorizontal?.();
+
+    const saved = getSceneObjectLayout('BerlinScene', 'player');
+    expect(saved?.flipX).toBe(true);
+    expect(saved?.xRatio).toBeGreaterThan(0);
+    expect(saved?.scale).not.toBe(1);
+
+    const payload = buildSceneLayoutPayload('BerlinScene');
+    const validated = validateSceneLayout(payload) as Record<string, unknown>;
+    resetSceneLayout();
+    loadSceneLayoutFromFake(validated);
+    expect(getSceneObjectLayout('BerlinScene', 'player')).toEqual(saved);
+  });
+
   it('the stall-entry logical-target conversion only reads the offset, never writes it', () => {
     // Author a non-zero player offset the way the editor would.
     setSceneObjectLayout('Level4Scene', 'player', { xRatio: 0.05, yRatio: 0, scale: 1.4 });
