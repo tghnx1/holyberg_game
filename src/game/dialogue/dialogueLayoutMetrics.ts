@@ -41,6 +41,11 @@ export interface DialogueLayoutMetrics {
   dividerPoints: readonly number[];
 }
 
+export interface DialogueLayoutOptions {
+  topBarHeight?: number;
+  bottomBarHeight?: number;
+}
+
 /**
  * Points for a diagonal strip of `thickness` centred on x=0 at the top,
  * drifting `skew` pixels to the right by the time it reaches `bodyHeight` —
@@ -98,9 +103,13 @@ export function computePortraitFitScale(
   return Math.min(panelWidth / sourceWidth, panelHeight / sourceHeight) * fillRatio;
 }
 
-export function computeDialogueLayout(width: number, height: number): DialogueLayoutMetrics {
-  const topBarHeight = DialogueLayout.topBarHeight;
-  const bottomBarHeight = DialogueLayout.bottomBarHeight;
+export function computeDialogueLayout(
+  width: number,
+  height: number,
+  options: DialogueLayoutOptions = {},
+): DialogueLayoutMetrics {
+  const topBarHeight = options.topBarHeight ?? DialogueLayout.topBarHeight;
+  const bottomBarHeight = options.bottomBarHeight ?? DialogueLayout.bottomBarHeight;
   const bodyHeight = Math.max(0, height - topBarHeight - bottomBarHeight);
   const sceneWidth = Math.round(width * DialogueLayout.scenePanelWidthRatio);
   const portraitWidth = Math.max(0, width - sceneWidth);
@@ -121,6 +130,51 @@ export function computeDialogueLayout(width: number, height: number): DialogueLa
       bodyHeight,
     ),
   };
+}
+
+/** Conservative monospace wrapping estimate used to reserve dialogue-bar height before Phaser renders it. */
+export function estimateWrappedLineCount(text: string, wrapWidth: number, fontSize: number): number {
+  const charactersPerLine = Math.max(1, Math.floor(wrapWidth / (fontSize * 0.62)));
+  let lines = 0;
+  for (const paragraph of text.split('\n')) {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines += 1;
+      continue;
+    }
+    let used = 0;
+    lines += 1;
+    for (const word of words) {
+      const length = Math.min(word.length, charactersPerLine);
+      if (used > 0 && used + 1 + length > charactersPerLine) {
+        lines += 1;
+        used = length;
+      } else {
+        used += (used > 0 ? 1 : 0) + length;
+      }
+    }
+  }
+  return lines;
+}
+
+export function dialogueBottomBarHeight(input: {
+  viewportHeight: number;
+  wrapWidth: number;
+  fontSize: number;
+  lineSpacing: number;
+  lines: readonly string[];
+  compactPhone: boolean;
+}): number {
+  const base = input.compactPhone ? 224 : DialogueLayout.bottomBarHeight;
+  const longest = Math.max(
+    1,
+    ...input.lines.map((line) => estimateWrappedLineCount(line, input.wrapWidth, input.fontSize)),
+  );
+  const bodyBottom = DialogueLayout.textOffsetY + longest * (input.fontSize + input.lineSpacing);
+  const required = bodyBottom + (input.compactPhone ? 38 : 30);
+  // Always preserve a useful live scene strip above the copy.
+  const maximum = Math.max(base, input.viewportHeight - DialogueLayout.topBarHeight - 120);
+  return Math.min(Math.max(base, required), maximum);
 }
 
 /**

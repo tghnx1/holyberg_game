@@ -46,6 +46,7 @@ import {
 import type { CurrentSceneSnapshot } from '../dialogue/currentSceneSnapshot';
 import { prefetchNextLevel } from '../systems/campaignPrefetch';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 export class RhythmScene extends Phaser.Scene implements PausableScene {
   private berlinScore = 0;
@@ -107,6 +108,12 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   private debugPointer = { x: 0, y: 0, lane: null as Lane | null };
   /** InputManager pointers are global and must be added only once per scene instance. */
   private touchPointersAdded = false;
+  private instructionTexts: Array<{
+    text: Phaser.GameObjects.Text;
+    desktopSize: number;
+    kind: 'heading' | 'body' | 'button';
+  }> = [];
+  private typographyViewport?: ViewportInfo;
 
   private get centerX(): number {
     return this.cameras.main.width / 2;
@@ -149,6 +156,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     );
     this.lastTimingDifferenceMs = null;
     this.audioEnded = false;
+    this.instructionTexts = [];
+    this.typographyViewport = undefined;
   }
   preload(): void {
     queueSceneAudio(this, 'RhythmScene');
@@ -349,7 +358,13 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       this.touchLabels.push(label);
     }
     this.hitHere = this.add.text(this.centerX, HIT_LINE_Y - 24, 'HIT HERE', { fontFamily: 'Space Mono', fontSize: '16px', fontStyle: 'bold', color: '#ffffff', backgroundColor: '#301536', padding: { x: 9, y: 4 } }).setOrigin(0.5, 1).setDepth(RhythmDepth.JUDGEMENT_EFFECTS);
-    if (this.game.device.input.touch) this.touchInstruction = this.add.text(this.centerX, PAD_BOTTOM_Y + 20, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI);
+    if (this.game.device.input.touch) {
+      this.touchInstruction = this.rememberInstructionText(
+        this.add.text(this.centerX, PAD_BOTTOM_Y + 20, 'TAP THE LANE WHEN THE NOTE REACHES THE LINE', { fontFamily: 'Space Mono', fontSize: '13px', color: '#ffffff' }).setOrigin(0.5, 1).setDepth(RhythmDepth.UI),
+        13,
+        'body',
+      );
+    }
     this.touchDebug = this.add.graphics().setDepth(RhythmDepth.UI + 1);
     this.touchDebugText = this.add.text(18, 130, '', { fontFamily: 'Space Mono', fontSize: '15px', color: '#56ffff', backgroundColor: '#090611cc', padding: { x: 8, y: 6 } }).setDepth(RhythmDepth.UI + 1).setVisible(false);
   }
@@ -376,7 +391,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
 
   private createStartOverlay(): void {
     const background = this.add.rectangle(0, this.cameras.main.height / 2, 760, 280, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
-    const text = this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE\nOR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '34px', color: '#ffdd57', align: 'center', lineSpacing: 8 }).setOrigin(0.5);
+    const text = this.rememberInstructionText(this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE\nOR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '34px', color: '#ffdd57', align: 'center', lineSpacing: 8 }).setOrigin(0.5), 34, 'heading');
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     let start = (): void => undefined;
@@ -438,7 +453,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
 
   private showAudioStartFallback(): void {
     const background = this.add.rectangle(0, this.cameras.main.height / 2, 700, 240, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
-    const text = this.add.text(0, this.cameras.main.height / 2, 'AUDIO IS PAUSED\n\nTAP TO START SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center' }).setOrigin(0.5);
+    const text = this.rememberInstructionText(this.add.text(0, this.cameras.main.height / 2, 'AUDIO IS PAUSED\n\nTAP TO START SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center' }).setOrigin(0.5), 38, 'heading');
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     let retrying = false;
@@ -485,7 +500,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       this.antiMash.reset();
       this.updateHud();
       const background = this.add.rectangle(0, this.cameras.main.height / 2, 500, 220, 0x090611, 0.9);
-      const text = this.add.text(0, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5);
+      const text = this.rememberInstructionText(this.add.text(0, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5), 58, 'heading');
       const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
       this.activeOverlay = overlay;
       this.runCountdown(overlay, background, text);
@@ -494,7 +509,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.tutorialReady = false;
     const colorNames = ['ORANGE', 'PINK', 'PURPLE', 'YELLOW'];
     this.tutorialPrompt?.destroy();
-    this.tutorialPrompt = this.add.text(this.centerX, 300, `TAP ${colorNames[lane]}`, { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffffff', stroke: '#34103e', strokeThickness: 8 }).setOrigin(0.5).setDepth(RhythmDepth.UI);
+    this.tutorialPrompt = this.rememberInstructionText(this.add.text(this.centerX, 300, `TAP ${colorNames[lane]}`, { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffffff', stroke: '#34103e', strokeThickness: 8 }).setOrigin(0.5).setDepth(RhythmDepth.UI), 38, 'heading');
     const shape = lane === 0 ? this.add.circle(0, 0, 32, LANE_COLORS[lane]) : lane === 1 ? this.add.rectangle(0, 0, 62, 62, LANE_COLORS[lane]) : lane === 2 ? this.add.triangle(0, 0, 0, 62, 31, 0, 62, 62, LANE_COLORS[lane]) : this.add.rectangle(0, 0, 50, 50, LANE_COLORS[lane]).setAngle(45);
     const symbol = this.add.text(0, 0, ['●', '■', '▲', '◆'][lane], { fontFamily: 'Arial', fontSize: '28px', color: '#130a1d' }).setOrigin(0.5);
     this.tutorialNote = this.add.container([-0.75, -0.25, 0.25, 0.75][lane] * HORIZON_HALF_WIDTH, HORIZON_Y, [shape, symbol]).setScale(0.2).setDepth(RhythmDepth.NOTES);
@@ -618,6 +633,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   private applyResponsiveLayout(viewport: ViewportInfo): void {
+    this.typographyViewport = viewport;
     const centerX = this.centerX;
     this.clubRoot.setX(centerX);
     this.deckRoot.setX(centerX);
@@ -638,12 +654,27 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.comboText.setPosition(centerX, this.comboText.y).setScale(viewport.hudScale);
     this.judgementText.setPosition(centerX, this.judgementText.y).setScale(viewport.hudScale);
     this.rhythmDebugText.setX(this.cameras.main.width - 18);
-    const controlScale = viewport.compactLandscape ? 0.82 : 1;
+    for (const item of this.instructionTexts) {
+      if (item.text.active) {
+        item.text.setFontSize(responsiveFontSize(item.desktopSize, viewport, item.kind));
+      }
+    }
+    const controlScale = viewport.compactLandscape && !viewport.touchOriented ? 0.82 : 1;
     for (let lane = 0; lane < this.touchLabels.length; lane += 1) {
       const geometry = getJudgementPadGeometry(lane as Lane, centerX);
       this.touchLabels[lane].setPosition(geometry.centerX, geometry.centerY).setScale(controlScale);
     }
     this.drawTouchDebug();
+  }
+
+  private rememberInstructionText(
+    text: Phaser.GameObjects.Text,
+    desktopSize: number,
+    kind: 'heading' | 'body' | 'button',
+  ): Phaser.GameObjects.Text {
+    this.instructionTexts.push({ text, desktopSize, kind });
+    text.setFontSize(responsiveFontSize(desktopSize, this.typographyViewport, kind));
+    return text;
   }
 
   private drawTouchDebug(): void {
@@ -694,7 +725,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.finished = true; this.playing = false; this.clock.stop(); this.audio.stop();
     gameAudio(this).playSfx('rhythmGameEnd');
     this.boothAnimation.stop();
-    const completeText = this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5);
+    const completeText = this.rememberInstructionText(this.add.text(0, 310, 'SET COMPLETE', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57', stroke: '#451452', strokeThickness: 9 }).setOrigin(0.5), 58, 'heading');
     const overlay = this.add.container(this.centerX, 0, [completeText]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
     this.time.delayedCall(1500, () => {

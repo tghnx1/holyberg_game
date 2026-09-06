@@ -73,6 +73,7 @@ import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 import type { LevelCompleteSceneData } from './LevelCompleteScene';
 import { transformOf } from '../systems/editor/transformItem';
 import { UI_COLORS, uiSecondaryStyle } from '../ui/theme';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 export interface ClubSceneData {
   /** Running total carried in from Berlin; Level 2 does not change it. */
@@ -1003,8 +1004,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.layoutPoster();
 
     const margin = viewport?.safeMargin ?? 24;
-    this.roomLabel.setPosition(margin, margin).setScale(viewport?.hudScale ?? 1);
-    this.hint?.setPosition(camera.width / 2, camera.height - margin).setScale(viewport?.hudScale ?? 1);
+    this.roomLabel
+      .setPosition(margin, margin)
+      .setScale(1)
+      .setFontSize(responsiveFontSize(15, viewport, 'body'));
+    this.hint
+      ?.setPosition(camera.width / 2, camera.height - margin)
+      .setScale(1)
+      .setFontSize(responsiveFontSize(15, viewport, 'body'));
 
     this.walk.layout(camera.width, camera.height);
 

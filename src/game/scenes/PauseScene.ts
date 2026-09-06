@@ -4,6 +4,9 @@ import { SoundManager } from '../audio/SoundManager';
 import { SfxManager } from '../audio/SfxManager';
 import { PAUSE_SCENE_KEY, resumeFromPause, restartFromPause, type PauseSceneData } from '../systems/pause/PauseCoordinator';
 import { UI_COLORS, UI_FONTS, uiButtonStyle, uiHeadingStyle } from '../ui/theme';
+import { getViewportInfo } from '../responsive/ResponsiveLayout';
+import type { ViewportInfo } from '../responsive/ViewportInfo';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 const PANEL_WIDTH = 360;
 const PANEL_HEIGHT = 520;
@@ -27,12 +30,17 @@ export class PauseScene extends Phaser.Scene {
   private unsubscribeSfx?: () => void;
   private unsubscribeMusicVolume?: () => void;
   private unsubscribeSfxVolume?: () => void;
+  private heading!: Phaser.GameObjects.Text;
+  private buttonTexts: Phaser.GameObjects.Text[] = [];
+  private volumeTexts: Phaser.GameObjects.Text[] = [];
 
   constructor() {
     super(PAUSE_SCENE_KEY);
   }
 
   create(): void {
+    this.buttonTexts = [];
+    this.volumeTexts = [];
     const { width, height } = this.scale;
     const centerX = width / 2;
     const centerY = height / 2;
@@ -48,7 +56,7 @@ export class PauseScene extends Phaser.Scene {
       .setStrokeStyle(2, UI_COLORS.accentNumber, 0.9)
       .setDepth(Depth.UI + 91);
 
-    this.add
+    this.heading = this.add
       .text(centerX, centerY - 220, 'PAUSED', uiHeadingStyle('32px'))
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92);
@@ -84,6 +92,10 @@ export class PauseScene extends Phaser.Scene {
       this.sfxVolumeLabel.setText(`SFX VOLUME: ${Math.round(volume * 100)}%`);
     });
 
+    const applyTypography = (): void => this.applyTypography(getViewportInfo(this.scale));
+    this.scale.on(Phaser.Scale.Events.RESIZE, applyTypography);
+    applyTypography();
+
     const onKey = (): void => resumeFromPause(this);
     this.input.keyboard?.on('keydown-ESC', onKey);
     this.input.keyboard?.on('keydown-P', onKey);
@@ -99,6 +111,7 @@ export class PauseScene extends Phaser.Scene {
       this.unsubscribeMusicVolume = undefined;
       this.unsubscribeSfxVolume?.();
       this.unsubscribeSfxVolume = undefined;
+      this.scale.off(Phaser.Scale.Events.RESIZE, applyTypography);
     });
   }
 
@@ -118,6 +131,7 @@ export class PauseScene extends Phaser.Scene {
     text.on('pointerup', onActivate);
     text.on('pointerover', () => text.setColor(UI_COLORS.accentBright));
     text.on('pointerout', () => text.setColor(UI_COLORS.textPrimary));
+    this.buttonTexts.push(text);
     return text;
   }
 
@@ -137,6 +151,7 @@ export class PauseScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92);
+    this.volumeTexts.push(value);
     this.createSmallButton(x - 145, y, '-', onDecrease);
     this.createSmallButton(x + 145, y, '+', onIncrease);
     return value;
@@ -149,7 +164,18 @@ export class PauseScene extends Phaser.Scene {
       .setDepth(Depth.UI + 92)
       .setInteractive({ useHandCursor: true });
     button.on('pointerup', onActivate);
+    this.buttonTexts.push(button);
     return button;
+  }
+
+  private applyTypography(viewport: ViewportInfo): void {
+    this.heading.setFontSize(responsiveFontSize(32, viewport, 'heading'));
+    for (const text of this.buttonTexts) {
+      text.setFontSize(responsiveFontSize(22, viewport, 'button'));
+    }
+    for (const text of this.volumeTexts) {
+      text.setFontSize(responsiveFontSize(16, viewport, 'body'));
+    }
   }
 }
 

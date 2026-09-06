@@ -23,6 +23,8 @@ import type { ArenaBounds } from '../boss/types';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
+import { getViewportInfo } from '../responsive/ResponsiveLayout';
+import { responsiveFontSize } from '../ui/mobileTypography';
 import { getLevel4AssetUrls, LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
 import type { RhythmResult } from '../rhythm/types';
 import type { EditableScene, EditorSavePayload } from '../systems/editableSceneContract';
@@ -532,7 +534,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.introText = this.add
       .text(width / 2, height / 2 - 40, `DODGE THE BOSS\n\n${hint}\n\nSURVIVE THE FIGHT`, {
         fontFamily: 'Archivo Black',
-        fontSize: '30px',
+        fontSize: `${responsiveFontSize(30, getViewportInfo(this.scale), 'body')}px`,
         color: '#ffdf57',
         align: 'center',
         stroke: '#55145e',

@@ -16,6 +16,7 @@ import {
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { BerlinEntity } from '../level/berlin/types';
 import { UI_COLORS, UI_FONTS, uiButtonStyle, uiHeadingStyle } from '../ui/theme';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 /** Fraction of the width the crouch zone occupies; mirrors HudSystem. */
 const DUCK_ZONE_FRACTION = 0.35;
@@ -249,6 +250,9 @@ export class ControlsTutorialSystem {
   /** Re-lays the overlay out after any viewport change. */
   applyLayout(viewport: ViewportInfo): void {
     this.viewport = viewport;
+    this.arrow.setFontSize(responsiveFontSize(72, viewport, 'heading'));
+    this.word.setFontSize(responsiveFontSize(30, viewport, 'body'));
+    this.banner.setFontSize(responsiveFontSize(34, viewport, 'button'));
     if (!this.root.visible) return;
     this.layoutPrompt(this.state.stage === 'duck' ? 'duck' : 'jump');
   }

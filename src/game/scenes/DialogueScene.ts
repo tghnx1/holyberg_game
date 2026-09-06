@@ -5,6 +5,7 @@ import { DialoguePanels } from '../dialogue/DialoguePanels';
 import {
   buildDiagonalStripPoints,
   computeDialogueLayout,
+  dialogueBottomBarHeight,
   dialogueBodyTextWidth,
   type DialogueLayoutMetrics,
 } from '../dialogue/dialogueLayoutMetrics';
@@ -44,6 +45,7 @@ import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import type { PausableScene } from '../systems/pause/PausableScene';
 import { UI_COLORS, UI_FONTS, uiHeadingStyle } from '../ui/theme';
+import { getUiTypography } from '../ui/mobileTypography';
 
 export interface DialogueSceneData {
   /** Id from dialogueScripts; defaults to the metro/Magician dialogue. */
@@ -522,7 +524,19 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
    * and resizes what is already on screen.
    */
   private applyResponsiveLayout(viewport: ViewportInfo): void {
-    const layout = computeDialogueLayout(this.cameras.main.width, this.cameras.main.height);
+    const typography = getUiTypography(viewport);
+    const width = this.cameras.main.width;
+    const height = this.cameras.main.height;
+    const wrapWidth = dialogueBodyTextWidth(width);
+    const bottomBarHeight = dialogueBottomBarHeight({
+      viewportHeight: height,
+      wrapWidth,
+      fontSize: typography.dialogueBody,
+      lineSpacing: typography.compactPhone ? 7 : 5,
+      lines: this.script.lines.map((line) => line.text),
+      compactPhone: typography.compactPhone,
+    });
+    const layout = computeDialogueLayout(width, height, { bottomBarHeight });
     this.layout = layout;
 
     this.topBarShape.setSize(layout.topBar.width, layout.topBar.height);
@@ -534,7 +548,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     });
 
     this.bottomBarShape.setSize(layout.bottomBar.width, layout.bottomBar.height);
-    this.bodyText.setWordWrapWidth(dialogueBodyTextWidth(layout.width));
+    this.bodyText.setWordWrapWidth(dialogueBodyTextWidth(layout.bottomBar.width));
     this.panels.updateGeometry('bottomBar', {
       restX: 0,
       restY: layout.bottomBar.y,
@@ -571,24 +585,29 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
     });
 
     this.glitchOverlay.setSize(layout.width, layout.height);
-    this.repositionSkipHint(layout, viewport);
-    this.applyTextScale(viewport);
+    this.repositionSkipHint(layout);
+    this.applyTextTypography(viewport);
   }
 
-  private repositionSkipHint(layout: DialogueLayoutMetrics, viewport: ViewportInfo): void {
+  private repositionSkipHint(layout: DialogueLayoutMetrics): void {
     const x = layout.width - DialogueLayout.textPaddingX;
-    this.skipHint.setPosition(x, layout.height - 26).setScale(viewport.hudScale);
+    this.skipHint.setPosition(x, layout.height - 18).setScale(1);
     this.skipFill.setPosition(x, layout.height - 20);
     // The width itself tracks SPACE-hold progress each frame in updateSkip();
     // only the anchor moves here, and only while the hint is still showing.
     if (!this.skipHint.visible) this.skipFill.width = 0;
   }
 
-  /** Matches the responsive scaling convention other HUDs use (viewport.hudScale). */
-  private applyTextScale(viewport: ViewportInfo): void {
-    this.speakerText.setScale(viewport.hudScale);
-    this.bodyText.setScale(viewport.hudScale);
-    this.topBarTitle.setScale(viewport.hudScale);
+  /** Phone copy grows independently; the scene/world composition is never scaled with it. */
+  private applyTextTypography(viewport: ViewportInfo): void {
+    const typography = getUiTypography(viewport);
+    this.speakerText.setScale(1).setFontSize(typography.dialogueSpeaker);
+    this.bodyText
+      .setScale(1)
+      .setFontSize(typography.dialogueBody)
+      .setLineSpacing(typography.compactPhone ? 7 : 5);
+    this.topBarTitle.setScale(1).setFontSize(typography.dialogueTitle);
+    this.skipHint.setFontSize(typography.dialogueSkip);
   }
 
   private startLine(index: number): void {

@@ -8,9 +8,25 @@ import {
   computeContainFit,
   computeDialogueLayout,
   dialogueBodyTextWidth,
+  dialogueBottomBarHeight,
+  estimateWrappedLineCount,
 } from '../src/game/dialogue/dialogueLayoutMetrics';
 
 describe('dialogue layout metrics', () => {
+  it('can grow the bottom bar without introducing a panel gap', () => {
+    const bottomBarHeight = dialogueBottomBarHeight({
+      viewportHeight: 720,
+      wrapWidth: 700,
+      fontSize: 34,
+      lineSpacing: 7,
+      lines: ['A deliberately long dialogue line '.repeat(12)],
+      compactPhone: true,
+    });
+    const layout = computeDialogueLayout(960, 720, { bottomBarHeight });
+    expect(estimateWrappedLineCount('A deliberately long dialogue line '.repeat(12), 700, 34)).toBeGreaterThan(2);
+    expect(layout.bottomBar.height).toBe(bottomBarHeight);
+    expect(layout.scenePanel.y + layout.scenePanel.height).toBe(layout.bottomBar.y);
+  });
   it('keeps body copy inside the responsive dialogue bar margins', () => {
     expect(dialogueBodyTextWidth(1280)).toBe(1168);
     expect(dialogueBodyTextWidth(320)).toBe(208);

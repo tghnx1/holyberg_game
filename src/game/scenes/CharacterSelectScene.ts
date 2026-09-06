@@ -17,6 +17,7 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { UI_COLORS, UI_FONTS, uiHeadingStyle, uiSecondaryStyle } from '../ui/theme';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 const CARD_WIDTH = 236;
 const CARD_HEIGHT = 304;
@@ -365,6 +366,18 @@ export class CharacterSelectScene extends Phaser.Scene {
     const width = camera.width;
     const height = camera.height;
     const margin = viewport?.safeMargin ?? 24;
+
+    this.title.setFontSize(responsiveFontSize(44, viewport, 'heading'));
+    this.hint
+      .setFontSize(responsiveFontSize(15, viewport, 'body'))
+      .setWordWrapWidth(Math.max(1, width - margin * 2), true)
+      .setAlign('center');
+    this.confirmLabel.setFontSize(responsiveFontSize(24, viewport, 'button'));
+    this.cards.forEach((card) =>
+      card.name.setFontSize(responsiveFontSize(20, viewport, 'body')),
+    );
+    this.arrowLeft?.setFontSize(responsiveFontSize(34, viewport, 'button'));
+    this.arrowRight?.setFontSize(responsiveFontSize(34, viewport, 'button'));
 
     this.title.setPosition(width / 2, Math.max(margin + 26, height * 0.13));
 

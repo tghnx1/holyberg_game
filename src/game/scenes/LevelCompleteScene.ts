@@ -3,6 +3,7 @@ import { attachFullscreenExitControl } from '../responsive/FullscreenController'
 import { OrientationController } from '../responsive/OrientationController';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { UI_COLORS, UI_FONTS, uiHeadingStyle, uiSecondaryStyle } from '../ui/theme';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 /**
  * Reusable post-level score screen, shown after a gameplay level finishes
@@ -170,6 +171,15 @@ export class LevelCompleteScene extends Phaser.Scene {
     const width = this.cameras.main.width;
     const height = this.cameras.main.height;
     const centerX = width / 2;
+
+    this.titleText.setFontSize(responsiveFontSize(52, viewport, 'heading'));
+    this.scoreLabel.setFontSize(responsiveFontSize(this.isNonScoring ? 20 : 22, viewport, 'body'));
+    if (!this.isNonScoring) {
+      this.scoreValue.setFontSize(responsiveFontSize(36, viewport, 'body'));
+      this.scoreMax.setFontSize(responsiveFontSize(22, viewport, 'body'));
+    }
+    this.retryButton.text.setFontSize(responsiveFontSize(24, viewport, 'button'));
+    this.continueButton.text.setFontSize(responsiveFontSize(24, viewport, 'button'));
 
     // One compact block, vertically centred as a unit rather than pinned to
     // fixed screen fractions — the block's own content height decides its

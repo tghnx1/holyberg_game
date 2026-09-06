@@ -27,6 +27,7 @@ import {
   uiHeadingStyle,
   uiTextActionStyle,
 } from '../ui/theme';
+import { responsiveFontSize } from '../ui/mobileTypography';
 
 const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
 
@@ -61,6 +62,11 @@ export class ResultScene extends Phaser.Scene {
   private storedInstagram = '';
   private submitting = false;
   private skipped = false;
+  private responsiveTexts: Array<{
+    text: Phaser.GameObjects.Text;
+    desktopSize: number;
+    kind: 'heading' | 'body' | 'button';
+  }> = [];
 
   constructor() {
     super('ResultScene');
@@ -73,6 +79,7 @@ export class ResultScene extends Phaser.Scene {
     this.storedInstagram = '';
     this.submitting = false;
     this.skipped = false;
+    this.responsiveTexts = [];
   }
 
   create(): void {
@@ -93,19 +100,21 @@ export class ResultScene extends Phaser.Scene {
     );
     this.storedInstagram = readStoredInstagram(window.localStorage);
     const grade = getPerformanceGrade(this.result.accuracy);
-    this.root.add(
-      this.add.text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', uiHeadingStyle('54px')).setOrigin(0.5),
-    );
-    this.root.add(
-      this.add
-        .text(280, 134, `YOUR SET RATING: ${grade}`, uiHeadingStyle('27px', { strokeThickness: 5 }))
-        .setOrigin(0.5),
-    );
-    this.root.add(
-      this.add
-        .text(92, 188, this.formatBreakdown(), uiBodyStyle('18px', { lineSpacing: 4 }))
-        .setOrigin(0, 0),
-    );
+    const title = this.add
+      .text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', uiHeadingStyle('54px'))
+      .setOrigin(0.5);
+    this.trackText(title, 54, 'heading');
+    this.root.add(title);
+    const rating = this.add
+      .text(280, 134, `YOUR SET RATING: ${grade}`, uiHeadingStyle('27px', { strokeThickness: 5 }))
+      .setOrigin(0.5);
+    this.trackText(rating, 27, 'heading');
+    this.root.add(rating);
+    const breakdown = this.add
+      .text(92, 188, this.formatBreakdown(), uiBodyStyle('18px', { lineSpacing: 4 }))
+      .setOrigin(0, 0);
+    this.trackText(breakdown, 18, 'body');
+    this.root.add(breakdown);
 
     this.createLeaderboardPanel();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeClaimModal());
@@ -131,6 +140,10 @@ export class ResultScene extends Phaser.Scene {
     const panelHeight = Math.max(1, camera.height - margin * 2);
     const fit = computeResultFit(panelWidth, panelHeight);
     this.root.setScale(fit.scale).setPosition(margin + fit.offsetX, margin + fit.offsetY);
+    for (const item of this.responsiveTexts) {
+      item.text.setFontSize(responsiveFontSize(item.desktopSize, viewport, item.kind));
+    }
+    this.leaderboardText.setLineSpacing(viewport?.compactLandscape && viewport.touchOriented ? 0 : 5);
   }
 
   /**
@@ -174,10 +187,13 @@ export class ResultScene extends Phaser.Scene {
         .rectangle(902, 380, 620, 570, UI_COLORS.panelNumber, 0.94)
         .setStrokeStyle(2, UI_COLORS.accentNumber, 0.9),
     );
-    this.root.add(
-      this.add.text(902, 116, 'LEADERBOARD', uiHeadingStyle('32px')).setOrigin(0.5),
-    );
+    const leaderboardTitle = this.add
+      .text(902, 116, 'LEADERBOARD', uiHeadingStyle('32px'))
+      .setOrigin(0.5);
+    this.trackText(leaderboardTitle, 32, 'heading');
+    this.root.add(leaderboardTitle);
     this.leaderboardText = this.add.text(625, 154, 'LOADING TOP 10…', uiBodyStyle('17px', { lineSpacing: 5 }));
+    this.trackText(this.leaderboardText, 17, 'body');
     this.root.add(this.leaderboardText);
     this.playerRowText = this.add.text(
       625,
@@ -194,6 +210,7 @@ export class ResultScene extends Phaser.Scene {
         padding: { x: 10, y: 8 },
       },
     );
+    this.trackText(this.playerRowText, 18, 'body');
     this.root.add(this.playerRowText);
     this.leaderboardStatus = this.add
       .text(
@@ -203,6 +220,7 @@ export class ResultScene extends Phaser.Scene {
         uiBodyStyle('16px', { fontStyle: 'bold', align: 'center', wordWrap: { width: 540 } }),
       )
       .setOrigin(0.5, 0);
+    this.trackText(this.leaderboardStatus, 16, 'body');
     this.root.add(this.leaderboardStatus);
     this.instagramInput = this.add
       .text(902, 523, '[@____________]', {
@@ -215,6 +233,7 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .setVisible(showClaimUi);
+    this.trackText(this.instagramInput, 18, 'body');
     this.root.add(this.instagramInput);
     this.instagramInput.on('pointerdown', () => {
       void this.claimScore();
@@ -252,6 +271,7 @@ export class ResultScene extends Phaser.Scene {
     button.on('pointerover', () => button.setScale(1.03));
     button.on('pointerout', () => button.setScale(1));
     this.root.add(button);
+    this.trackText(button, 17, 'button');
     return button;
   }
 
@@ -269,7 +289,16 @@ export class ResultScene extends Phaser.Scene {
     actionText.on('pointerover', () => actionText.setColor(UI_COLORS.accentBright));
     actionText.on('pointerout', () => actionText.setColor(UI_COLORS.textSecondary));
     this.root.add(actionText);
+    this.trackText(actionText, 14, 'body');
     return actionText;
+  }
+
+  private trackText(
+    text: Phaser.GameObjects.Text,
+    desktopSize: number,
+    kind: 'heading' | 'body' | 'button',
+  ): void {
+    this.responsiveTexts.push({ text, desktopSize, kind });
   }
 
   private async loadLeaderboard(): Promise<void> {
