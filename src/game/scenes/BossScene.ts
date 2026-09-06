@@ -602,7 +602,11 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
         // offered by the event that starts it rather than on a timer. The
         // group is anchored to the player's position right now, not to a
         // fixed world point.
-        this.emeralds.showWindow(bossTelegraphWindowId(event.attack), this.player.damageHitbox.centerX);
+        this.emeralds.showWindow(
+          bossTelegraphWindowId(event.attack),
+          this.player.damageHitbox.centerX,
+          this.player.reachableCenterBounds(this.bounds),
+        );
         break;
       case 'attackActivated':
         gameAudio(this).playSfx(bossSfxId(event.kind));

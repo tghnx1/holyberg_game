@@ -175,6 +175,27 @@ describe('EmeraldLayer', () => {
     expect(xs[1] - xs[0]).toBeCloseTo(80);
   });
 
+  it('keeps every spawn inside the player-reachable range at both arena extremes', () => {
+    authorSpots('attack-00', [
+      { id: 'emerald-01', x: -40, y: 560 },
+      { id: 'emerald-02', x: 40, y: 560 },
+    ]);
+    const reachable: ArenaBounds = { minX: 150, maxX: 1050 };
+    const { scene, sprites } = createScene();
+    const layer = new EmeraldLayer(scene as never, SCENE_KEY);
+    layer.setBounds(arena);
+
+    layer.showWindow('attack-00', 160, reachable);
+    const leftSpawn = sprites.filter((sprite) => !sprite.destroyed).map((sprite) => sprite.x);
+    expect(leftSpawn.every((x) => x >= reachable.minX && x <= reachable.maxX)).toBe(true);
+    expect(Math.max(...leftSpawn) - Math.min(...leftSpawn)).toBeCloseTo(80);
+
+    layer.showWindow('attack-00', 1040, reachable);
+    const rightSpawn = sprites.filter((sprite) => !sprite.destroyed).map((sprite) => sprite.x);
+    expect(rightSpawn.every((x) => x >= reachable.minX && x <= reachable.maxX)).toBe(true);
+    expect(Math.max(...rightSpawn) - Math.min(...rightSpawn)).toBeCloseTo(80);
+  });
+
   it('saves an edited position as an offset relative to the window anchor', () => {
     authorSpots('attack-00', [{ id: 'emerald-01', x: 0, y: 560 }]);
     const { scene } = createScene();

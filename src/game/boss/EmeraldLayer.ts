@@ -84,7 +84,7 @@ export class EmeraldLayer {
     return this.windowId;
   }
 
-  /** Arena walls the current translated group is kept inside of. */
+  /** Raw arena walls used only when a caller has no tighter player-reach bounds. */
   setBounds(bounds: ArenaBounds): void {
     this.bounds = bounds;
   }
@@ -100,13 +100,17 @@ export class EmeraldLayer {
    * never fire against this new window's emeralds, so any pending timer is
    * cancelled here too.
    */
-  showWindow(windowId: string, playerX: number): void {
+  showWindow(
+    windowId: string,
+    playerX: number,
+    reachableBounds: ArenaBounds = this.bounds,
+  ): void {
     this.cancelScheduledHide();
     this.clearSprites();
     this.windowId = windowId;
     this.windowSceneKey = bossEmeraldWindowSceneKey(this.sceneKey, windowId);
     const spots = getAuthoredEmeraldSpots(this.windowSceneKey);
-    this.translateDeltaX = this.computeTranslateDeltaX(playerX, spots);
+    this.translateDeltaX = this.computeTranslateDeltaX(playerX, spots, reachableBounds);
     for (const spot of spots) this.add(spot);
     // Collision/collect math and the boss scene's own score-popup placement
     // both need where the emerald is actually drawn, not its authored
@@ -122,18 +126,22 @@ export class EmeraldLayer {
 
   /**
    * `playerX` plus a uniform shift only large enough to keep every spot in
-   * the group inside the arena — the group moves together, so one emerald
-   * hanging past a wall shifts all of them, it never restretches the
-   * authored spacing.
+   * the group inside the player's reachable centre range. The group moves
+   * together, so one emerald near a wall shifts all of them; it never
+   * restretches the authored spacing or follows the player after spawning.
    */
-  private computeTranslateDeltaX(playerX: number, spots: readonly EmeraldSpot[]): number {
+  private computeTranslateDeltaX(
+    playerX: number,
+    spots: readonly EmeraldSpot[],
+    reachableBounds: ArenaBounds,
+  ): number {
     if (spots.length === 0) return playerX;
     const rawXs = spots.map((spot) => playerX + spot.x);
     const minRaw = Math.min(...rawXs);
     const maxRaw = Math.max(...rawXs);
     let shift = 0;
-    if (minRaw < this.bounds.minX) shift = this.bounds.minX - minRaw;
-    else if (maxRaw > this.bounds.maxX) shift = this.bounds.maxX - maxRaw;
+    if (minRaw < reachableBounds.minX) shift = reachableBounds.minX - minRaw;
+    else if (maxRaw > reachableBounds.maxX) shift = reachableBounds.maxX - maxRaw;
     return playerX + shift;
   }
 
