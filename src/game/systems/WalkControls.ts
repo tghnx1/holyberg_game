@@ -64,6 +64,18 @@ export class WalkInput {
       this.rightPointers.clear();
     };
 
+    // A held touch's pointerup can land while this scene is paused — Club
+    // and Level 4 both pause their source scene for a current-scene dialogue
+    // (launchCurrentSceneDialogue), and Phaser stops delivering input events
+    // to a paused scene, so POINTER_UP below would never fire to clear it.
+    // Without this, a finger lifted mid-dialogue leaves a stale held
+    // direction that keeps "walking" once gameplay resumes. Cleared on
+    // both PAUSE and RESUME: the former drops it before it can go stale,
+    // the latter guarantees a clean start regardless of what happened while
+    // paused.
+    scene.events.on(Phaser.Scenes.Events.PAUSE, this.clearAll);
+    scene.events.on(Phaser.Scenes.Events.RESUME, this.clearAll);
+
     if (scene.game.device.input.touch) this.createTouchZones();
   }
 
@@ -117,6 +129,8 @@ export class WalkInput {
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.release);
     this.scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.release);
     this.scene.input.off(Phaser.Input.Events.GAME_OUT, this.clearAll);
+    this.scene.events.off(Phaser.Scenes.Events.PAUSE, this.clearAll);
+    this.scene.events.off(Phaser.Scenes.Events.RESUME, this.clearAll);
     this.clearAll();
     this.leftZone?.destroy();
     this.rightZone?.destroy();
