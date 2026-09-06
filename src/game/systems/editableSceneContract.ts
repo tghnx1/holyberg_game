@@ -61,3 +61,48 @@ export function toSavePayloads(
   if (!result) return [];
   return Array.isArray(result) ? result : [result as EditorSavePayload];
 }
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Combines every payload that targets the same route into one, so one P save
+ * can never fire concurrent POSTs at the same save endpoint.
+ *
+ * The dev save server reads the target file, merges the incoming slice in,
+ * and writes it back — one request at a time, on its own. Two concurrent
+ * requests to the same route each read the file before either has written,
+ * so whichever finishes last overwrites the other's change with a copy that
+ * never saw it. A scene with several editable slices of the same file (the
+ * boss's own presentation plus its active telegraph's emerald layout, or —
+ * during the final dialogue — those two plus DialogueScene's own framing
+ * slice) all reach `/__scene-editor/save-layout` this way; merging them into
+ * one request before ever calling `fetch` removes the race outright rather
+ * than trying to win it.
+ *
+ * Bodies are shallow-merged left to right when both are plain objects, which
+ * is safe here because every caller's body for a mergeable route is
+ * `{ [ownSceneKey]: {...} }` — distinct scene keys never collide. A route
+ * that only ever sends one payload (`/__club-editor/save-npcs`, say) or
+ * whose body isn't a plain object is unaffected: the last (only) payload for
+ * that route wins, exactly as a single payload always did.
+ */
+export function mergeSavePayloadsByRoute(
+  payloads: readonly EditorSavePayload[],
+): readonly EditorSavePayload[] {
+  const byRoute = new Map<string, EditorSavePayload>();
+  for (const payload of payloads) {
+    const existing = byRoute.get(payload.route);
+    if (!existing) {
+      byRoute.set(payload.route, payload);
+      continue;
+    }
+    const body =
+      isPlainObject(existing.body) && isPlainObject(payload.body)
+        ? { ...existing.body, ...payload.body }
+        : payload.body;
+    byRoute.set(payload.route, { route: payload.route, body });
+  }
+  return [...byRoute.values()];
+}

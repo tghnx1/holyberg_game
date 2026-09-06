@@ -1,10 +1,16 @@
 import Phaser from 'phaser';
 import { SceneEditor } from './SceneEditor';
 
-import { isEditableScene, toSavePayloads, type EditableScene } from './editableSceneContract';
+import {
+  isEditableScene,
+  mergeSavePayloadsByRoute,
+  toSavePayloads,
+  type EditableScene,
+} from './editableSceneContract';
 
 export {
   isEditableScene,
+  mergeSavePayloadsByRoute,
   toSavePayloads,
   type EditableScene,
   type EditorSavePayload,
@@ -30,8 +36,9 @@ function attachSceneEditor(scene: Phaser.Scene & EditableScene): void {
       // could otherwise race the in-flight POST and reload the pre-edit
       // file while still showing a save confirmation.
       onSave: async (snapshot) => {
+        const payloads = mergeSavePayloadsByRoute(toSavePayloads(scene.buildEditorSave?.(snapshot)));
         await Promise.all(
-          toSavePayloads(scene.buildEditorSave?.(snapshot)).map(async (payload) => {
+          payloads.map(async (payload) => {
             const response = await fetch(payload.route, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
