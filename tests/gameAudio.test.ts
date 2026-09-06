@@ -53,10 +53,11 @@ function createBackend() {
 }
 
 describe('game audio catalog', () => {
-  it('keeps every general soundtrack start second in one scene config', () => {
-    for (const scene of ['BerlinScene', 'ClubScene', 'Level4Scene', 'BossScene'] as const) {
-      expect(sceneAudioConfig(scene).soundtrack).toEqual({ track: 'koaboExpanse', startAt: 0 });
-    }
+  it('assigns level-specific soundtracks while preserving each scene start offset', () => {
+    expect(sceneAudioConfig('BerlinScene').soundtrack).toEqual({ track: 'city', startAt: 0 });
+    expect(sceneAudioConfig('ClubScene').soundtrack).toEqual({ track: 'koaboExpanse', startAt: 0 });
+    expect(sceneAudioConfig('Level4Scene').soundtrack).toEqual({ track: 'toiletLevel', startAt: 0 });
+    expect(sceneAudioConfig('BossScene').soundtrack).toEqual({ track: 'bossFight', startAt: 0 });
   });
 
   it('does not assign the general soundtrack to Rhythm', () => {
@@ -65,6 +66,9 @@ describe('game audio catalog', () => {
 
   it('uses catalog keys rather than scene-owned filenames', () => {
     expect(GAME_AUDIO.koaboExpanse.url).toBe('assets/audio/music/koabo-expanse.mp3');
+    expect(GAME_AUDIO.city.url).toBe('assets/audio/music/city.mp3');
+    expect(GAME_AUDIO.toiletLevel.url).toBe('assets/audio/music/toilet-level.mp3');
+    expect(GAME_AUDIO.bossFight.url).toBe('assets/audio/music/boss-fight.mp3');
     expect(GAME_AUDIO.jump.url).toBe('assets/audio/sfx/jump.wav');
   });
 });
@@ -82,14 +86,16 @@ describe('persistent soundtrack lifecycle', () => {
     expect(sounds[0].play).toHaveBeenCalledWith({ loop: true, seek: 0, volume: 0.55 });
   });
 
-  it('preserves the soundtrack when a dialogue-capable next level uses the same track', () => {
+  it('replaces the soundtrack when the next level uses its own track', () => {
     const { backend, sounds } = createBackend();
     const controller = new SoundtrackController(backend);
     controller.start(sceneAudioConfig('BerlinScene').soundtrack);
     controller.start(sceneAudioConfig('ClubScene').soundtrack);
 
-    expect(sounds).toHaveLength(1);
-    expect(sounds[0].stop).not.toHaveBeenCalled();
+    expect(sounds).toHaveLength(2);
+    expect(sounds[0].stop).toHaveBeenCalledOnce();
+    expect(sounds[0].destroy).toHaveBeenCalledOnce();
+    expect(sounds[1].key).toBe(GAME_AUDIO.koaboExpanse.key);
   });
 
   it('stops music when entering the dedicated Rhythm audio mode', () => {

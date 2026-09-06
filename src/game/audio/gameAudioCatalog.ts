@@ -2,6 +2,9 @@ import type Phaser from 'phaser';
 
 export type GameAudioId =
   | 'koaboExpanse'
+  | 'city'
+  | 'toiletLevel'
+  | 'bossFight'
   | 'bossLightningHit'
   | 'clubDjMusicStop'
   | 'level4Door'
@@ -26,6 +29,9 @@ export interface GameAudioAsset {
 /** The only filename-to-key mapping for the non-rhythm game audio. */
 export const GAME_AUDIO: Record<GameAudioId, GameAudioAsset> = {
   koaboExpanse: { key: 'audio:music:koabo-expanse', url: 'assets/audio/music/koabo-expanse.mp3', kind: 'music' },
+  city: { key: 'audio:music:city', url: 'assets/audio/music/city.mp3', kind: 'music' },
+  toiletLevel: { key: 'audio:music:toilet-level', url: 'assets/audio/music/toilet-level.mp3', kind: 'music' },
+  bossFight: { key: 'audio:music:boss-fight', url: 'assets/audio/music/boss-fight.mp3', kind: 'music' },
   bossLightningHit: { key: 'audio:sfx:boss-lightning-hit', url: 'assets/audio/sfx/boss-lightning-hit.wav', kind: 'sfx' },
   clubDjMusicStop: { key: 'audio:sfx:club-dj-music-stop', url: 'assets/audio/sfx/club-dj-music-stop.mp3', kind: 'sfx' },
   level4Door: { key: 'audio:sfx:level4-door', url: 'assets/audio/sfx/level4-door.mp3', kind: 'sfx' },
@@ -58,10 +64,10 @@ export interface SceneAudioConfig {
  * in individual scenes, so soundtrack timing has one obvious source of truth.
  */
 export const SCENE_AUDIO: Record<GameAudioScene, SceneAudioConfig> = {
-  BerlinScene: { soundtrack: { track: 'koaboExpanse', startAt: 0 }, requiredSfx: ['jump', 'doubleJump', 'token'] },
+  BerlinScene: { soundtrack: { track: 'city', startAt: 0 }, requiredSfx: ['jump', 'doubleJump', 'token'] },
   ClubScene: { soundtrack: { track: 'koaboExpanse', startAt: 0 }, requiredSfx: ['clubDjMusicStop'] },
-  Level4Scene: { soundtrack: { track: 'koaboExpanse', startAt: 0 }, requiredSfx: ['level4Door', 'disusAppearDisappear'] },
-  BossScene: { soundtrack: { track: 'koaboExpanse', startAt: 0 }, requiredSfx: ['bossIntro', 'bossLightningCharge', 'bossLightningHit', 'bossLightningDamage', 'token'] },
+  Level4Scene: { soundtrack: { track: 'toiletLevel', startAt: 0 }, requiredSfx: ['level4Door', 'disusAppearDisappear'] },
+  BossScene: { soundtrack: { track: 'bossFight', startAt: 0 }, requiredSfx: ['bossIntro', 'bossLightningCharge', 'bossLightningHit', 'bossLightningDamage', 'token'] },
   RhythmScene: { requiredSfx: ['rhythmGameEnd'] },
   DialogueScene: { requiredSfx: ['disusAppearDisappear', 'trainDeparture'] },
 };
