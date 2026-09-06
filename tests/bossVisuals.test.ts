@@ -14,7 +14,7 @@ import {
 describe('boss visual assets', () => {
   it('uses canonical repository URLs and every declared source exists', () => {
     const assets = getBossAssetUrls();
-    expect(assets).toHaveLength(19);
+    expect(assets).toHaveLength(23);
     expect(new Set(assets.map((asset) => asset.key)).size).toBe(assets.length);
     for (const asset of assets) {
       expect(asset.url).toMatch(/^assets\/boss\/[a-z0-9/-]+\.png$/);
@@ -26,8 +26,23 @@ describe('boss visual assets', () => {
     const desktop = getBossAssetUrls('desktop');
     const mobile = getBossAssetUrls('mobile');
     expect(mobile.map((asset) => asset.key)).toEqual(desktop.map((asset) => asset.key));
-    expect(mobile.every((asset) => asset.url.endsWith('.mobile.webp'))).toBe(true);
-    expect(mobile.every((asset) => asset.url.startsWith('assets/generated/boss/'))).toBe(true);
+    const ash = mobile.filter((asset) => asset.key.startsWith('boss-ash-'));
+    const generated = mobile.filter((asset) => !asset.key.startsWith('boss-ash-'));
+    expect(ash).toHaveLength(4);
+    expect(ash.map((asset) => asset.url)).toEqual(
+      desktop.filter((asset) => asset.key.startsWith('boss-ash-')).map((asset) => asset.url),
+    );
+    expect(generated.every((asset) => asset.url.endsWith('.mobile.webp'))).toBe(true);
+    expect(generated.every((asset) => asset.url.startsWith('assets/generated/boss/'))).toBe(true);
+  });
+
+  it('declares all delivered ash frames in authored order', () => {
+    expect(BOSS_ART.ash.map((frame) => frame.key)).toEqual([
+      'boss-ash-01',
+      'boss-ash-02',
+      'boss-ash-03',
+      'boss-ash-04',
+    ]);
   });
 });
 

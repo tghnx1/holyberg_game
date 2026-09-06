@@ -9,8 +9,7 @@ import { BossHud } from '../boss/BossHud';
 import { BossInput } from '../boss/BossInput';
 import { BossPlayer } from '../boss/BossPlayer';
 import { EmeraldLayer } from '../boss/EmeraldLayer';
-import { getBossAssetUrls } from '../boss/bossAssets';
-import { BOSS_ART } from '../boss/bossAssets';
+import { BOSS_ART, BOSS_ASH, getBossAssetUrls } from '../boss/bossAssets';
 import { BOSS_ARENA, BOSS_SCORING } from '../boss/bossConfig';
 import { queueCharacterAssets, queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
@@ -338,9 +337,24 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     };
 
     const magicianActor = this.buildMagicianActor(camera);
+    const defeatedAsh = this.player.defeatedDisplayObject;
+    const playerActor = this.player.isDefeated && defeatedAsh
+      ? liveSpriteActor(this, {
+          id: 'player-defeated-ash',
+          label: 'PLAYER ASH',
+          target: defeatedAsh,
+          getNativeSize: () => ({
+            width: defeatedAsh.frame.realWidth,
+            height: defeatedAsh.frame.realHeight,
+          }),
+        }, {
+          frameKeys: BOSS_ART.ash.map((frame) => frame.key),
+          cycleMs: BOSS_ASH.animationCycleMs,
+        })
+      : liveSpriteActor(this, player);
 
     return {
-      actors: [bossActor, liveSpriteActor(this, player), magicianActor.actor],
+      actors: [bossActor, playerActor, magicianActor.actor],
       buildEditorSave: () => this.buildEditorSave(),
       playArrival: (onComplete) => magicianActor.playArrival(onComplete),
     };

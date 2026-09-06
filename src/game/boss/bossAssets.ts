@@ -40,6 +40,7 @@ export const BOSS_ART = {
   },
   energySphere: frameSequence('effects/energy-sphere'),
   laser: frameSequence('effects/laser').slice(0, 2),
+  ash: frameSequence('ash'),
   platform: {
     key: 'boss-environment-platform',
     url: `${ASSET_ROOT}/environment/platform.png`,
@@ -67,6 +68,13 @@ export const BOSS_VISUAL = {
   energyArtworkCenterOffsetY: -7,
 } as const;
 
+/** Source-canvas measurements for the delivered four-frame player ash loop. */
+export const BOSS_ASH = {
+  animationCycleMs: 480,
+  /** Transparent rows below each frame's visible ash, alpha-measured. */
+  footGaps: [23, 23, 23, 24],
+} as const;
+
 /** The platform's first non-transparent row, measured from the source PNG. */
 export const BOSS_PLATFORM = {
   sourceWidth: 1672,
@@ -81,14 +89,19 @@ export function getBossAssetUrls(profile: AssetQualityProfile = 'desktop'): Boss
     ...BOSS_ART.baby.right,
     ...BOSS_ART.energySphere,
     ...BOSS_ART.laser,
+    ...BOSS_ART.ash,
     BOSS_ART.platform,
   ];
   if (profile === 'desktop') return assets;
   return assets.map((asset) => ({
     key: asset.key,
-    url: asset.url
-      .replace(/^assets\/boss\//, 'assets/generated/boss/')
-      .replace(/\.png$/, `.${profile}.webp`),
+    // Ash is already a compact 256px source; keeping its canonical PNG avoids
+    // requiring a generated variant while preserving the normal Boss loader.
+    url: asset.key.startsWith('boss-ash-')
+      ? asset.url
+      : asset.url
+        .replace(/^assets\/boss\//, 'assets/generated/boss/')
+        .replace(/\.png$/, `.${profile}.webp`),
   }));
 }
 

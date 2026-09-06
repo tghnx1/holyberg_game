@@ -11,6 +11,7 @@ import { resolveGameplayScale } from '../characters/characterManifest';
 import { BOSS_ARENA, BOSS_PLAYER } from './bossConfig';
 
 import { BossDepth } from './bossConstants';
+import { BOSS_ART, BOSS_ASH } from './bossAssets';
 import {
   applyKnockback,
   createBossPlayerMotion,
@@ -41,6 +42,8 @@ export class BossPlayer {
   private motion: BossPlayerMotion;
   private readonly sprite: Phaser.GameObjects.Sprite;
   private currentFrameKey?: string;
+  /** Alpha-measured gap below the frame currently drawn by the normal player. */
+  private currentFrameFootGap: number;
   private presentation = { offsetX: 0, offsetY: 0, scale: 1, flipX: false };
   /** Cached with the presentation; only those two inputs can change it. */
   private visibleHalfWidth = 0;
@@ -50,6 +53,11 @@ export class BossPlayer {
   private currentPose: BossPlayerPose = 'idle';
   private entranceStartedAtMs?: number;
   private defeated = false;
+  private defeatedAtMs = -Infinity;
+  /** Separate ash visual: the normal character is hidden once it is active. */
+  private ashSprite?: Phaser.GameObjects.Sprite;
+  /** Immutable arena floor position captured when the player is defeated. */
+  private ashFloorY?: number;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -60,6 +68,7 @@ export class BossPlayer {
     this.visibleHalfWidth = visiblePlayerHalfWidth(character, 1);
     const { damage, idle, run } = character.gameplay;
     const initial = damage[0] ?? idle ?? run[staticRunFrameIndex(run.length)];
+    this.currentFrameFootGap = initial.footGap;
     this.sprite = scene.add
       .sprite(startX, BOSS_ARENA.floorY, initial.key)
       .setOrigin(0.5, 1)
@@ -167,6 +176,7 @@ export class BossPlayer {
     );
     const resolved = this.resolveFrame(nowMs, direction);
     const { frame } = resolved;
+    this.currentFrameFootGap = frame.footGap;
     this.currentPose = resolved.pose;
     if (frame.key !== this.currentFrameKey) {
       this.sprite.setTexture(frame.key);
@@ -189,26 +199,41 @@ export class BossPlayer {
   /** Replaceable final-death presentation until the authored coal exists. */
   showDefeated(nowMs: number): void {
     this.defeated = true;
+    this.defeatedAtMs = nowMs;
     this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.setAlpha(1);
+    const visibleFloorY = this.sprite.y - footOffset(this.currentFrameFootGap, this.sprite.scaleY);
+    this.ashFloorY = visibleFloorY;
+    const ash = this.ashSprite ?? this.scene.add
+      .sprite(this.sprite.x, visibleFloorY + footOffset(BOSS_ASH.footGaps[0], 1), BOSS_ART.ash[0].key)
+      .setOrigin(0.5, 1)
+      .setDepth(BossDepth.PLAYER);
+    this.ashSprite = ash;
+    this.sprite.setVisible(false);
     this.renderDefeated(nowMs);
   }
 
   private renderDefeated(nowMs: number): void {
-    const frame = this.character.gameplay.damage[0]
-      ?? this.character.gameplay.idle
-      ?? this.character.gameplay.run[staticRunFrameIndex(this.character.gameplay.run.length)];
-    this.currentPose = this.character.gameplay.damage.length > 0 ? 'damage' : 'idle';
-    if (frame.key !== this.currentFrameKey) {
-      this.sprite.setTexture(frame.key);
-      this.currentFrameKey = frame.key;
-    }
-    const scale = this.resolveScale(this.currentPose);
-    const anchor = this.anchorAt(nowMs, frame.footGap);
-    this.sprite
-      .setPosition(anchor.x + this.presentation.offsetX, anchor.y + this.presentation.offsetY)
-      .setScale(scale * this.presentation.scale)
-      .setRotation(Math.PI / 2);
+    const ash = this.ashSprite;
+    if (!ash) return;
+    const frameIndex = loopedFrameIndex(
+      nowMs - this.defeatedAtMs,
+      BOSS_ART.ash.length,
+      BOSS_ASH.animationCycleMs,
+    );
+    const frame = BOSS_ART.ash[frameIndex];
+    if (ash.texture.key !== frame.key) ash.setTexture(frame.key);
+    // All frames share the floor captured at defeat. Their alpha-measured
+    // transparent foot gaps differ, but the visible ash never bobs or drifts.
+    ash.setY((this.ashFloorY ?? ash.y) + footOffset(BOSS_ASH.footGaps[frameIndex], ash.scaleY));
+  }
+
+  get isDefeated(): boolean {
+    return this.defeated;
+  }
+
+  get defeatedDisplayObject(): Phaser.GameObjects.Sprite | undefined {
+    return this.ashSprite;
   }
 
   /** Where the fight wants the character drawn, before any authored offset. */
@@ -289,5 +314,8 @@ export class BossPlayer {
   destroy(): void {
     this.scene.tweens.killTweensOf(this.sprite);
     this.sprite.destroy();
+    this.ashSprite?.destroy();
+    this.ashSprite = undefined;
+    this.ashFloorY = undefined;
   }
 }
