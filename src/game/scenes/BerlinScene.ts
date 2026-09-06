@@ -68,8 +68,6 @@ export class BerlinScene extends Phaser.Scene {
   /** Latest safe-area margin, kept so the start gate can re-anchor itself. */
   private safeMargin = 24;
   private finishTriggered = false;
-  /** Wall-clock handoff: Phaser's scene clock can be paused after a win. */
-  private finishTransitionTimer?: number;
   private trainsStarted = false;
   private world!: BuiltBerlinWorld;
   private layers!: SceneLayers;
@@ -115,7 +113,6 @@ export class BerlinScene extends Phaser.Scene {
     this.scoreSystem = new BerlinScoreSystem();
     this.sections = new SectionTracker();
     this.finishTriggered = false;
-    this.clearFinishTransitionTimer();
     this.trainsStarted = false;
     this.inputSuspended = false;
     this.shuttingDown = false;
@@ -396,32 +393,16 @@ export class BerlinScene extends Phaser.Scene {
     this.finishTriggered = true;
     this.progress.state = 'won';
     this.progress.score = this.scoreSystem.finish(this.progress.seconds);
-    this.player.halt();
-    this.physics.pause();
-    this.hud.update(this.progress);
-    this.hud.flash(
-      `YOU MADE IT\nTIME BONUS  ${this.scoreSystem.breakdown.timeBonus}\nFINAL SCORE  ${this.progress.score}`,
-      1800,
-    );
-    // Keep the completion beat visible, but do not depend on this scene's
-    // Clock: it can be paused by orientation/pause UI after the player wins.
-    // A wall-clock timer still hands the result screen over reliably.
-    this.finishTransitionTimer = window.setTimeout(() => {
-      this.finishTransitionTimer = undefined;
-      this.scene.start('LevelCompleteScene', {
-        score: this.progress.score,
-        maxScore: getBerlinMaxScore(),
-        retryScene: 'BerlinScene',
-        continueScene: 'ClubScene',
-        continueData: { score: this.progress.score },
-      } satisfies LevelCompleteSceneData);
-    }, 2200);
-  }
-
-  private clearFinishTransitionTimer(): void {
-    if (this.finishTransitionTimer === undefined) return;
-    window.clearTimeout(this.finishTransitionTimer);
-    this.finishTransitionTimer = undefined;
+    // LevelCompleteScene owns the result presentation. Starting it in the
+    // same completion turn avoids exposing a halted Berlin frame while a
+    // wall-clock handoff waits in the background.
+    this.scene.start('LevelCompleteScene', {
+      score: this.progress.score,
+      maxScore: getBerlinMaxScore(),
+      retryScene: 'BerlinScene',
+      continueScene: 'ClubScene',
+      continueData: { score: this.progress.score },
+    } satisfies LevelCompleteSceneData);
   }
 
   private repositionOverlays(): void {
@@ -541,7 +522,6 @@ export class BerlinScene extends Phaser.Scene {
   private teardown(): void {
     this.shuttingDown = true;
     this.events.off('player-jump-sfx', this.playJumpSfx, this);
-    this.clearFinishTransitionTimer();
     // Listeners on the *game* emitter outlive the scene, so these must go.
     this.hud.destroy();
     this.tutorial.destroy();
