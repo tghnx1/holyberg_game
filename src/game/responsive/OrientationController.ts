@@ -10,6 +10,27 @@ interface OrientationCallbacks {
   onLayout?: (viewport: ViewportInfo) => void;
 }
 
+/**
+ * True while a text field (or a contenteditable) actually has focus.
+ *
+ * Checked by tag name/type string rather than `instanceof HTMLInputElement`
+ * etc., so this stays callable with no `document` at all — this class also
+ * runs under plain unit tests with no DOM.
+ */
+function isTextInputFocused(): boolean {
+  if (typeof document === 'undefined') return false;
+  const active = document.activeElement as (Element & { type?: string; isContentEditable?: boolean }) | null;
+  if (!active) return false;
+  if (active.tagName === 'TEXTAREA') return true;
+  if (active.tagName === 'INPUT') {
+    // Only text-entry types; a focused checkbox/radio/button/range etc. is
+    // not something the on-screen keyboard opens for.
+    const textTypes = new Set(['text', 'search', 'email', 'tel', 'url', 'password', 'number']);
+    return textTypes.has(active.type ?? 'text');
+  }
+  return active.isContentEditable === true;
+}
+
 export class OrientationController {
   private overlay?: HTMLDivElement;
   private portrait = false;
@@ -25,6 +46,15 @@ export class OrientationController {
   }
 
   refresh(): void {
+    // Opening the on-screen keyboard shrinks the layout viewport on many
+    // mobile browsers (notably Android Chrome), which fires the exact same
+    // Scale.Events.RESIZE this listens for. Acting on that resize while a
+    // text field has focus — e.g. the leaderboard claim modal's Instagram
+    // input — would pause the scene and raise the "ROTATE YOUR PHONE"
+    // overlay (z-index above that modal) mid-keystroke, stealing focus and
+    // cutting typing short. It is never a real rotation, so it is ignored
+    // outright; a real rotation re-fires RESIZE once the field blurs anyway.
+    if (isTextInputFocused()) return;
     const viewport = getViewportInfo(this.scene.scale);
     // A zero or absent measurement is not an orientation. Acting on one would
     // latch the scene paused on the frame it was created, and recovery would
