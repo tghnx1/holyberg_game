@@ -679,7 +679,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   private layoutStoryMask(actor: ClubStoryActor, visibleBodyHeight: number): void {
     const mask = actor.mask;
     if (!mask) return;
-    const waistY = actor.sprite.y - visibleBodyHeight * 0.44;
+    const waistY = actor.sprite.y - visibleBodyHeight * 0.1;
     mask.clear().fillStyle(0xffffff).fillRect(0, 0, this.cameras.main.width, waistY);
   }
 
