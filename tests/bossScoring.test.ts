@@ -6,6 +6,7 @@ import {
   applyLaserHit,
   getBossMultiplier,
   initialBossScoreState,
+  type BossScoreState,
 } from '../src/game/boss/BossScoreSystem';
 import { BOSS_SCORING } from '../src/game/boss/bossConfig';
 import { combineAllScores, combineScores } from '../src/game/rhythm/ScoreSystem';
@@ -45,24 +46,38 @@ describe('boss scoring', () => {
     expect(applyLaserHit(initialBossScoreState()).score).toBe(0);
   });
 
-  it('adds the survival bonus, and the flawless bonus only with zero hits', () => {
-    const clean = applyFightEnd(applyDodge(initialBossScoreState()));
-    expect(clean.score).toBe(100 + 2000 + 5000);
+  it('marks the fight finished without changing the score, so it never jumps at the end', () => {
+    const beforeEnd = applyDodge(initialBossScoreState());
+    const clean = applyFightEnd(beforeEnd);
+    expect(clean.score).toBe(beforeEnd.score);
     expect(clean.finished).toBe(true);
 
-    const hurt = applyFightEnd(applyLaserHit(applyDodge(initialBossScoreState())));
-    expect(hurt.score).toBe(2000);
+    const hurtBeforeEnd = applyLaserHit(applyDodge(initialBossScoreState()));
+    const hurt = applyFightEnd(hurtBeforeEnd);
+    expect(hurt.score).toBe(hurtBeforeEnd.score);
   });
 
-  it('always reaches the end: being hit costs points, never the run', () => {
+  it('always reaches the end: being hit costs points, never the run, and ending adds nothing', () => {
     // There is no downed branch to award nothing, because there is no downing.
     let state = initialBossScoreState();
     for (let index = 0; index < 20; index += 1) state = applyLaserHit(state);
     expect(state.hits).toBe(20);
+    expect(state.score).toBe(0);
 
     const ended = applyFightEnd(state);
     expect(ended.finished).toBe(true);
-    expect(ended.score).toBe(BOSS_SCORING.survivalBonus);
+    expect(ended.score).toBe(0);
+  });
+
+  it('regression: a score of 1000 visible on the HUD at fight end stays 1000, not silently bumped', () => {
+    // Whatever combination of dodges/emeralds/hits produced this running
+    // total, it is exactly what the HUD has already shown the player.
+    const state: BossScoreState = { ...initialBossScoreState(), score: 1000 };
+
+    const ended = applyFightEnd(state);
+
+    expect(ended.score).toBe(1000);
+    expect(ended.finished).toBe(true);
   });
 
   it('awards a flat emerald value and tracks it separately from the total', () => {

@@ -77,19 +77,12 @@ export function applyLaserHit(state: BossScoreState): BossScoreState {
 /**
  * Fight is over.
  *
- * There is no longer a losing branch: the player cannot be downed, so reaching
- * the end of the timer is the only way a fight finishes and the survival bonus
- * is unconditional. The flawless bonus still has to be earned — taking no hits
- * at all is what it now marks.
+ * Marks the state finished and nothing else. `score` here must equal exactly
+ * what the HUD has already shown the player for the whole fight — adding a
+ * bonus at this point (as this used to, unconditionally) would change the
+ * number silently at the one moment the player is no longer watching it
+ * update live, which reads as the score having been wrong the entire time.
  */
 export function applyFightEnd(state: BossScoreState): BossScoreState {
-  const flawless = state.hits === 0;
-  return {
-    ...state,
-    finished: true,
-    score:
-      state.score +
-      BOSS_SCORING.survivalBonus +
-      (flawless ? BOSS_SCORING.flawlessBonus : 0),
-  };
+  return { ...state, finished: true };
 }

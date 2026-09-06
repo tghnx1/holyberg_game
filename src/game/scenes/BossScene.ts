@@ -11,6 +11,7 @@ import { BossPlayer } from '../boss/BossPlayer';
 import { EmeraldLayer } from '../boss/EmeraldLayer';
 import { BOSS_ART, BOSS_ASH, getBossAssetUrls } from '../boss/bossAssets';
 import { BOSS_ARENA, BOSS_SCORING } from '../boss/bossConfig';
+import { getBossMaxScore } from '../boss/bossMaxScore';
 import { queueCharacterAssets, queueCharacterGameplay } from '../characters/characterAssets';
 import { getSelectedCharacter } from '../characters/characterSelection';
 import { footOffset } from '../characters/characterAnimation';
@@ -740,7 +741,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     const bossScore = this.bossResult.bossScore ?? 0;
     this.scene.start('LevelCompleteScene', {
       score: bossScore,
-      maxScore: bossScore,
+      maxScore: getBossMaxScore(this.scene.key, this.bounds, this.seed),
       retryScene: 'BossScene',
       retryData: { rhythmResult: this.rhythmResult, seed: this.seed },
       continueScene: 'ResultScene',

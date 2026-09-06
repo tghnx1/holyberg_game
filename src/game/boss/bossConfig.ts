@@ -147,8 +147,6 @@ export const BOSS_SCORING = {
   /** The single source for what one emerald is worth. */
   emeraldScore: 100,
   hitPenalty: 500,
-  survivalBonus: 2000,
-  flawlessBonus: 5000,
   /** Combo thresholds, highest first; the first match wins. */
   multiplierTiers: [
     { combo: 12, multiplier: 4 },

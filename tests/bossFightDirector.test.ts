@@ -63,9 +63,8 @@ describe('boss fight director', () => {
     expect(score.finished).toBe(true);
     expect(score.hits).toBe(0);
     expect(score.dodges).toBeGreaterThan(10);
-    expect(score.score).toBeGreaterThan(
-      BOSS_SCORING.survivalBonus + BOSS_SCORING.flawlessBonus,
-    );
+    // Every dodge scored at at least the base rate, no bonus added at the end.
+    expect(score.score).toBeGreaterThanOrEqual(score.dodges * BOSS_SCORING.dodgeScore);
   });
 
   it('a motionless player takes hits and still reaches the end of the fight', () => {
@@ -98,12 +97,25 @@ describe('boss fight director', () => {
     expect(wideHits).toBe(1);
   });
 
-  it('awards the survival bonus however many times the player was hit', () => {
+  it('reaches the end however many times the player was hit', () => {
     const director = simulate(() => 640);
     const { score } = director.result;
     expect(score.hits).toBeGreaterThan(0);
-    // Hit repeatedly, so no flawless bonus — but the fight was still finished.
-    expect(score.score).toBeGreaterThanOrEqual(BOSS_SCORING.survivalBonus);
+    expect(score.finished).toBe(true);
+  });
+
+  it('regression: the score at the instant the fight ends equals the score the frame before — nothing is added silently', () => {
+    const director = new BossFightDirector(bounds, 1);
+    let scoreBeforeEnd = director.snapshot.score.score;
+    let guard = 0;
+    while (!director.snapshot.finished && guard < 100_000) {
+      scoreBeforeEnd = director.snapshot.score.score;
+      const x = findSafestX(director.snapshot.activeAttacks);
+      director.update(FRAME_MS, x);
+      guard += 1;
+    }
+    expect(director.snapshot.finished).toBe(true);
+    expect(director.result.score.score).toBe(scoreBeforeEnd);
   });
 
   it('banks emeralds through the same score state as dodges and hits', () => {
