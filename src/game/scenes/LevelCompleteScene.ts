@@ -14,10 +14,18 @@ import type { ViewportInfo } from '../responsive/ViewportInfo';
  * here.
  */
 export interface LevelCompleteSceneData {
-  /** Score earned in this level only, not the cumulative total. */
+  /** Score earned in this level only, not the cumulative total. Ignored when `scoring` is `'none'`. */
   score: number;
-  /** Maximum possible score for this level only. */
+  /** Maximum possible score for this level only. Ignored when `scoring` is `'none'`. */
   maxScore: number;
+  /**
+   * `'scored'` (the default when omitted) shows `SCORE  X / Y`. `'none'` is
+   * for a level that awards no points of its own (Club, Level 4): showing
+   * `0 / 0`, or a carried-over score from an earlier level as if it were
+   * earned here, would both misrepresent what actually happened in this
+   * level, so this shows a neutral line instead.
+   */
+  scoring?: 'scored' | 'none';
   /** Scene to restart for a fresh attempt at this level. */
   retryScene: string;
   /** Data to restart that scene with; carries forward only prior levels' scores. */
@@ -83,6 +91,10 @@ export class LevelCompleteScene extends Phaser.Scene {
     this.activated = false;
   }
 
+  private get isNonScoring(): boolean {
+    return this.levelData.scoring === 'none';
+  }
+
   create(): void {
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#090611');
@@ -106,26 +118,41 @@ export class LevelCompleteScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // "SCORE  6600 / 8550" as three adjacent segments instead of one string,
-    // so the earned score can read visually stronger than the label and the
-    // maximum while the whole line still measures and centres as one unit.
-    this.scoreLabel = this.add
-      .text(0, 0, 'SCORE', { fontFamily: 'Space Mono', fontSize: '22px', color: '#a99bc0' })
-      .setOrigin(0, 0.5);
-    this.scoreValue = this.add
-      .text(0, 0, `${this.levelData.score}`, {
-        fontFamily: 'Archivo Black',
-        fontSize: '36px',
-        color: '#ffdf57',
-      })
-      .setOrigin(0, 0.5);
-    this.scoreMax = this.add
-      .text(0, 0, `/ ${this.levelData.maxScore}`, {
-        fontFamily: 'Space Mono',
-        fontSize: '22px',
-        color: '#9c8fb0',
-      })
-      .setOrigin(0, 0.5);
+    if (this.isNonScoring) {
+      // One centred line, not three segments: there is no earned/maximum
+      // pair to show, so nothing here should read as though there were.
+      this.scoreLabel = this.add
+        .text(0, 0, 'THIS LEVEL DOES NOT AWARD SCORE', {
+          fontFamily: 'Space Mono',
+          fontSize: '20px',
+          color: '#a99bc0',
+        })
+        .setOrigin(0.5);
+      this.scoreValue = this.add.text(0, 0, '', {}).setOrigin(0, 0.5).setVisible(false);
+      this.scoreMax = this.add.text(0, 0, '', {}).setOrigin(0, 0.5).setVisible(false);
+    } else {
+      // "SCORE  6600 / 8550" as three adjacent segments instead of one
+      // string, so the earned score can read visually stronger than the
+      // label and the maximum while the whole line still measures and
+      // centres as one unit.
+      this.scoreLabel = this.add
+        .text(0, 0, 'SCORE', { fontFamily: 'Space Mono', fontSize: '22px', color: '#a99bc0' })
+        .setOrigin(0, 0.5);
+      this.scoreValue = this.add
+        .text(0, 0, `${this.levelData.score}`, {
+          fontFamily: 'Archivo Black',
+          fontSize: '36px',
+          color: '#ffdf57',
+        })
+        .setOrigin(0, 0.5);
+      this.scoreMax = this.add
+        .text(0, 0, `/ ${this.levelData.maxScore}`, {
+          fontFamily: 'Space Mono',
+          fontSize: '22px',
+          color: '#9c8fb0',
+        })
+        .setOrigin(0, 0.5);
+    }
 
     this.retryButton = this.createButton('RETRY', '#ff477e', () => {
       for (const key of this.levelData.retryCleanupTextureKeys ?? []) {
@@ -193,6 +220,12 @@ export class LevelCompleteScene extends Phaser.Scene {
   }
 
   private layoutScoreLine(centerX: number, y: number): void {
+    if (this.isNonScoring) {
+      // scoreValue/scoreMax are empty and hidden for this presentation;
+      // scoreLabel alone (origin 0.5) is the whole line.
+      this.scoreLabel.setPosition(centerX, y);
+      return;
+    }
     const totalWidth =
       this.scoreLabel.width + SEGMENT_GAP + this.scoreValue.width + SEGMENT_GAP + this.scoreMax.width;
     let cursorX = centerX - totalWidth / 2;

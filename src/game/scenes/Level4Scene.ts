@@ -1688,8 +1688,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     this.finished = true;
     this.controlsLocked = true;
     this.scene.start('LevelCompleteScene', {
+      // Level 4 is a walk to the boss door: it awards no points of its own.
       score: 0,
       maxScore: 0,
+      scoring: 'none',
       retryScene: 'Level4Scene',
       retryData: { rhythmResult: this.rhythmResult },
       continueScene: 'BossScene',

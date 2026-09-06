@@ -888,10 +888,13 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
 
     this.releaseVideo();
     this.scene.start('LevelCompleteScene', {
-      // Level 2 is a walk: it awards nothing and simply carries the running
-      // total through to Level 3.
+      // Level 2 is a walk: it awards nothing of its own. `score`/`maxScore`
+      // are ignored by the 'none' presentation below — the Berlin carry-over
+      // is still passed through untouched via continueData/retryData, it's
+      // just never shown here as though Club had earned it.
       score: this.score,
       maxScore: this.score,
+      scoring: 'none',
       retryScene: 'ClubScene',
       retryData: { score: this.score, storyCast: this.storyCast },
       continueScene: 'RhythmScene',
