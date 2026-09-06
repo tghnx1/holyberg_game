@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { SoundManager } from './SoundManager';
+import { DEFAULT_AUDIO_VOLUME, SoundManager } from './SoundManager';
 import { SfxManager } from './SfxManager';
 import {
   GAME_AUDIO,
@@ -15,11 +15,12 @@ import {
  * music read as noisy rather than as feedback. Music is unaffected: its own
  * volume is set separately in `SoundtrackController.start`.
  */
-export const SFX_VOLUME = 0.55;
+export const SFX_VOLUME = DEFAULT_AUDIO_VOLUME;
 
 interface MusicSound {
   isPlaying: boolean;
   play: (config?: { loop?: boolean; seek?: number; volume?: number }) => unknown;
+  setVolume: (volume: number) => unknown;
   stop: () => unknown;
   destroy: () => unknown;
 }
@@ -27,13 +28,14 @@ interface MusicSound {
 interface AudioBackend {
   addMusic: (key: string) => MusicSound;
   playSfx: (key: string, volume: number) => unknown;
-  setMuted: (muted: boolean) => unknown;
 }
 
 /** Testable lifecycle guard: one shared soundtrack instance, never duplicates. */
 export class SoundtrackController {
   private active?: MusicSound;
   private activeTrack?: GameAudioId;
+  private muted = false;
+  private volume = DEFAULT_AUDIO_VOLUME;
 
   constructor(private readonly backend: AudioBackend) {}
 
@@ -47,7 +49,25 @@ export class SoundtrackController {
     const sound = this.backend.addMusic(GAME_AUDIO[soundtrack.track].key);
     this.active = sound;
     this.activeTrack = soundtrack.track;
-    sound.play({ loop: true, seek: soundtrack.startAt, volume: 0.55 });
+    sound.play({ loop: true, seek: soundtrack.startAt, volume: this.effectiveVolume });
+  }
+
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    this.applyVolume();
+  }
+
+  setVolume(volume: number): void {
+    this.volume = volume;
+    this.applyVolume();
+  }
+
+  private get effectiveVolume(): number {
+    return this.muted ? 0 : this.volume;
+  }
+
+  private applyVolume(): void {
+    this.active?.setVolume(this.effectiveVolume);
   }
 
   stop(): void {
@@ -70,10 +90,12 @@ export class GameAudio {
     this.backend = {
       addMusic: (key) => scene.sound.add(key) as unknown as MusicSound,
       playSfx: (key, volume) => scene.sound.play(key, { volume }),
-      setMuted: (muted) => scene.sound.setMute(muted),
     };
     this.soundtrack = new SoundtrackController(this.backend);
-    SoundManager.onChange((muted) => this.backend.setMuted(muted));
+    // Music gets its own gain: never use Phaser's global mute here, because
+    // it would also silence one-shot system SFX.
+    SoundManager.onChange((muted) => this.soundtrack.setMuted(muted));
+    SoundManager.onVolumeChange((volume) => this.soundtrack.setVolume(volume));
   }
 
   startSceneMusic(sceneId: GameAudioScene): void {
@@ -99,15 +121,11 @@ export class GameAudio {
   }
 
   private play(id: GameAudioId): void {
-    // SfxManager is a second, independent switch from the master SOUND
-    // ON/OFF above — skipped entirely here rather than through Phaser's
-    // global mute, which SoundManager already owns and which would also
-    // silence music.
+    // SfxManager is independent from music — skipped entirely here rather
+    // than through Phaser's global mute.
     if (SfxManager.isMuted) return;
     const asset = GAME_AUDIO[id];
-    // Phaser's global sound manager already applies SoundManager mute through
-    // the subscription above, including live SOUND ON/OFF changes.
-    this.backend.playSfx(asset.key, SFX_VOLUME);
+    this.backend.playSfx(asset.key, SfxManager.currentVolume);
   }
 }
 

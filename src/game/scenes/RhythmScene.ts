@@ -53,6 +53,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   /** The actual final Club room, retained before this scene was entered. */
   private clubStageSnapshot?: CurrentSceneSnapshot;
   private unsubscribeSoundManager?: () => void;
+  private unsubscribeMusicVolume?: () => void;
   private chart!: RhythmChart;
   private playbackWindow!: RhythmPlaybackWindow;
   private scoreState!: ScoreState;
@@ -208,6 +209,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       this.audio = new AudioTrackPlayer();
       await this.audio.prepare(audioBuffer);
       this.unsubscribeSoundManager = SoundManager.onChange((muted) => this.audio.setMuted(muted));
+      this.unsubscribeMusicVolume = SoundManager.onVolumeChange((volume) => this.audio.setVolume(volume));
       // prepare() detaches the buffer, so the cached copy is now an empty
       // shell that nothing can decode. Dropping it frees the encoded track
       // (several MB held for the whole level) and makes a retry re-request
@@ -756,6 +758,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.clock?.stop();
     this.unsubscribeSoundManager?.();
     this.unsubscribeSoundManager = undefined;
+    this.unsubscribeMusicVolume?.();
+    this.unsubscribeMusicVolume = undefined;
     this.audio?.destroy();
     this.notes?.destroy();
     this.boothAnimation?.destroy();

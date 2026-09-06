@@ -1,7 +1,10 @@
 type MuteListener = (muted: boolean) => void;
+type VolumeListener = (volume: number) => void;
 
 /** `sessionStorage`/`localStorage` doesn't exist in every environment this runs in — unit tests, some embeds. */
 export const SOUND_MUTED_STORAGE_KEY = 'holyberg.sound.muted';
+export const SOUND_VOLUME_STORAGE_KEY = 'holyberg.sound.musicVolume';
+export const DEFAULT_AUDIO_VOLUME = 0.55;
 
 /**
  * Where the mute preference is read from and written to. An interface, not a
@@ -12,6 +15,12 @@ export interface MuteStorage {
   /** `undefined` when nothing has been saved yet (as opposed to a saved `false`). */
   getMuted(): boolean | undefined;
   setMuted(muted: boolean): void;
+}
+
+export interface VolumeStorage {
+  /** `undefined` when no valid volume has been saved yet. */
+  getVolume(): number | undefined;
+  setVolume(volume: number): void;
 }
 
 /**
@@ -61,28 +70,66 @@ export function createLocalStorageMuteStorage(key: string): MuteStorage {
   };
 }
 
+/** Same safe persistence contract as mute, kept separate so volume can be restored independently. */
+export function createLocalStorageVolumeStorage(key: string): VolumeStorage {
+  const storage = (): Storage | undefined => {
+    try {
+      return typeof window === 'undefined' ? undefined : window.localStorage;
+    } catch {
+      return undefined;
+    }
+  };
+  return {
+    getVolume(): number | undefined {
+      try {
+        const raw = storage()?.getItem(key);
+        if (raw === null || raw === undefined) return undefined;
+        const volume = Number(raw);
+        return Number.isFinite(volume) && volume >= 0 && volume <= 1 ? volume : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    setVolume(volume: number): void {
+      try {
+        storage()?.setItem(key, String(volume));
+      } catch {
+        // Blocked/unavailable storage must not prevent an in-memory change.
+      }
+    },
+  };
+}
+
 /**
- * Global, session-wide mute switch. Anything that plays audio (currently
- * `AudioTrackPlayer`) subscribes with `onChange` and applies the mute itself;
- * this module holds no reference to any audio node so it stays usable from
- * plain unit tests.
+ * Global, session-wide music settings. Anything that plays music (including
+ * `AudioTrackPlayer`) subscribes and applies its own mute/volume, so this
+ * module never touches Phaser's global sound manager and stays unit-testable.
  *
- * The preference persists across reloads through `MuteStorage` (`localStorage`
- * by default): restored once at construction, and every real change through
- * `setMuted` writes it back. Defaults to unmuted when nothing was saved yet.
+ * Mute and volume persist independently through `localStorage`: both restore
+ * at construction, and every real change writes only its own value. Defaults
+ * are music/SFX on at 55%.
  */
 export class SoundManagerImpl {
   private muted: boolean;
+  private volume: number;
   private readonly listeners = new Set<MuteListener>();
+  private readonly volumeListeners = new Set<VolumeListener>();
 
   constructor(
     private readonly storage: MuteStorage = createLocalStorageMuteStorage(SOUND_MUTED_STORAGE_KEY),
+    private readonly volumeStorage: VolumeStorage = createLocalStorageVolumeStorage(SOUND_VOLUME_STORAGE_KEY),
+    defaultVolume = DEFAULT_AUDIO_VOLUME,
   ) {
     this.muted = this.readStoredMuted() ?? false;
+    this.volume = this.readStoredVolume() ?? defaultVolume;
   }
 
   get isMuted(): boolean {
     return this.muted;
+  }
+
+  get currentVolume(): number {
+    return this.volume;
   }
 
   // A misbehaving storage — the default factory already guards `localStorage`
@@ -104,6 +151,22 @@ export class SoundManagerImpl {
     }
   }
 
+  private readStoredVolume(): number | undefined {
+    try {
+      return this.volumeStorage.getVolume();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private writeStoredVolume(volume: number): void {
+    try {
+      this.volumeStorage.setVolume(volume);
+    } catch {
+      // Ignored — see readStoredVolume.
+    }
+  }
+
   setMuted(muted: boolean): void {
     if (muted === this.muted) return;
     this.muted = muted;
@@ -115,11 +178,30 @@ export class SoundManagerImpl {
     this.setMuted(!this.muted);
   }
 
+  setVolume(volume: number): void {
+    const next = Math.min(1, Math.max(0, Number.isFinite(volume) ? volume : this.volume));
+    if (next === this.volume) return;
+    this.volume = next;
+    this.writeStoredVolume(next);
+    for (const listener of this.volumeListeners) listener(next);
+  }
+
+  adjustVolume(delta: number): void {
+    this.setVolume(this.volume + delta);
+  }
+
   /** Returns an unsubscribe function. Fires immediately with the current state. */
   onChange(listener: MuteListener): () => void {
     this.listeners.add(listener);
     listener(this.muted);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Returns an unsubscribe function. Fires immediately with the current volume. */
+  onVolumeChange(listener: VolumeListener): () => void {
+    this.volumeListeners.add(listener);
+    listener(this.volume);
+    return () => this.volumeListeners.delete(listener);
   }
 }
 

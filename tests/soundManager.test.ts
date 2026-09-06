@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createLocalStorageMuteStorage,
+  type VolumeStorage,
   SOUND_MUTED_STORAGE_KEY,
   SoundManager,
   SoundManagerImpl,
@@ -21,6 +22,19 @@ function fakeMuteStorage(initial?: boolean): MuteStorage & { setCalls: boolean[]
     setMuted: (muted) => {
       saved = muted;
       setCalls.push(muted);
+    },
+  };
+}
+
+function fakeVolumeStorage(initial?: number): VolumeStorage & { setCalls: number[] } {
+  let saved = initial;
+  const setCalls: number[] = [];
+  return {
+    setCalls,
+    getVolume: () => saved,
+    setVolume: (volume) => {
+      saved = volume;
+      setCalls.push(volume);
     },
   };
 }
@@ -147,5 +161,28 @@ describe('SoundManager persistence', () => {
     const storage = createLocalStorageMuteStorage('some.other.key');
     expect(storage.getMuted()).toBeUndefined();
     expect(() => storage.setMuted(true)).not.toThrow();
+  });
+
+  it('restores, persists, and notifies volume independently from mute', () => {
+    const volumeStorage = fakeVolumeStorage(0.7);
+    const manager = new SoundManagerImpl(fakeMuteStorage(false), volumeStorage);
+    const listener = vi.fn();
+
+    expect(manager.currentVolume).toBe(0.7);
+    manager.onVolumeChange(listener);
+    expect(listener).toHaveBeenCalledExactlyOnceWith(0.7);
+
+    manager.setVolume(0.4);
+    expect(volumeStorage.setCalls).toEqual([0.4]);
+    expect(listener).toHaveBeenLastCalledWith(0.4);
+    expect(manager.isMuted).toBe(false);
+  });
+
+  it('clamps volume changes to the playable 0–100% range', () => {
+    const manager = new SoundManagerImpl(fakeMuteStorage(false), fakeVolumeStorage(0.55));
+    manager.adjustVolume(1);
+    expect(manager.currentVolume).toBe(1);
+    manager.adjustVolume(-2);
+    expect(manager.currentVolume).toBe(0);
   });
 });

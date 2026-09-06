@@ -1,4 +1,5 @@
 import type { TrackTimeSource } from './RhythmClock';
+import { DEFAULT_AUDIO_VOLUME } from '../audio/SoundManager';
 
 const START_LEAD_SECONDS = 0.04;
 const DEFAULT_FADE_OUT_SECONDS = 0.25;
@@ -18,6 +19,7 @@ export class AudioTrackPlayer implements TrackTimeSource {
   /** Session-wide mute; persists across `schedulePlayback` calls since it lives on this node, not the per-play gain. */
   private masterGain?: GainNode;
   private muted = false;
+  private volume = DEFAULT_AUDIO_VOLUME;
   onEnded?: () => void;
 
   /**
@@ -35,14 +37,23 @@ export class AudioTrackPlayer implements TrackTimeSource {
     if (!this.masterGain) {
       this.masterGain = this.context.createGain();
       this.masterGain.connect(this.context.destination);
-      this.masterGain.gain.value = this.muted ? 0 : 1;
+      this.applyMasterVolume();
     }
   }
 
   /** Applies (or queues, if the context isn't ready yet) the global mute state. */
   setMuted(muted: boolean): void {
     this.muted = muted;
-    if (this.masterGain) this.masterGain.gain.value = muted ? 0 : 1;
+    this.applyMasterVolume();
+  }
+
+  setVolume(volume: number): void {
+    this.volume = volume;
+    this.applyMasterVolume();
+  }
+
+  private applyMasterVolume(): void {
+    if (this.masterGain) this.masterGain.gain.value = this.muted ? 0 : this.volume;
   }
 
   async unlock(): Promise<boolean> {

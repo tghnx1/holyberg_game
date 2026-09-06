@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SFX_MUTED_STORAGE_KEY, SfxManager } from '../src/game/audio/SfxManager';
-import { SOUND_MUTED_STORAGE_KEY, SoundManager } from '../src/game/audio/SoundManager';
+import { SFX_MUTED_STORAGE_KEY, SFX_VOLUME_STORAGE_KEY, SfxManager } from '../src/game/audio/SfxManager';
+import { SOUND_MUTED_STORAGE_KEY, SOUND_VOLUME_STORAGE_KEY, SoundManager } from '../src/game/audio/SoundManager';
 
 describe('SfxManager', () => {
   afterEach(() => {
@@ -20,5 +20,7 @@ describe('SfxManager', () => {
   it('uses its own storage key, distinct from the master SOUND switch', () => {
     expect(SFX_MUTED_STORAGE_KEY).not.toBe(SOUND_MUTED_STORAGE_KEY);
     expect(SFX_MUTED_STORAGE_KEY).toBe('holyberg.sound.sfxMuted');
+    expect(SFX_VOLUME_STORAGE_KEY).toBe('holyberg.sound.sfxVolume');
+    expect(SFX_VOLUME_STORAGE_KEY).not.toBe(SOUND_VOLUME_STORAGE_KEY);
   });
 });

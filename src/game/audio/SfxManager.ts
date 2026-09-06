@@ -1,7 +1,12 @@
-import { createLocalStorageMuteStorage, SoundManagerImpl } from './SoundManager';
+import {
+  createLocalStorageMuteStorage,
+  createLocalStorageVolumeStorage,
+  SoundManagerImpl,
+} from './SoundManager';
 
 /** Independent from SOUND_MUTED_STORAGE_KEY, so the two switches persist separately. */
 export const SFX_MUTED_STORAGE_KEY = 'holyberg.sound.sfxMuted';
+export const SFX_VOLUME_STORAGE_KEY = 'holyberg.sound.sfxVolume';
 
 /**
  * Independent mute switch for one-shot "system sounds" — jumps, pickups,
@@ -16,4 +21,7 @@ export const SFX_MUTED_STORAGE_KEY = 'holyberg.sound.sfxMuted';
  * `sound.setMute`, which the master `SoundManager` already owns and which
  * would silence music too.
  */
-export const SfxManager = new SoundManagerImpl(createLocalStorageMuteStorage(SFX_MUTED_STORAGE_KEY));
+export const SfxManager = new SoundManagerImpl(
+  createLocalStorageMuteStorage(SFX_MUTED_STORAGE_KEY),
+  createLocalStorageVolumeStorage(SFX_VOLUME_STORAGE_KEY),
+);

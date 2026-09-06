@@ -5,8 +5,8 @@ import { SfxManager } from '../audio/SfxManager';
 import { PAUSE_SCENE_KEY, resumeFromPause, restartFromPause, type PauseSceneData } from '../systems/pause/PauseCoordinator';
 
 const PANEL_WIDTH = 360;
-const PANEL_HEIGHT = 380;
-const BUTTON_GAP = 64;
+const PANEL_HEIGHT = 520;
+const VOLUME_STEP = 0.1;
 
 /**
  * The one pause overlay every pausable scene shares. Launched additively on
@@ -20,8 +20,12 @@ export class PauseScene extends Phaser.Scene {
 
   private soundLabel!: Phaser.GameObjects.Text;
   private sfxLabel!: Phaser.GameObjects.Text;
+  private musicVolumeLabel!: Phaser.GameObjects.Text;
+  private sfxVolumeLabel!: Phaser.GameObjects.Text;
   private unsubscribeSound?: () => void;
   private unsubscribeSfx?: () => void;
+  private unsubscribeMusicVolume?: () => void;
+  private unsubscribeSfxVolume?: () => void;
 
   constructor() {
     super(PAUSE_SCENE_KEY);
@@ -44,7 +48,7 @@ export class PauseScene extends Phaser.Scene {
       .setDepth(Depth.UI + 91);
 
     this.add
-      .text(centerX, centerY - 120, 'PAUSED', {
+      .text(centerX, centerY - 220, 'PAUSED', {
         fontFamily: 'Archivo Black',
         fontSize: '32px',
         color: '#ffdf57',
@@ -52,22 +56,35 @@ export class PauseScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(Depth.UI + 92);
 
-    this.createButton(centerX, centerY - 120 + BUTTON_GAP, 'RESUME', () => resumeFromPause(this));
-    this.createButton(centerX, centerY - 120 + BUTTON_GAP * 2, 'RESTART', () => restartFromPause(this));
-    this.soundLabel = this.createButton(centerX, centerY - 120 + BUTTON_GAP * 3, '', () =>
+    this.createButton(centerX, centerY - 160, 'RESUME', () => resumeFromPause(this));
+    this.createButton(centerX, centerY - 104, 'RESTART', () => restartFromPause(this));
+    this.soundLabel = this.createButton(centerX, centerY - 40, '', () =>
       SoundManager.toggle(),
     );
     this.unsubscribeSound = SoundManager.onChange((muted) => {
-      this.soundLabel.setText(`SOUND: ${muted ? 'OFF' : 'ON'}`);
+      this.soundLabel.setText(`MUSIC: ${muted ? 'OFF' : 'ON'}`);
     });
-    // Independent from the SOUND switch above: this only silences one-shot
-    // system sounds (jumps, pickups, hits, UI stingers) — music/ambience
-    // keep playing either way.
-    this.sfxLabel = this.createButton(centerX, centerY - 120 + BUTTON_GAP * 4, '', () =>
+    this.musicVolumeLabel = this.createVolumeControls(centerX, centerY + 12, 'MUSIC VOLUME', () =>
+      SoundManager.adjustVolume(-VOLUME_STEP),
+      () => SoundManager.adjustVolume(VOLUME_STEP),
+    );
+    this.unsubscribeMusicVolume = SoundManager.onVolumeChange((volume) => {
+      this.musicVolumeLabel.setText(`MUSIC VOLUME: ${Math.round(volume * 100)}%`);
+    });
+
+    // Independent from music: system sounds are one-shot gameplay/UI SFX.
+    this.sfxLabel = this.createButton(centerX, centerY + 80, '', () =>
       SfxManager.toggle(),
     );
     this.unsubscribeSfx = SfxManager.onChange((muted) => {
       this.sfxLabel.setText(`SYSTEM SOUNDS: ${muted ? 'OFF' : 'ON'}`);
+    });
+    this.sfxVolumeLabel = this.createVolumeControls(centerX, centerY + 132, 'SFX VOLUME', () =>
+      SfxManager.adjustVolume(-VOLUME_STEP),
+      () => SfxManager.adjustVolume(VOLUME_STEP),
+    );
+    this.unsubscribeSfxVolume = SfxManager.onVolumeChange((volume) => {
+      this.sfxVolumeLabel.setText(`SFX VOLUME: ${Math.round(volume * 100)}%`);
     });
 
     const onKey = (): void => resumeFromPause(this);
@@ -81,6 +98,10 @@ export class PauseScene extends Phaser.Scene {
       this.unsubscribeSound = undefined;
       this.unsubscribeSfx?.();
       this.unsubscribeSfx = undefined;
+      this.unsubscribeMusicVolume?.();
+      this.unsubscribeMusicVolume = undefined;
+      this.unsubscribeSfxVolume?.();
+      this.unsubscribeSfxVolume = undefined;
     });
   }
 
@@ -100,6 +121,42 @@ export class PauseScene extends Phaser.Scene {
     text.on('pointerover', () => text.setColor('#ffdf57'));
     text.on('pointerout', () => text.setColor('#ffffff'));
     return text;
+  }
+
+  private createVolumeControls(
+    x: number,
+    y: number,
+    label: string,
+    onDecrease: () => void,
+    onIncrease: () => void,
+  ): Phaser.GameObjects.Text {
+    const value = this.add
+      .text(x, y, label, {
+        fontFamily: 'Archivo Black',
+        fontSize: '16px',
+        color: '#ffffff',
+      })
+      .setOrigin(0.5)
+      .setDepth(Depth.UI + 92);
+    this.createSmallButton(x - 145, y, '-', onDecrease);
+    this.createSmallButton(x + 145, y, '+', onIncrease);
+    return value;
+  }
+
+  private createSmallButton(x: number, y: number, label: '-' | '+', onActivate: () => void): Phaser.GameObjects.Text {
+    const button = this.add
+      .text(x, y, label, {
+        fontFamily: 'Archivo Black',
+        fontSize: '22px',
+        color: '#ffdf57',
+        backgroundColor: '#3a2650',
+        padding: { x: 12, y: 4 },
+      })
+      .setOrigin(0.5)
+      .setDepth(Depth.UI + 92)
+      .setInteractive({ useHandCursor: true });
+    button.on('pointerup', onActivate);
+    return button;
   }
 }
 

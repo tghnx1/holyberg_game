@@ -2,28 +2,36 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type Phaser from 'phaser';
 import { GameAudio, SFX_VOLUME, SoundtrackController } from '../src/game/audio/GameAudio';
 import { SfxManager } from '../src/game/audio/SfxManager';
+import { SoundManager } from '../src/game/audio/SoundManager';
 import { GAME_AUDIO, sceneAudioConfig } from '../src/game/audio/gameAudioCatalog';
 
 /**
  * Just enough of a Phaser.Scene for `GameAudio`'s own backend wiring —
- * `scene.sound.add/play/setMute` — without a running Phaser game.
+ * `scene.sound.add/play` — without a running Phaser game.
  */
 function fakeScene() {
   const play = vi.fn();
-  const setMute = vi.fn();
   const add = vi.fn((key: string) => ({
     key,
     isPlaying: false,
     play: vi.fn(),
+    setVolume: vi.fn(),
     stop: vi.fn(),
     destroy: vi.fn(),
   }));
-  const scene = { sound: { add, play, setMute } } as unknown as Phaser.Scene;
-  return { scene, play, setMute, add };
+  const scene = { sound: { add, play } } as unknown as Phaser.Scene;
+  return { scene, play, add };
 }
 
 function createBackend() {
-  const sounds: { key: string; isPlaying: boolean; play: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }[] = [];
+  const sounds: {
+    key: string;
+    isPlaying: boolean;
+    play: ReturnType<typeof vi.fn>;
+    setVolume: ReturnType<typeof vi.fn>;
+    stop: ReturnType<typeof vi.fn>;
+    destroy: ReturnType<typeof vi.fn>;
+  }[] = [];
   return {
     sounds,
     backend: {
@@ -32,6 +40,7 @@ function createBackend() {
           key,
           isPlaying: false,
           play: vi.fn(() => { sound.isPlaying = true; }),
+          setVolume: vi.fn(),
           stop: vi.fn(() => { sound.isPlaying = false; }),
           destroy: vi.fn(),
         };
@@ -39,7 +48,6 @@ function createBackend() {
         return sound;
       },
       playSfx: vi.fn(),
-      setMuted: vi.fn(),
     },
   };
 }
@@ -94,12 +102,28 @@ describe('persistent soundtrack lifecycle', () => {
     expect(sounds[0].destroy).toHaveBeenCalledOnce();
     expect(controller.currentTrack).toBeUndefined();
   });
+
+  it('applies a music mute and volume change to the active soundtrack only', () => {
+    const { backend, sounds } = createBackend();
+    const controller = new SoundtrackController(backend);
+    controller.start(sceneAudioConfig('BerlinScene').soundtrack);
+
+    controller.setMuted(true);
+    expect(sounds[0].setVolume).toHaveBeenLastCalledWith(0);
+
+    controller.setMuted(false);
+    controller.setVolume(0.4);
+    expect(sounds[0].setVolume).toHaveBeenLastCalledWith(0.4);
+  });
 });
 
 describe('GameAudio.playSfx', () => {
   afterEach(() => {
     // Session-wide singleton: reset between tests so cases don't leak state.
     SfxManager.setMuted(false);
+    SfxManager.setVolume(SFX_VOLUME);
+    SoundManager.setMuted(false);
+    SoundManager.setVolume(0.55);
   });
 
   it('plays a one-shot sound at the reduced SFX_VOLUME, not full volume', () => {
@@ -133,6 +157,17 @@ describe('GameAudio.playSfx', () => {
     audio.playSfx('token');
 
     expect(play).toHaveBeenCalledWith(GAME_AUDIO.token.key, { volume: SFX_VOLUME });
+  });
+
+  it('keeps SFX enabled when music is muted and uses the current SFX volume', () => {
+    const { scene, play } = fakeScene();
+    const audio = new GameAudio(scene);
+    SoundManager.setMuted(true);
+    SfxManager.setVolume(0.7);
+
+    audio.playSfx('jump');
+
+    expect(play).toHaveBeenCalledWith(GAME_AUDIO.jump.key, { volume: 0.7 });
   });
 
   it('never throws even if the backend play call itself throws', () => {
