@@ -4,6 +4,8 @@ import {
   CharacterCarouselError,
   computeCarouselLayout,
   stepIndex,
+  swipeStep,
+  wheelStep,
   wrapIndex,
 } from '../src/game/characters/characterCarousel';
 
@@ -70,6 +72,27 @@ describe('navigation', () => {
     let index = 0;
     for (let i = 0; i < 4; i += 1) index = stepIndex(index, 4, 1);
     expect(index).toBe(0);
+  });
+});
+
+describe('touch and wheel gestures', () => {
+  it('keeps short card taps as taps and changes one card only after a swipe threshold', () => {
+    expect(swipeStep(300, 266)).toBe(0);
+    expect(swipeStep(300, 240)).toBe(1);
+    expect(swipeStep(300, 360)).toBe(-1);
+  });
+
+  it('uses a horizontal trackpad scroll or vertical mouse wheel direction predictably', () => {
+    expect(wheelStep(20, 2)).toBe(1);
+    expect(wheelStep(-20, 2)).toBe(-1);
+    expect(wheelStep(0, 100)).toBe(1);
+    expect(wheelStep(0, -100)).toBe(-1);
+    expect(wheelStep(0, 0)).toBe(0);
+  });
+
+  it('feeds gesture steps through the same wrapping navigation as arrows', () => {
+    expect(stepIndex(2, 3, swipeStep(300, 240))).toBe(0);
+    expect(stepIndex(0, 3, wheelStep(-20, 0))).toBe(2);
   });
 });
 

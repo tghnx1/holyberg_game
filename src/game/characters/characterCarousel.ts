@@ -45,6 +45,29 @@ export function stepIndex(index: number, count: number, delta: number): number {
   return wrapIndex(index + delta, count);
 }
 
+/** Horizontal movement required before a touch is a carousel swipe, not a tap. */
+export const CAROUSEL_SWIPE_THRESHOLD = 44;
+
+/**
+ * Converts a completed horizontal drag into one carousel step.  A left swipe
+ * advances to the next card; a right swipe returns to the previous card.
+ */
+export function swipeStep(startX: number, endX: number, threshold = CAROUSEL_SWIPE_THRESHOLD): -1 | 0 | 1 {
+  const distance = endX - startX;
+  if (Math.abs(distance) < threshold) return 0;
+  return distance < 0 ? 1 : -1;
+}
+
+/**
+ * Treat either wheel axis as carousel navigation. Trackpads commonly report
+ * horizontal deltas, while a conventional mouse wheel reports vertical ones.
+ */
+export function wheelStep(deltaX: number, deltaY: number): -1 | 0 | 1 {
+  const dominant = Math.abs(deltaX) >= Math.abs(deltaY) ? deltaX : deltaY;
+  if (dominant === 0) return 0;
+  return dominant > 0 ? 1 : -1;
+}
+
 export interface CarouselLayout {
   /**
    * X for the track container, chosen so the focused card lands on the

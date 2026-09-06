@@ -3,8 +3,11 @@ import { Depth } from '../constants';
 import { queueCharacterPreview } from '../characters/characterAssets';
 import {
   assertSelectable,
+  CAROUSEL_SWIPE_THRESHOLD,
   computeCarouselLayout,
   stepIndex,
+  swipeStep,
+  wheelStep,
   type CarouselLayout,
 } from '../characters/characterCarousel';
 import type { CharacterDefinition } from '../characters/characterManifest';
@@ -21,6 +24,9 @@ const CARD_GAP = 28;
 const TOUCH_PADDING = 18;
 const CONFIRM_WIDTH = 268;
 const CONFIRM_HEIGHT = 62;
+const WHEEL_DELTA_THRESHOLD = 12;
+const WHEEL_DEBOUNCE_MS = 240;
+const WHEEL_GESTURE_GAP_MS = 140;
 
 interface CharacterCard {
   character: CharacterDefinition;
@@ -60,6 +66,13 @@ export class CharacterSelectScene extends Phaser.Scene {
   private layout!: CarouselLayout;
   /** Latched by the first accepted confirm, so a double tap cannot double-start. */
   private confirmed = false;
+  /** Touch drag state is intentionally scene-owned, so cards can reject its release. */
+  private carouselPointer?: { id: number; startX: number; dragged: boolean };
+  /** Covers both Phaser pointer-up dispatch orders: card first or scene first. */
+  private dragReleasePointerIds = new Set<number>();
+  private wheelDelta = 0;
+  private lastWheelAt = -Infinity;
+  private wheelBlockedUntil = -Infinity;
 
   constructor() {
     super('CharacterSelectScene');
@@ -85,6 +98,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.buildConfirm();
     this.buildArrows();
     this.buildKeyboard();
+    this.buildCarouselGestures();
 
     new OrientationController(this, { onLayout: (viewport) => this.applyLayout(viewport) });
     this.applyLayout();
@@ -150,6 +164,7 @@ export class CharacterSelectScene extends Phaser.Scene {
         // Focus on release, never on hover, so touch and mouse behave alike.
         .on('pointerup', (pointer: Phaser.Input.Pointer) => {
           this.swallow(pointer);
+          if (this.isCarouselDrag(pointer)) return;
           this.focus(index);
         });
       this.track.add(root);
@@ -227,6 +242,30 @@ export class CharacterSelectScene extends Phaser.Scene {
     keyboard.on('keydown-SPACE', () => this.confirm());
   }
 
+  /**
+   * Wheel/trackpad and touch both feed the existing one-card `move` path.
+   * Keeping gesture recognition here lets card taps remain simple and avoids
+   * a second carousel state machine.
+   */
+  private buildCarouselGestures(): void {
+    this.input.on('pointerdown', this.onCarouselPointerDown, this);
+    this.input.on('pointermove', this.onCarouselPointerMove, this);
+    this.input.on('pointerup', this.onCarouselPointerUp, this);
+    this.input.on('pointerupoutside', this.onCarouselPointerUp, this);
+    this.input.on('wheel', this.onCarouselWheel, this);
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.input.off('pointerdown', this.onCarouselPointerDown, this);
+      this.input.off('pointermove', this.onCarouselPointerMove, this);
+      this.input.off('pointerup', this.onCarouselPointerUp, this);
+      this.input.off('pointerupoutside', this.onCarouselPointerUp, this);
+      this.input.off('wheel', this.onCarouselWheel, this);
+      this.carouselPointer = undefined;
+      this.dragReleasePointerIds.clear();
+      this.wheelDelta = 0;
+    });
+  }
+
   // ----------------------------------------------------------------- input
 
   private swallow(pointer: Phaser.Input.Pointer): void {
@@ -236,6 +275,61 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   private move(delta: number): void {
     this.focus(stepIndex(this.index, this.characters.length, delta));
+  }
+
+  private onCarouselPointerDown(pointer: Phaser.Input.Pointer): void {
+    if (!this.isInCarouselBand(pointer)) return;
+    this.dragReleasePointerIds.delete(pointer.id);
+    this.carouselPointer = { id: pointer.id, startX: pointer.x, dragged: false };
+  }
+
+  private onCarouselPointerMove(pointer: Phaser.Input.Pointer): void {
+    const gesture = this.carouselPointer;
+    if (!gesture || gesture.id !== pointer.id) return;
+    // Mark this before pointerup so a card's own pointerup handler cannot
+    // mistake a swipe release for a selection.
+    if (Math.abs(pointer.x - gesture.startX) >= CAROUSEL_SWIPE_THRESHOLD) gesture.dragged = true;
+  }
+
+  private onCarouselPointerUp(pointer: Phaser.Input.Pointer): void {
+    const gesture = this.carouselPointer;
+    if (!gesture || gesture.id !== pointer.id) return;
+    const step = gesture.dragged ? swipeStep(gesture.startX, pointer.x) : 0;
+    if (gesture.dragged) this.dragReleasePointerIds.add(pointer.id);
+    this.carouselPointer = undefined;
+    if (step !== 0) this.move(step);
+  }
+
+  private onCarouselWheel(
+    _pointer: Phaser.Input.Pointer,
+    _objects: Phaser.GameObjects.GameObject[],
+    deltaX: number,
+    deltaY: number,
+  ): void {
+    if (this.characters.length < 2) return;
+    const now = this.time.now;
+    if (now - this.lastWheelAt > WHEEL_GESTURE_GAP_MS) this.wheelDelta = 0;
+    this.lastWheelAt = now;
+    const rawStep = wheelStep(deltaX, deltaY);
+    if (rawStep === 0) return;
+    const dominant = Math.abs(deltaX) >= Math.abs(deltaY) ? deltaX : deltaY;
+    this.wheelDelta += dominant;
+    if (Math.abs(this.wheelDelta) < WHEEL_DELTA_THRESHOLD || now < this.wheelBlockedUntil) return;
+
+    this.move(this.wheelDelta > 0 ? 1 : -1);
+    this.wheelDelta = 0;
+    this.wheelBlockedUntil = now + WHEEL_DEBOUNCE_MS;
+  }
+
+  private isInCarouselBand(pointer: Phaser.Input.Pointer): boolean {
+    return Math.abs(pointer.y - this.track.y) <= CARD_HEIGHT / 2;
+  }
+
+  private isCarouselDrag(pointer: Phaser.Input.Pointer): boolean {
+    return (
+      (this.carouselPointer?.id === pointer.id && this.carouselPointer.dragged) ||
+      this.dragReleasePointerIds.has(pointer.id)
+    );
   }
 
   private focus(index: number): void {
@@ -296,7 +390,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   private hintText(): string {
     if (this.characters.length < 2) return 'ENTER OR TAP SELECT TO START';
-    return '← → OR TAP A RUNNER   ·   ENTER TO START';
+    return 'SWIPE OR SCROLL   ·   ← → OR TAP A RUNNER   ·   ENTER TO START';
   }
 
   /**
