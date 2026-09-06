@@ -232,6 +232,10 @@ export class ClubNpcLayer {
         width: instance.sprite.width,
         height: instance.sprite.height,
       }),
+      // The editor changes the sprite directly. Keep the authored placement
+      // in lockstep so a resize/layout pass cannot restore stale coordinates
+      // before the user presses P.
+      onChange: (transform) => this.updatePlacementFromTransform(instance, transform),
       clone: () => {
         const created = this.duplicate(instance);
         return created ? this.toEditableObject(created) : undefined;
@@ -244,6 +248,26 @@ export class ClubNpcLayer {
       // have no `remove`, so the editor cannot delete them.
       remove: () => this.removeInstance(instance),
     };
+  }
+
+  /** Converts the editor's rendered sprite position back into authored ratios. */
+  private updatePlacementFromTransform(
+    instance: NpcInstance,
+    transform: { x: number; y: number; scaleY: number },
+  ): void {
+    const camera = this.scene.cameras.main;
+    instance.placement = toClubNpcPlacement(
+      instance.placement,
+      {
+        x: transform.x,
+        // The sprite itself sits below the authored floor line by its scaled
+        // foot gap. Remove that rendering-only displacement before persisting.
+        y: transform.y - footOffset(instance.art.footGap, transform.scaleY),
+        scale: transform.scaleY,
+      },
+      camera.width,
+      camera.height,
+    );
   }
 
   /** Destroys one crowd group and stops tracking it. */

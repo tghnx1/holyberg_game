@@ -130,6 +130,43 @@ describe('editing the ambient club crowd', () => {
     expect(layer.getEditableObjects()).toHaveLength(getRoomNpcPlacements(ROOM).length);
   });
 
+  it('keeps an editor move/resize through layout and the save/reload placement round trip', () => {
+    const { layer } = buildLayer(ROOM);
+    const editable = layer.getEditableObjects()[0];
+    const sprite = editable.target as unknown as FakeSprite;
+    const edited = { x: 456, y: 321, scaleX: 1.15, scaleY: 1.15 };
+
+    // SceneEditor applies the sprite transform first, then calls onChange.
+    sprite.setPosition(edited.x, edited.y).setScale(edited.scaleX, edited.scaleY);
+    editable.onChange?.(edited);
+    layer.layout();
+
+    expect(sprite.x).toBe(edited.x);
+    expect(sprite.y).toBe(edited.y);
+    expect(sprite.scaleX).toBe(edited.scaleX);
+    expect(sprite.scaleY).toBe(edited.scaleY);
+
+    const saved = layer.buildLayoutFromSnapshot(
+      layer.getEditableObjects().map((object) => ({
+        id: object.id,
+        x: object.target.x,
+        y: object.target.y,
+        scaleX: object.target.scaleX,
+        scaleY: object.target.scaleY,
+      })),
+    );
+    expect(saved[0].xRatio).toBeCloseTo(edited.x / 1280, 6);
+
+    // `setRoom` consumes the same placement array that P sends to the save
+    // endpoint, modelling a reload/re-entry without touching the fixture.
+    layer.setRoom(ROOM);
+    const restored = layer.getEditableObjects()[0].target as unknown as FakeSprite;
+    expect(restored.x).toBe(edited.x);
+    expect(restored.y).toBe(edited.y);
+    expect(restored.scaleX).toBe(edited.scaleX);
+    expect(restored.scaleY).toBe(edited.scaleY);
+  });
+
   /**
    * Both capabilities are declared per object, and the shared core offers
    * each one only where it is present — so these are also the assertion that
