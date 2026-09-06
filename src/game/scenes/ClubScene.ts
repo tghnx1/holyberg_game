@@ -552,8 +552,21 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     }
   }
 
+  /** Re-places every currently shown scenery item against the live camera size; call on any resize. */
+  private layoutRoomScenery(): void {
+    if (this.roomScenery.size === 0) return;
+    const camera = this.cameras.main;
+    for (const item of CLUB_ROOM_SCENERY_ITEMS) {
+      const image = this.roomScenery.get(item.editableId);
+      if (!image) continue;
+      const transform = resolveClubRoomSceneryTransform(this.scene.key, item, camera.width, camera.height);
+      image.setPosition(transform.x, transform.y).setScale(transform.scale);
+    }
+  }
+
   private showRoomSceneryItem(item: ClubRoomSceneryItem): void {
-    const transform = resolveClubRoomSceneryTransform(this.scene.key, item);
+    const camera = this.cameras.main;
+    const transform = resolveClubRoomSceneryTransform(this.scene.key, item, camera.width, camera.height);
     let image = this.roomScenery.get(item.editableId);
     if (!image) {
       // Below the ambient crowd (Depth.ENVIRONMENT), so NPCs stand in front
@@ -578,11 +591,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       resizable: true,
       getNativeSize: () => ({ width: image.width, height: image.height }),
       onChange: (transform) => {
-        persistClubRoomScenery(this.scene.key, item, {
-          x: transform.x,
-          y: transform.y,
-          scale: transform.scaleY,
-        });
+        const camera = this.cameras.main;
+        persistClubRoomScenery(
+          this.scene.key,
+          item,
+          { x: transform.x, y: transform.y, scale: transform.scaleY },
+          camera.width,
+          camera.height,
+        );
         image.setPosition(transform.x, transform.y).setScale(transform.scaleY);
       },
     };
@@ -995,6 +1011,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Ratio-based, so the crowd re-seats itself on the new viewport.
     this.npcs?.layout();
     this.layoutStoryActor();
+    // Same reason: a scenery item authored as a fraction of the camera must
+    // be re-placed against the *new* camera size, not left at wherever it
+    // last landed.
+    this.layoutRoomScenery();
 
     // Keep the player inside the new width, and on the floor line.
     this.walkX = Phaser.Math.Clamp(this.walkX, EDGE_MARGIN, camera.width - EDGE_MARGIN);
