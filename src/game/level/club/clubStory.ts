@@ -93,6 +93,11 @@ export function clubStorySlotForRoom(roomId: string): ClubStorySlot | undefined 
     .find(([, placement]) => placement.roomId === roomId)?.[0];
 }
 
+/** The final DJ's line releases the player into the set, without another input. */
+export function shouldAutoExitClubAfterDialogue(slot: ClubStorySlot | undefined): boolean {
+  return slot === 'dj3';
+}
+
 export function buildClubRoomDialogue(
   slot: ClubStorySlot,
   characterId: string,

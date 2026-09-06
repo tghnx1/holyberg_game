@@ -21,6 +21,7 @@ import {
   CLUB_STORY_PLACEMENTS,
   clubStorySlotForRoom,
   resolveClubStoryCast,
+  shouldAutoExitClubAfterDialogue,
   type ClubStoryCast,
   type ClubStorySlot,
 } from '../level/club/clubStory';
@@ -161,6 +162,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   private storyActor?: ClubStoryActor;
   private completedStorySlots = new Set<ClubStorySlot>();
   private activeStorySlot?: ClubStorySlot;
+  /** Final DJ dialogue hands control to this walk until the normal right-edge exit. */
+  private autoWalkingToExit = false;
   private devRoomId?: string;
   private devDialogue = false;
   private preloadStartedAt = 0;
@@ -201,6 +204,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.finished = false;
     this.completedStorySlots = new Set();
     this.activeStorySlot = undefined;
+    this.autoWalkingToExit = false;
   }
 
   create(): void {
@@ -299,7 +303,11 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // doing, and drives nothing else in the scene.
     this.npcs?.update(this.time.now);
     if (this.finished) return;
-    const direction = this.transitioning ? 0 : this.walk.direction;
+    const direction: -1 | 0 | 1 = this.transitioning
+      ? 0
+      : this.autoWalkingToExit
+        ? 1
+        : this.walk.direction;
     if (direction !== 0) {
       this.facing = direction;
       this.walkX += direction * WALK_SPEED * (delta / 1000);
@@ -748,7 +756,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     if (slot) this.completedStorySlots.add(slot);
     this.activeStorySlot = undefined;
     this.transitioning = false;
-    this.applyWalkFrame(false);
+    // The last room has no further input gate. Reuse the ordinary right-edge
+    // transition, so the final walk remains visible in campaign and ?scene=club.
+    this.autoWalkingToExit = shouldAutoExitClubAfterDialogue(slot);
+    this.applyWalkFrame(this.autoWalkingToExit);
   }
 
   /**

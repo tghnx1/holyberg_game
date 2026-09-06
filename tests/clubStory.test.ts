@@ -7,6 +7,7 @@ import {
   CLUB_STORY_PLACEMENTS,
   buildPostRhythmDialogue,
   resolveClubStoryCast,
+  shouldAutoExitClubAfterDialogue,
 } from '../src/game/level/club/clubStory';
 import { getClubStoryActorIdleAssets } from '../src/game/level/club/clubStoryActorAssets';
 
@@ -69,6 +70,12 @@ describe('Club dialogue content', () => {
     const after = buildPostRhythmDialogue('c');
     expect(after.id).toBe('club-post-rhythm-dj');
     expect(after.defaultSpeaker).toEqual({ type: 'character', characterId: 'c' });
+  });
+
+  it('auto-walks only after the final dancefloor DJ dialogue', () => {
+    expect(shouldAutoExitClubAfterDialogue('dj1')).toBe(false);
+    expect(shouldAutoExitClubAfterDialogue('barkeeper')).toBe(false);
+    expect(shouldAutoExitClubAfterDialogue('dj3')).toBe(true);
   });
 });
 
