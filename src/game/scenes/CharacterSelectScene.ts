@@ -5,8 +5,8 @@ import {
   assertSelectable,
   CAROUSEL_SWIPE_THRESHOLD,
   computeCarouselLayout,
+  resolveCarouselDragRelease,
   stepIndex,
-  swipeStep,
   wheelStep,
   type CarouselLayout,
 } from '../characters/characterCarousel';
@@ -27,6 +27,7 @@ const CONFIRM_HEIGHT = 62;
 const WHEEL_DELTA_THRESHOLD = 12;
 const WHEEL_DEBOUNCE_MS = 240;
 const WHEEL_GESTURE_GAP_MS = 140;
+const CAROUSEL_SNAP_DURATION_MS = 180;
 
 interface CharacterCard {
   character: CharacterDefinition;
@@ -67,7 +68,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   /** Latched by the first accepted confirm, so a double tap cannot double-start. */
   private confirmed = false;
   /** Touch drag state is intentionally scene-owned, so cards can reject its release. */
-  private carouselPointer?: { id: number; startX: number; dragged: boolean };
+  private carouselPointer?: { id: number; startX: number; startTrackX: number; dragged: boolean };
   /** Covers both Phaser pointer-up dispatch orders: card first or scene first. */
   private dragReleasePointerIds = new Set<number>();
   private wheelDelta = 0;
@@ -278,9 +279,15 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   private onCarouselPointerDown(pointer: Phaser.Input.Pointer): void {
-    if (!this.isInCarouselBand(pointer)) return;
+    if (this.characters.length < 2 || !this.isInCarouselBand(pointer)) return;
     this.dragReleasePointerIds.delete(pointer.id);
-    this.carouselPointer = { id: pointer.id, startX: pointer.x, dragged: false };
+    this.tweens.killTweensOf(this.track);
+    this.carouselPointer = {
+      id: pointer.id,
+      startX: pointer.x,
+      startTrackX: this.track.x,
+      dragged: false,
+    };
   }
 
   private onCarouselPointerMove(pointer: Phaser.Input.Pointer): void {
@@ -289,15 +296,23 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Mark this before pointerup so a card's own pointerup handler cannot
     // mistake a swipe release for a selection.
     if (Math.abs(pointer.x - gesture.startX) >= CAROUSEL_SWIPE_THRESHOLD) gesture.dragged = true;
+    if (gesture.dragged) this.track.setX(gesture.startTrackX + pointer.x - gesture.startX);
   }
 
   private onCarouselPointerUp(pointer: Phaser.Input.Pointer): void {
     const gesture = this.carouselPointer;
     if (!gesture || gesture.id !== pointer.id) return;
-    const step = gesture.dragged ? swipeStep(gesture.startX, pointer.x) : 0;
+    const nextIndex = resolveCarouselDragRelease({
+      index: this.index,
+      count: this.characters.length,
+      startTrackX: gesture.startTrackX,
+      trackX: this.track.x,
+      cardCentres: this.layout.cardCentres,
+      viewportWidth: this.cameras.main.width,
+    });
     if (gesture.dragged) this.dragReleasePointerIds.add(pointer.id);
     this.carouselPointer = undefined;
-    if (step !== 0) this.move(step);
+    if (gesture.dragged) this.snapToIndex(nextIndex, true);
   }
 
   private onCarouselWheel(
@@ -335,7 +350,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   private focus(index: number): void {
     if (this.confirmed || index === this.index) return;
     this.index = index;
-    this.applyLayout();
+    this.applyLayout(undefined, true);
   }
 
   private confirm(): void {
@@ -351,7 +366,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   // ------------------------------------------------------------ responsive
 
-  private applyLayout(viewport?: ViewportInfo): void {
+  private applyLayout(viewport?: ViewportInfo, animateTrack = false): void {
     const camera = this.cameras.main;
     const width = camera.width;
     const height = camera.height;
@@ -367,7 +382,9 @@ export class CharacterSelectScene extends Phaser.Scene {
       gap: CARD_GAP,
       viewportWidth: width,
     });
-    this.track.setPosition(this.layout.trackX, cardsY);
+    this.track.setY(cardsY);
+    if (animateTrack) this.snapTrack(this.layout.trackX);
+    else this.track.setX(this.layout.trackX);
 
     this.cards.forEach((card, index) => {
       card.root.setPosition(this.layout.cardCentres[index], 0);
@@ -391,6 +408,23 @@ export class CharacterSelectScene extends Phaser.Scene {
   private hintText(): string {
     if (this.characters.length < 2) return 'ENTER OR TAP SELECT TO START';
     return 'SWIPE OR SCROLL   ·   ← → OR TAP A RUNNER   ·   ENTER TO START';
+  }
+
+  /** Applies selection styling then eases the live track back to that card. */
+  private snapToIndex(index: number, animate: boolean): void {
+    if (this.confirmed) return;
+    this.index = index;
+    this.applyLayout(undefined, animate);
+  }
+
+  private snapTrack(targetX: number): void {
+    this.tweens.killTweensOf(this.track);
+    this.tweens.add({
+      targets: this.track,
+      x: targetX,
+      duration: CAROUSEL_SNAP_DURATION_MS,
+      ease: 'Cubic.Out',
+    });
   }
 
   /**

@@ -3,6 +3,8 @@ import {
   assertSelectable,
   CharacterCarouselError,
   computeCarouselLayout,
+  nearestCarouselIndex,
+  resolveCarouselDragRelease,
   stepIndex,
   swipeStep,
   wheelStep,
@@ -93,6 +95,32 @@ describe('touch and wheel gestures', () => {
   it('feeds gesture steps through the same wrapping navigation as arrows', () => {
     expect(stepIndex(2, 3, swipeStep(300, 240))).toBe(0);
     expect(stepIndex(0, 3, wheelStep(-20, 0))).toBe(2);
+  });
+
+  it('snaps a live dragged track to the card nearest the viewport centre', () => {
+    const layout = computeCarouselLayout(metrics(4, 1));
+    expect(nearestCarouselIndex(layout.cardCentres, layout.trackX - 250, 1280)).toBe(2);
+    expect(nearestCarouselIndex(layout.cardCentres, layout.trackX + 250, 1280)).toBe(0);
+  });
+
+  it('keeps a short drag on its card and wraps an outward end-card swipe', () => {
+    const layout = computeCarouselLayout(metrics(3, 0));
+    expect(resolveCarouselDragRelease({
+      index: 0,
+      count: 3,
+      startTrackX: layout.trackX,
+      trackX: layout.trackX + 20,
+      cardCentres: layout.cardCentres,
+      viewportWidth: 1280,
+    })).toBe(0);
+    expect(resolveCarouselDragRelease({
+      index: 0,
+      count: 3,
+      startTrackX: layout.trackX,
+      trackX: layout.trackX + 100,
+      cardCentres: layout.cardCentres,
+      viewportWidth: 1280,
+    })).toBe(2);
   });
 });
 

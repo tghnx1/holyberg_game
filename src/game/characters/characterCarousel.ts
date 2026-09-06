@@ -68,6 +68,56 @@ export function wheelStep(deltaX: number, deltaY: number): -1 | 0 | 1 {
   return dominant > 0 ? 1 : -1;
 }
 
+/** Finds which card is closest to the viewport centre at a live track X. */
+export function nearestCarouselIndex(
+  cardCentres: readonly number[],
+  trackX: number,
+  viewportWidth: number,
+): number {
+  if (cardCentres.length === 0) return 0;
+  const viewportCenter = viewportWidth / 2;
+  let nearest = 0;
+  let nearestDistance = Infinity;
+  cardCentres.forEach((cardCenter, index) => {
+    const distance = Math.abs(trackX + cardCenter - viewportCenter);
+    if (distance < nearestDistance) {
+      nearest = index;
+      nearestDistance = distance;
+    }
+  });
+  return nearest;
+}
+
+export interface CarouselDragRelease {
+  index: number;
+  count: number;
+  startTrackX: number;
+  trackX: number;
+  cardCentres: readonly number[];
+  viewportWidth: number;
+  threshold?: number;
+}
+
+/**
+ * Snaps a dragged track to the card now closest to centre. The end cards
+ * retain the carousel's existing wraparound convention for a clear outward
+ * swipe, rather than becoming dead ends.
+ */
+export function resolveCarouselDragRelease({
+  index,
+  count,
+  startTrackX,
+  trackX,
+  cardCentres,
+  viewportWidth,
+  threshold = CAROUSEL_SWIPE_THRESHOLD,
+}: CarouselDragRelease): number {
+  if (count <= 1 || Math.abs(trackX - startTrackX) < threshold) return index;
+  if (index === 0 && trackX > startTrackX) return count - 1;
+  if (index === count - 1 && trackX < startTrackX) return 0;
+  return nearestCarouselIndex(cardCentres, trackX, viewportWidth);
+}
+
 export interface CarouselLayout {
   /**
    * X for the track container, chosen so the focused card lands on the
