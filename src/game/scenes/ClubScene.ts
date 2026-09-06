@@ -355,12 +355,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       // set of groups is editable without this scene knowing what is in it.
       ...(this.npcs?.getEditableObjects() ?? []),
       ...(this.storyActor ? [this.storyActorEditable(this.storyActor)] : []),
-      ...CLUB_ROOM_SCENERY_ITEMS.filter((item) => item.roomId === this.roomIndexId())
-        .map((item) => {
-          const image = this.roomScenery.get(item.editableId);
-          return image ? this.roomSceneryEditable(item, image) : undefined;
-        })
-        .filter((object): object is EditableObject => object !== undefined),
+      ...this.currentRoomSceneryEditables(),
       createPlayerEditable(this, {
         sprite: this.playerSprite,
         getAnchor: () => this.playerAnchor(frame.footGap, baseScale()),
@@ -391,7 +386,20 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const story = this.storyActor
       ? this.storyActorEditable(this.storyActor)
       : undefined;
+    // Scenery (the bar, the DJ deck) has to be a live actor here too, not
+    // left baked into the captured background: gameplay draws it between the
+    // story actor and the crowd (see materializeStoryActor/showRoomSceneryItem),
+    // and matching that in the dialogue means it needs its own depth relative
+    // to those other live actors, not a fixed spot behind all of them.
+    const scenery = this.currentRoomSceneryEditables();
     const actors = [
+      // Back to front, matching the gameplay depth order: the performer
+      // stands behind their own counter/deck, which stands behind the crowd,
+      // which stands behind the player.
+      ...(story && this.storyActor
+        ? [liveSpriteActor(this, story, this.storyActorLiveOptions(this.storyActor))]
+        : []),
+      ...scenery.map((object) => liveSpriteActor(this, object)),
       ...this.npcs?.getDialogueActorSpecs().map((spec) =>
         liveSpriteActor(this, spec.editable, {
           frameKeys: spec.frameKeys.filter((key) => this.textures.exists(key)),
@@ -399,9 +407,6 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
           phaseMs: spec.phaseMs,
         }),
       ) ?? [],
-      ...(story && this.storyActor
-        ? [liveSpriteActor(this, story, this.storyActorLiveOptions(this.storyActor))]
-        : []),
       ...(player ? [liveSpriteActor(this, player)] : []),
     ];
     return {
@@ -529,9 +534,11 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const transform = resolveClubRoomSceneryTransform(this.scene.key, item);
     let image = this.roomScenery.get(item.editableId);
     if (!image) {
-      // Above the ambient crowd (Depth.ENVIRONMENT), so the bar/DJ deck reads
-      // as furniture the NPCs stand behind rather than floating over it.
-      image = this.add.image(0, 0, item.textureKey).setOrigin(0.5, 1).setDepth(Depth.ENVIRONMENT + 1);
+      // Below the ambient crowd (Depth.ENVIRONMENT), so NPCs stand in front
+      // of the bar/DJ deck rather than it floating over them. Above the story
+      // actor (see materializeStoryActor), so the DJ/bartender stands behind
+      // their own counter/deck.
+      image = this.add.image(0, 0, item.textureKey).setOrigin(0.5, 1).setDepth(Depth.ENVIRONMENT - 1);
       this.roomScenery.set(item.editableId, image);
     }
     image
@@ -559,6 +566,17 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     };
   }
 
+  /** Editable objects for whichever scenery is actually shown in the current room. */
+  private currentRoomSceneryEditables(): EditableObject[] {
+    const roomId = this.roomIndexId();
+    return CLUB_ROOM_SCENERY_ITEMS.filter((item) => item.roomId === roomId)
+      .map((item) => {
+        const image = this.roomScenery.get(item.editableId);
+        return image ? this.roomSceneryEditable(item, image) : undefined;
+      })
+      .filter((object): object is EditableObject => object !== undefined);
+  }
+
   /**
    * Shows a room's story actor only after Phaser has registered its idle
    * texture. HTTP prefetch can make this immediate, but direct cold loads use
@@ -584,10 +602,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       });
       return;
     }
+    // Behind its own room's scenery (the bar counter, the DJ deck) — see
+    // showRoomSceneryItem — so the performer reads as standing at it rather
+    // than in front of it. Rooms with no scenery (the lounge's dj1) are
+    // unaffected: there is nothing at this depth to be behind.
     const sprite = this.add
       .sprite(0, 0, frame.key)
       .setOrigin(0.5, 1)
-      .setDepth(Depth.ENVIRONMENT + 2);
+      .setDepth(Depth.ENVIRONMENT - 2);
     const actor: ClubStoryActor = { slot, character, sprite };
     if (CLUB_STORY_PLACEMENTS[slot].waistCrop) {
       const mask = this.make.graphics({}, false);
