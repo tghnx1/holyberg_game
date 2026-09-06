@@ -14,6 +14,8 @@ import {
 } from '../leaderboard/domain';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import type { ViewportInfo } from '../responsive/ViewportInfo';
+import { computeResultFit } from './resultLayout';
 import { combineAllScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
 import type { RhythmResult } from '../rhythm/types';
 import { releaseKeyboardCaptureWhileFocused } from '../systems/textInputKeyboardRelease';
@@ -26,6 +28,12 @@ export class ResultScene extends Phaser.Scene {
 
   private result!: RhythmResult;
   private totalScore = 0;
+  /**
+   * Everything this scene draws lives in here, at the same local coordinates
+   * it always had; `layoutUi` moves/scales only this one object to fit the
+   * live viewport, so no individual element's position math had to change.
+   */
+  private root!: Phaser.GameObjects.Container;
   private leaderboardText!: Phaser.GameObjects.Text;
   private playerRowText!: Phaser.GameObjects.Text;
   private leaderboardStatus!: Phaser.GameObjects.Text;
@@ -60,11 +68,14 @@ export class ResultScene extends Phaser.Scene {
   }
 
   create(): void {
-    new OrientationController(this);
     attachFullscreenExitControl(this);
     this.cameras.main.setBackgroundColor('#090611');
+    this.root = this.add.container(0, 0);
+
     for (let index = 0; index < 12; index += 1) {
-      this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, 0x22112e);
+      this.root.add(
+        this.add.rectangle(100 + index * 100, 650, 65, 180 + (index % 4) * 60, 0x22112e),
+      );
     }
 
     this.totalScore = combineAllScores(
@@ -74,39 +85,61 @@ export class ResultScene extends Phaser.Scene {
     );
     this.storedInstagram = readStoredInstagram(window.localStorage);
     const grade = getPerformanceGrade(this.result.accuracy);
-    this.add
-      .text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', {
-        fontFamily: 'Archivo Black',
-        fontSize: '54px',
-        color: '#ffdf57',
-        stroke: '#55145e',
-        strokeThickness: 9,
-      })
-      .setOrigin(0.5);
-    this.add
-      .text(280, 134, `YOUR SET RATING: ${grade}`, {
-        fontFamily: 'Archivo Black',
-        fontSize: '27px',
-        color: '#ff9f43',
-      })
-      .setOrigin(0.5);
-    this.add
-      .text(
-        92,
-        188,
-        this.formatBreakdown(),
-        {
+    this.root.add(
+      this.add
+        .text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', {
+          fontFamily: 'Archivo Black',
+          fontSize: '54px',
+          color: '#ffdf57',
+          stroke: '#55145e',
+          strokeThickness: 9,
+        })
+        .setOrigin(0.5),
+    );
+    this.root.add(
+      this.add
+        .text(280, 134, `YOUR SET RATING: ${grade}`, {
+          fontFamily: 'Archivo Black',
+          fontSize: '27px',
+          color: '#ff9f43',
+        })
+        .setOrigin(0.5),
+    );
+    this.root.add(
+      this.add
+        .text(92, 188, this.formatBreakdown(), {
           fontFamily: 'Space Mono',
           fontSize: '18px',
           color: '#ffffff',
           lineSpacing: 4,
-        },
-      )
-      .setOrigin(0, 0);
+        })
+        .setOrigin(0, 0),
+    );
 
     this.createLeaderboardPanel();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeClaimModal());
     void this.loadLeaderboard();
+
+    // Built after every child exists, mirroring LevelCompleteScene: the
+    // controller runs one onLayout from its own constructor, so there has to
+    // be something to lay out by then.
+    new OrientationController(this, { onLayout: (viewport) => this.layoutUi(viewport) });
+    this.layoutUi();
+  }
+
+  /**
+   * Fits the whole `root` composition into the live camera, uniformly scaled
+   * and centred, respecting the safe-area margin on every side. Re-run on
+   * every resize/orientation/fullscreen change through OrientationController,
+   * the same pattern LevelCompleteScene/ClubScene use.
+   */
+  private layoutUi(viewport?: ViewportInfo): void {
+    const camera = this.cameras.main;
+    const margin = viewport?.safeMargin ?? 24;
+    const panelWidth = Math.max(1, camera.width - margin * 2);
+    const panelHeight = Math.max(1, camera.height - margin * 2);
+    const fit = computeResultFit(panelWidth, panelHeight);
+    this.root.setScale(fit.scale).setPosition(margin + fit.offsetX, margin + fit.offsetY);
   }
 
   /**
@@ -145,20 +178,25 @@ export class ResultScene extends Phaser.Scene {
 
   private createLeaderboardPanel(): void {
     const showClaimUi = shouldShowClaimUi(this.storedInstagram);
-    this.add.rectangle(902, 380, 620, 570, 0x120a1b, 0.94).setStrokeStyle(4, 0xff477e, 0.9);
-    this.add
-      .text(902, 116, 'LEADERBOARD', {
-        fontFamily: 'Archivo Black',
-        fontSize: '32px',
-        color: '#ffdf57',
-      })
-      .setOrigin(0.5);
+    this.root.add(
+      this.add.rectangle(902, 380, 620, 570, 0x120a1b, 0.94).setStrokeStyle(4, 0xff477e, 0.9),
+    );
+    this.root.add(
+      this.add
+        .text(902, 116, 'LEADERBOARD', {
+          fontFamily: 'Archivo Black',
+          fontSize: '32px',
+          color: '#ffdf57',
+        })
+        .setOrigin(0.5),
+    );
     this.leaderboardText = this.add.text(625, 154, 'LOADING TOP 10…', {
       fontFamily: 'Space Mono',
       fontSize: '17px',
       color: '#ffffff',
       lineSpacing: 5,
     });
+    this.root.add(this.leaderboardText);
     this.playerRowText = this.add.text(
       625,
       425,
@@ -174,6 +212,7 @@ export class ResultScene extends Phaser.Scene {
         padding: { x: 10, y: 8 },
       },
     );
+    this.root.add(this.playerRowText);
     this.leaderboardStatus = this.add
       .text(902, 471, showClaimUi ? 'CALCULATING YOUR POSITION…' : 'UPDATING YOUR BEST SCORE…', {
         fontFamily: 'Space Mono',
@@ -184,6 +223,7 @@ export class ResultScene extends Phaser.Scene {
         wordWrap: { width: 540 },
       })
       .setOrigin(0.5, 0);
+    this.root.add(this.leaderboardStatus);
     this.instagramInput = this.add
       .text(902, 523, '[@____________]', {
         fontFamily: 'Space Mono',
@@ -195,6 +235,7 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .setVisible(showClaimUi);
+    this.root.add(this.instagramInput);
     this.instagramInput.on('pointerdown', () => {
       void this.claimScore();
     });
@@ -237,6 +278,7 @@ export class ResultScene extends Phaser.Scene {
     button.on('pointerdown', action);
     button.on('pointerover', () => button.setScale(1.03));
     button.on('pointerout', () => button.setScale(1));
+    this.root.add(button);
     return button;
   }
 
@@ -257,6 +299,7 @@ export class ResultScene extends Phaser.Scene {
     actionText.on('pointerdown', action);
     actionText.on('pointerover', () => actionText.setColor('#ffffff'));
     actionText.on('pointerout', () => actionText.setColor('#ffb0bf'));
+    this.root.add(actionText);
     return actionText;
   }
 
