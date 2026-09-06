@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import { SoundManager } from './SoundManager';
+import { SfxManager } from './SfxManager';
 import {
   GAME_AUDIO,
   sceneAudioConfig,
@@ -7,6 +8,14 @@ import {
   type GameAudioScene,
   type SceneSoundtrack,
 } from './gameAudioCatalog';
+
+/**
+ * One-shot SFX play noticeably louder than the mix at full (1.0) volume —
+ * "system sounds" (jumps, pickups, hits, UI stingers) stacking on top of
+ * music read as noisy rather than as feedback. Music is unaffected: its own
+ * volume is set separately in `SoundtrackController.start`.
+ */
+export const SFX_VOLUME = 0.55;
 
 interface MusicSound {
   isPlaying: boolean;
@@ -17,7 +26,7 @@ interface MusicSound {
 
 interface AudioBackend {
   addMusic: (key: string) => MusicSound;
-  playSfx: (key: string) => unknown;
+  playSfx: (key: string, volume: number) => unknown;
   setMuted: (muted: boolean) => unknown;
 }
 
@@ -53,14 +62,14 @@ export class SoundtrackController {
   }
 }
 
-class GameAudio {
+export class GameAudio {
   private readonly soundtrack: SoundtrackController;
   private readonly backend: AudioBackend;
 
   constructor(scene: Phaser.Scene) {
     this.backend = {
       addMusic: (key) => scene.sound.add(key) as unknown as MusicSound,
-      playSfx: (key) => scene.sound.play(key),
+      playSfx: (key, volume) => scene.sound.play(key, { volume }),
       setMuted: (muted) => scene.sound.setMute(muted),
     };
     this.soundtrack = new SoundtrackController(this.backend);
@@ -90,10 +99,15 @@ class GameAudio {
   }
 
   private play(id: GameAudioId): void {
+    // SfxManager is a second, independent switch from the master SOUND
+    // ON/OFF above — skipped entirely here rather than through Phaser's
+    // global mute, which SoundManager already owns and which would also
+    // silence music.
+    if (SfxManager.isMuted) return;
     const asset = GAME_AUDIO[id];
     // Phaser's global sound manager already applies SoundManager mute through
     // the subscription above, including live SOUND ON/OFF changes.
-    this.backend.playSfx(asset.key);
+    this.backend.playSfx(asset.key, SFX_VOLUME);
   }
 }
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createLocalStorageMuteStorage,
   SOUND_MUTED_STORAGE_KEY,
   SoundManager,
   SoundManagerImpl,
@@ -140,5 +141,11 @@ describe('SoundManager persistence', () => {
 
   it('uses the documented storage key', () => {
     expect(SOUND_MUTED_STORAGE_KEY).toBe('holyberg.sound.muted');
+  });
+
+  it('createLocalStorageMuteStorage is safe with no window at all (e.g. this test environment)', () => {
+    const storage = createLocalStorageMuteStorage('some.other.key');
+    expect(storage.getMuted()).toBeUndefined();
+    expect(() => storage.setMuted(true)).not.toThrow();
   });
 });

@@ -27,7 +27,13 @@ export interface MuteStorage {
  * global that warns on access, which a bare `typeof localStorage` check would
  * otherwise trigger for no reason in every test run.
  */
-function createLocalStorageMuteStorage(): MuteStorage {
+/**
+ * Builds a `localStorage`-backed `MuteStorage` under `key`. Exported (rather
+ * than hardwired to `SOUND_MUTED_STORAGE_KEY`) so another independent mute
+ * switch — e.g. `SfxManager` — can reuse this exact mechanism with its own
+ * key instead of duplicating it.
+ */
+export function createLocalStorageMuteStorage(key: string): MuteStorage {
   const storage = (): Storage | undefined => {
     try {
       return typeof window === 'undefined' ? undefined : window.localStorage;
@@ -38,7 +44,7 @@ function createLocalStorageMuteStorage(): MuteStorage {
   return {
     getMuted(): boolean | undefined {
       try {
-        const raw = storage()?.getItem(SOUND_MUTED_STORAGE_KEY);
+        const raw = storage()?.getItem(key);
         return raw === null || raw === undefined ? undefined : raw === 'true';
       } catch {
         return undefined;
@@ -46,7 +52,7 @@ function createLocalStorageMuteStorage(): MuteStorage {
     },
     setMuted(muted: boolean): void {
       try {
-        storage()?.setItem(SOUND_MUTED_STORAGE_KEY, String(muted));
+        storage()?.setItem(key, String(muted));
       } catch {
         // Blocked/unavailable storage: nothing to do, muting still works for
         // the rest of this session, it just won't survive a reload.
@@ -69,7 +75,9 @@ export class SoundManagerImpl {
   private muted: boolean;
   private readonly listeners = new Set<MuteListener>();
 
-  constructor(private readonly storage: MuteStorage = createLocalStorageMuteStorage()) {
+  constructor(
+    private readonly storage: MuteStorage = createLocalStorageMuteStorage(SOUND_MUTED_STORAGE_KEY),
+  ) {
     this.muted = this.readStoredMuted() ?? false;
   }
 

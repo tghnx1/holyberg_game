@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { Depth } from '../constants';
 import { SoundManager } from '../audio/SoundManager';
+import { SfxManager } from '../audio/SfxManager';
 import { PAUSE_SCENE_KEY, resumeFromPause, restartFromPause, type PauseSceneData } from '../systems/pause/PauseCoordinator';
 
 const PANEL_WIDTH = 360;
+const PANEL_HEIGHT = 380;
 const BUTTON_GAP = 64;
 
 /**
@@ -17,7 +19,9 @@ export class PauseScene extends Phaser.Scene {
   static readonly pausable = false;
 
   private soundLabel!: Phaser.GameObjects.Text;
+  private sfxLabel!: Phaser.GameObjects.Text;
   private unsubscribeSound?: () => void;
+  private unsubscribeSfx?: () => void;
 
   constructor() {
     super(PAUSE_SCENE_KEY);
@@ -35,7 +39,7 @@ export class PauseScene extends Phaser.Scene {
       .setInteractive(); // Swallows clicks so they can't reach the frozen scene underneath.
 
     this.add
-      .rectangle(centerX, centerY, PANEL_WIDTH, 320, 0x1a0f26, 0.96)
+      .rectangle(centerX, centerY, PANEL_WIDTH, PANEL_HEIGHT, 0x1a0f26, 0.96)
       .setStrokeStyle(2, 0xffdf57, 0.8)
       .setDepth(Depth.UI + 91);
 
@@ -56,6 +60,15 @@ export class PauseScene extends Phaser.Scene {
     this.unsubscribeSound = SoundManager.onChange((muted) => {
       this.soundLabel.setText(`SOUND: ${muted ? 'OFF' : 'ON'}`);
     });
+    // Independent from the SOUND switch above: this only silences one-shot
+    // system sounds (jumps, pickups, hits, UI stingers) — music/ambience
+    // keep playing either way.
+    this.sfxLabel = this.createButton(centerX, centerY - 120 + BUTTON_GAP * 4, '', () =>
+      SfxManager.toggle(),
+    );
+    this.unsubscribeSfx = SfxManager.onChange((muted) => {
+      this.sfxLabel.setText(`SYSTEM SOUNDS: ${muted ? 'OFF' : 'ON'}`);
+    });
 
     const onKey = (): void => resumeFromPause(this);
     this.input.keyboard?.on('keydown-ESC', onKey);
@@ -66,6 +79,8 @@ export class PauseScene extends Phaser.Scene {
       this.input.keyboard?.off('keydown-P', onKey);
       this.unsubscribeSound?.();
       this.unsubscribeSound = undefined;
+      this.unsubscribeSfx?.();
+      this.unsubscribeSfx = undefined;
     });
   }
 

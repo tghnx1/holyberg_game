@@ -1,6 +1,26 @@
-import { describe, expect, it, vi } from 'vitest';
-import { SoundtrackController } from '../src/game/audio/GameAudio';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type Phaser from 'phaser';
+import { GameAudio, SFX_VOLUME, SoundtrackController } from '../src/game/audio/GameAudio';
+import { SfxManager } from '../src/game/audio/SfxManager';
 import { GAME_AUDIO, sceneAudioConfig } from '../src/game/audio/gameAudioCatalog';
+
+/**
+ * Just enough of a Phaser.Scene for `GameAudio`'s own backend wiring —
+ * `scene.sound.add/play/setMute` — without a running Phaser game.
+ */
+function fakeScene() {
+  const play = vi.fn();
+  const setMute = vi.fn();
+  const add = vi.fn((key: string) => ({
+    key,
+    isPlaying: false,
+    play: vi.fn(),
+    stop: vi.fn(),
+    destroy: vi.fn(),
+  }));
+  const scene = { sound: { add, play, setMute } } as unknown as Phaser.Scene;
+  return { scene, play, setMute, add };
+}
 
 function createBackend() {
   const sounds: { key: string; isPlaying: boolean; play: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> }[] = [];
@@ -73,5 +93,55 @@ describe('persistent soundtrack lifecycle', () => {
     expect(sounds[0].stop).toHaveBeenCalledOnce();
     expect(sounds[0].destroy).toHaveBeenCalledOnce();
     expect(controller.currentTrack).toBeUndefined();
+  });
+});
+
+describe('GameAudio.playSfx', () => {
+  afterEach(() => {
+    // Session-wide singleton: reset between tests so cases don't leak state.
+    SfxManager.setMuted(false);
+  });
+
+  it('plays a one-shot sound at the reduced SFX_VOLUME, not full volume', () => {
+    const { scene, play } = fakeScene();
+    const audio = new GameAudio(scene);
+
+    audio.playSfx('jump');
+
+    expect(play).toHaveBeenCalledWith(GAME_AUDIO.jump.key, { volume: SFX_VOLUME });
+    expect(SFX_VOLUME).toBeLessThan(1);
+  });
+
+  it('is skipped entirely while SfxManager is muted', () => {
+    const { scene, play } = fakeScene();
+    const audio = new GameAudio(scene);
+    SfxManager.setMuted(true);
+
+    audio.playSfx('jump');
+
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it('resumes playing once SfxManager is unmuted again', () => {
+    const { scene, play } = fakeScene();
+    const audio = new GameAudio(scene);
+    SfxManager.setMuted(true);
+    audio.playSfx('jump');
+    expect(play).not.toHaveBeenCalled();
+
+    SfxManager.setMuted(false);
+    audio.playSfx('token');
+
+    expect(play).toHaveBeenCalledWith(GAME_AUDIO.token.key, { volume: SFX_VOLUME });
+  });
+
+  it('never throws even if the backend play call itself throws', () => {
+    const { scene, play } = fakeScene();
+    play.mockImplementation(() => {
+      throw new Error('decode failed');
+    });
+    const audio = new GameAudio(scene);
+
+    expect(() => audio.playSfx('jump')).not.toThrow();
   });
 });
