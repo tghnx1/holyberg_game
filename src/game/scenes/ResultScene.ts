@@ -32,7 +32,6 @@ export class ResultScene extends Phaser.Scene {
   private claimButton!: Phaser.GameObjects.Text;
   private skipAction!: Phaser.GameObjects.Text;
   private shareButton!: Phaser.GameObjects.Text;
-  private replayButton!: Phaser.GameObjects.Text;
   private restartAction!: Phaser.GameObjects.Text;
   private retryAction!: Phaser.GameObjects.Text;
   private modal?: HTMLDivElement;
@@ -207,21 +206,12 @@ export class ResultScene extends Phaser.Scene {
     this.shareButton = this.createButton(902, 533, 'SHARE YOUR SCORE', () => {
       void this.shareScore();
     }).setVisible(false);
-    this.replayButton = this.createButton(902, 590, 'REPLAY THIS LEVEL', () => {
-      this.scene.start('RhythmScene', { score: this.result.berlinScore });
-    })
-      .setFontSize(18)
-      .setBackgroundColor('#ff477e')
-      .setColor('#ffffff')
-      .setPadding(20, 10)
-      .setVisible(false);
     this.restartAction = this.createTextAction(902, 642, 'RESTART FULL GAME', () => {
       this.scene.start('BerlinScene');
     }).setVisible(!showClaimUi);
     this.retryAction = this.createTextAction(902, 511, 'RETRY SCORE UPDATE', () => {
       void this.updateStoredScore();
     }).setVisible(false);
-    if (!showClaimUi) this.replayButton.setVisible(true);
   }
 
   private createButton(
@@ -336,7 +326,6 @@ export class ResultScene extends Phaser.Scene {
 
   private showReplayOptions(claimed: boolean): void {
     this.shareButton.setVisible(claimed);
-    this.replayButton.setVisible(true);
     this.restartAction.setVisible(true);
   }
 
