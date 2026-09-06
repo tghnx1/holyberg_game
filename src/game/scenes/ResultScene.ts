@@ -28,8 +28,7 @@ import {
   uiTextActionStyle,
 } from '../ui/theme';
 import { responsiveFontSize } from '../ui/mobileTypography';
-
-const GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
+import { createBrandedScoreCard, shareScoreResult } from '../leaderboard/scoreShare';
 
 export class ResultScene extends Phaser.Scene {
   /** Final results/leaderboard screen, not gameplay. */
@@ -556,20 +555,21 @@ export class ResultScene extends Phaser.Scene {
 
   private async shareScore(): Promise<void> {
     if (!this.claimed) return;
-    const text = `I ranked #${this.claimed.rank} with ${this.claimed.bestScore} points in Holyberg. Can you beat my score?`;
     try {
-      if (navigator.share) {
-        await navigator.share({ title: 'Holyberg score', text, url: GAME_URL });
-        return;
-      }
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${text} ${GAME_URL}`);
+      const result = await shareScoreResult(
+        { rank: this.claimed.rank, score: this.claimed.bestScore },
+        {
+          navigator,
+          createCardFile: createBrandedScoreCard,
+          prompt: (message, value) => window.prompt(message, value),
+        },
+      );
+      if (result === 'copied') {
         this.leaderboardStatus.setText('SHARE TEXT COPIED.');
-        return;
+      } else if (result === 'prompted') {
+        this.leaderboardStatus.setText('COPY THE SCORE TEXT TO SHARE.');
       }
-      window.prompt('Copy your Holyberg score', `${text} ${GAME_URL}`);
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
+    } catch {
       this.leaderboardStatus.setText('SHARING IS UNAVAILABLE — COPY THE GAME URL.');
     }
   }
