@@ -372,18 +372,21 @@ export function representativeGameplayBodyHeight(
     : heights[middle];
 }
 
-/** Atmos returns exactly 1; other playable bodies resolve to Atmos's visible pose height. */
+/**
+ * Atmos returns exactly 1. One run-pose factor normalizes a character's
+ * gameplay body without reinterpreting intentionally short poses (crouch,
+ * damage, etc.) as a smaller character that needs enlarging.
+ */
 export function gameplayBodyHeightNormalizationFactor(
   character: CharacterDefinition,
   reference: CharacterDefinition,
-  pose: CharacterGameplayPose,
 ): number {
   if (character.id === reference.id) return 1;
-  const characterHeight = representativeGameplayBodyHeight(character, pose);
-  const referenceHeight = representativeGameplayBodyHeight(reference, pose);
+  const characterHeight = representativeGameplayBodyHeight(character, 'run');
+  const referenceHeight = representativeGameplayBodyHeight(reference, 'run');
   if (characterHeight <= 0 || referenceHeight <= 0) return 1;
-  const characterAuthoredScale = resolveGameplayScale(character, pose);
-  const referenceAuthoredScale = resolveGameplayScale(reference, pose);
+  const characterAuthoredScale = resolveGameplayScale(character, 'run');
+  const referenceAuthoredScale = resolveGameplayScale(reference, 'run');
   if (characterAuthoredScale <= 0) return 1;
   return (referenceHeight * referenceAuthoredScale) / (characterHeight * characterAuthoredScale);
 }
@@ -405,11 +408,11 @@ export function normalizePlayableGameplayScales(
   return definitions.map((character) => {
     if (!character.capabilities.playable || character.id === reference.id) return character;
     const gameplayPoseScales = { ...character.presentation.gameplayPoseScales };
+    const normalizationFactor = gameplayBodyHeightNormalizationFactor(character, reference);
     for (const pose of GAMEPLAY_POSES) {
       if (framesForGameplayPose(character, pose).length === 0) continue;
       const authoredScale = resolveGameplayScale(character, pose);
-      gameplayPoseScales[pose] =
-        authoredScale * gameplayBodyHeightNormalizationFactor(character, reference, pose);
+      gameplayPoseScales[pose] = authoredScale * normalizationFactor;
     }
     return {
       ...character,
