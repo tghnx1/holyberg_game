@@ -335,6 +335,89 @@ export function resolveGameplayScale(
   return character.presentation.gameplayPoseScales[pose] ?? character.presentation.gameplayScale;
 }
 
+const GAMEPLAY_POSES: readonly CharacterGameplayPose[] = [
+  'idle',
+  'run',
+  'walk',
+  'jump',
+  'crouch',
+  'damage',
+];
+
+function framesForGameplayPose(
+  character: CharacterDefinition,
+  pose: CharacterGameplayPose,
+): readonly CharacterAssetRef[] {
+  if (pose === 'idle') return character.gameplay.idle ? [character.gameplay.idle] : [];
+  return character.gameplay[pose];
+}
+
+/**
+ * Median drawn body height for a pose. Animation bounce/outlier frames do not
+ * redefine a character's perceived size, while every value still comes from
+ * the alpha-measured `bodyHeight` metadata.
+ */
+export function representativeGameplayBodyHeight(
+  character: CharacterDefinition,
+  pose: CharacterGameplayPose,
+): number {
+  const heights = framesForGameplayPose(character, pose)
+    .map((frame) => frame.bodyHeight)
+    .filter((height) => height > 0)
+    .sort((a, b) => a - b);
+  if (heights.length === 0) return 0;
+  const middle = Math.floor(heights.length / 2);
+  return heights.length % 2 === 0
+    ? (heights[middle - 1] + heights[middle]) / 2
+    : heights[middle];
+}
+
+/** Atmos returns exactly 1; other playable bodies resolve to Atmos's visible pose height. */
+export function gameplayBodyHeightNormalizationFactor(
+  character: CharacterDefinition,
+  reference: CharacterDefinition,
+  pose: CharacterGameplayPose,
+): number {
+  if (character.id === reference.id) return 1;
+  const characterHeight = representativeGameplayBodyHeight(character, pose);
+  const referenceHeight = representativeGameplayBodyHeight(reference, pose);
+  if (characterHeight <= 0 || referenceHeight <= 0) return 1;
+  const characterAuthoredScale = resolveGameplayScale(character, pose);
+  const referenceAuthoredScale = resolveGameplayScale(reference, pose);
+  if (characterAuthoredScale <= 0) return 1;
+  return (referenceHeight * referenceAuthoredScale) / (characterHeight * characterAuthoredScale);
+}
+
+/**
+ * Applies the reference once while assembling the generated manifest. The
+ * result remains ordinary pose scales, so every existing gameplay renderer
+ * picks up normalization without a parallel character/rendering system.
+ */
+export function normalizePlayableGameplayScales(
+  definitions: readonly CharacterDefinition[],
+  referenceId = 'atmos',
+): CharacterDefinition[] {
+  const reference = definitions.find(
+    (definition) => definition.id === referenceId && definition.capabilities.playable,
+  );
+  if (!reference) return [...definitions];
+
+  return definitions.map((character) => {
+    if (!character.capabilities.playable || character.id === reference.id) return character;
+    const gameplayPoseScales = { ...character.presentation.gameplayPoseScales };
+    for (const pose of GAMEPLAY_POSES) {
+      if (framesForGameplayPose(character, pose).length === 0) continue;
+      const authoredScale = resolveGameplayScale(character, pose);
+      gameplayPoseScales[pose] =
+        authoredScale * gameplayBodyHeightNormalizationFactor(character, reference, pose);
+    }
+    return {
+      ...character,
+      presentation: { ...character.presentation, gameplayPoseScales },
+    };
+  });
+}
+
 export function resolveDialogueScale(character: CharacterDefinition): number {
   return character.presentation.dialogueScale;
 }
@@ -363,7 +446,9 @@ export function buildCharacterManifest(
     byId.set(definition.id, entry.folderName);
     return definition;
   });
-  return definitions.sort((a, b) => a.id.localeCompare(b.id));
+  return normalizePlayableGameplayScales(
+    definitions.sort((a, b) => a.id.localeCompare(b.id)),
+  );
 }
 
 /** Characters complete enough to be offered in Character Select. */

@@ -43,7 +43,11 @@ import {
 import { WalkInput, WALK_SPEED } from '../systems/WalkControls';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
-import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import {
+  createPlayerEditable,
+  getPlayerVisualOffset,
+  resolvePlayerPresentationScale,
+} from '../systems/playerPresentation';
 import {
   LEVEL4_EDITABLE_IDS,
   resolveCameraStopScroll,
@@ -859,9 +863,16 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     // Visual only: the editor's saved offset and scale move the drawn sprite,
     // never `actor.x`, so triggers, the cutscene and completion are unaffected.
     const visual = this.playerVisualOffset(actor);
+    const renderedScale = actor === this.player
+      ? resolvePlayerPresentationScale(
+          actor.character,
+          resolveLocomotionPose(actor.character, actor.motion),
+          visual.scale,
+        )
+      : baseScale * visual.scale;
     actor.sprite
       .setFlipX((actor.facing < 0) !== visual.flipX)
-      .setScale(baseScale * visual.scale)
+      .setScale(renderedScale)
       .setPosition(anchor.x + visual.offsetX, anchor.y + visual.offsetY);
   }
 

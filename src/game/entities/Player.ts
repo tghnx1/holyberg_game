@@ -35,7 +35,11 @@ import {
   type CharacterDefinition,
   type CharacterGameplayPose,
 } from '../characters/characterManifest';
-import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import {
+  createPlayerEditable,
+  getPlayerVisualOffset,
+  resolvePlayerPresentationScale,
+} from '../systems/playerPresentation';
 import type { EditableObject } from '../systems/SceneEditor';
 
 // Re-exported so existing importers (BootScene) keep one import site while the
@@ -168,7 +172,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.visual.setTexture(frame.key);
       this.currentVisualFrameKey = frame.key;
     }
-    this.visual.setScale(scale * presentation.scale);
+    this.visual.setScale(
+      resolvePlayerPresentationScale(
+        this.character,
+        this.resolveVisualPose(now),
+        presentation.scale,
+      ),
+    );
     this.visual.setFlipX(presentation.flipX);
     this.visual.rotation = this.rotation;
     this.visual.setDepth(Depth.PLAYER);

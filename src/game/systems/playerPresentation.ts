@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 import { designPointFromLayout, layoutRatiosFromDesignPoint } from './designSpace';
 import type { EditableObject } from './SceneEditor';
 import { getSceneObjectLayout, setSceneObjectLayout } from './sceneLayout';
+import {
+  resolveGameplayScale,
+  type CharacterDefinition,
+  type CharacterGameplayPose,
+} from '../characters/characterManifest';
 
 /**
  * Editable *visual* presentation for a level's main playable character.
@@ -24,6 +29,19 @@ export interface PlayerVisualOffset {
   offsetY: number;
   scale: number;
   flipX: boolean;
+}
+
+/**
+ * One identity-independent PLAYER multiplier on top of the normalized
+ * manifest scale. SceneEditor edits this multiplier, so changing characters
+ * never requires another size calibration.
+ */
+export function resolvePlayerPresentationScale(
+  character: CharacterDefinition,
+  pose: CharacterGameplayPose,
+  sharedScale: number,
+): number {
+  return resolveGameplayScale(character, pose) * sharedScale;
 }
 
 /**

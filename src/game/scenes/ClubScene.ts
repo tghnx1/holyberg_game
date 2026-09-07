@@ -45,7 +45,11 @@ import {
 import { getClubStoryActorIdleAssets } from '../level/club/clubStoryActorAssets';
 import type { EditableObject } from '../systems/SceneEditor';
 import type { EditableScene, EditorSavePayload } from '../systems/editableScene';
-import { createPlayerEditable, getPlayerVisualOffset } from '../systems/playerPresentation';
+import {
+  createPlayerEditable,
+  getPlayerVisualOffset,
+  resolvePlayerPresentationScale,
+} from '../systems/playerPresentation';
 import { buildSceneLayoutPayload } from '../systems/sceneLayout';
 import { getSceneObjectLayout, setSceneObjectLayout } from '../systems/sceneLayout';
 import {
@@ -351,7 +355,13 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Visual only: the saved offset moves the drawn sprite, never `walkX`, so
     // room edges and transitions trigger at exactly the same places.
     const visual = getPlayerVisualOffset(this.scene.key);
-    this.playerSprite.setScale(baseScale * visual.scale);
+    this.playerSprite.setScale(
+      resolvePlayerPresentationScale(
+        this.character,
+        resolveLocomotionPose(this.character, motion),
+        visual.scale,
+      ),
+    );
     this.playerSprite.setPosition(
       Math.round(anchor.x + visual.offsetX),
       Math.round(anchor.y + visual.offsetY),

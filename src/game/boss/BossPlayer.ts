@@ -23,6 +23,7 @@ import {
 } from './bossPlayerMovement';
 import { playerPickupBox, type CollectibleBox } from './emeraldField';
 import type { ArenaBounds } from './types';
+import { resolvePlayerPresentationScale } from '../systems/playerPresentation';
 
 const ENTRANCE_FALL_DURATION_MS = 900;
 const ENTRANCE_FALL_START_OFFSET_Y = -800;
@@ -182,14 +183,15 @@ export class BossPlayer {
       this.sprite.setTexture(frame.key);
       this.currentFrameKey = frame.key;
     }
-    const scale = this.resolveScale(this.currentPose);
     // The authored presentation offset rides on top of wherever the fight put
     // the character; `motion` itself is never touched, so dodging, collision
     // and the arena bounds are exactly as before.
     const anchor = this.anchorAt(nowMs, frame.footGap);
     this.sprite.x = anchor.x + this.presentation.offsetX;
     this.sprite.y = anchor.y + this.presentation.offsetY;
-    this.sprite.setScale(scale * this.presentation.scale);
+    this.sprite.setScale(
+      resolvePlayerPresentationScale(this.character, this.currentPose, this.presentation.scale),
+    );
     // Face the way the player is travelling; the run art is drawn facing right.
     if (this.motion.velocityX !== 0) {
       this.sprite.setFlipX((this.motion.velocityX < 0) !== this.presentation.flipX);
