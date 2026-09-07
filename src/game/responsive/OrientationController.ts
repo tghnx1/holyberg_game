@@ -110,7 +110,7 @@ export class OrientationController {
       subtitle.textContent =
         mode === 'rotate-with-hint'
           ? 'TURN OFF ROTATION LOCK'
-          : 'HOLYBERG PLAYS BEST IN LANDSCAPE';
+          : 'HOLYWORLD PLAYS BEST IN LANDSCAPE';
       overlay.append(phone);
     }
     overlay.append(title, subtitle);
