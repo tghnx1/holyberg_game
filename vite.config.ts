@@ -62,9 +62,9 @@ const EDITOR_SAVE_TARGETS = [
 ];
 
 export default defineConfig(({ command }) => ({
-  // GitHub Pages serves this repository at /holyberg_game/. Keep local
-  // development at / so phone testing through the Vite dev server is unchanged.
-  base: command === 'build' ? '/holyberg_game/' : '/',
+  // Build with relative asset URLs so the same artifact works both on the
+  // legacy /holyberg_game/ Pages path and on the custom domain root.
+  base: command === 'build' ? './' : '/',
   plugins: [characterManifestPlugin(), editorSavePlugin(EDITOR_SAVE_TARGETS)],
   test: {
     environment: 'node',
