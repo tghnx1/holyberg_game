@@ -31,7 +31,7 @@ import {
   requestGameFullscreen,
 } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
-import { BerlinScoreSystem } from '../systems/BerlinScoreSystem';
+import { BerlinScoreSystem, OBSTACLE_SCORE_PENALTY } from '../systems/BerlinScoreSystem';
 import { prefetchNextLevel } from '../systems/campaignPrefetch';
 import { getRuntimeAssetQualityProfile } from '../responsive/AssetQuality';
 import { queueCharacterGameplay } from '../characters/characterAssets';
@@ -357,7 +357,7 @@ export class BerlinScene extends Phaser.Scene {
     this.sections.markDamage();
     this.scoreSystem.hitObstacle();
     this.syncScore();
-    this.hud.flash(`HIT ${config.id.toUpperCase()}\n-100`);
+    this.hud.flash(`-${OBSTACLE_SCORE_PENALTY}`);
     this.player.hurt();
     this.player.startHitReaction(this.time.now);
     this.player.setTintFill(0xff3d66);
