@@ -145,7 +145,7 @@ export async function verifyInstagramProfile(
         headers: {
           Accept: 'text/html,application/xhtml+xml',
           'User-Agent':
-            'Mozilla/5.0 (compatible; HolybergLeaderboard/1.0; +https://tghnx1.github.io/holyberg_game/)',
+            'Mozilla/5.0 (compatible; HolybergLeaderboard/1.0; +https://game.holyberg.net/)',
         },
       },
     );
