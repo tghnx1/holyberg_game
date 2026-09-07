@@ -1,6 +1,6 @@
 # Holyberg leaderboard Worker
 
-The GitHub Pages game calls the public Worker at:
+The game calls the public Worker at:
 
 `https://holyberg-leaderboard.holyberg-game.workers.dev`
 
@@ -15,5 +15,6 @@ npm run worker:migrate
 npm run worker:deploy
 ```
 
-The production CORS origin is `https://tghnx1.github.io`. Localhost and
+Production CORS accepts `https://game.holyberg.net` and the legacy
+`https://tghnx1.github.io` origin during the domain transition. Localhost and
 127.0.0.1 origins are also accepted for development.
