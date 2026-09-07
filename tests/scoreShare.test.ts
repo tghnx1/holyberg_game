@@ -5,6 +5,11 @@ import {
   scoreShareText,
   shareScoreResult,
 } from '../src/game/leaderboard/scoreShare';
+import {
+  createSharePreviewResult,
+  createSharePreviewSnapshot,
+  isSharePreviewEnabled,
+} from '../src/game/leaderboard/sharePreview';
 
 const score = {
   rank: 23,
@@ -18,6 +23,19 @@ const score = {
 const file = { name: 'holyworld-score.png', type: 'image/png' } as File;
 
 describe('score sharing', () => {
+  it('provides representative claimed data only for the DEV preview route', () => {
+    expect(isSharePreviewEnabled('?scene=result&sharePreview=1', true)).toBe(true);
+    expect(isSharePreviewEnabled('?scene=result&sharePreview=1', false)).toBe(false);
+    expect(isSharePreviewEnabled('?scene=result', true)).toBe(false);
+
+    const snapshot = createSharePreviewSnapshot();
+    expect(snapshot.instagram).toBe('preview_player');
+    expect(snapshot.rank).toBe(5);
+    expect(snapshot.top10).toContainEqual({ instagram: 'preview_player', bestScore: 12_450 });
+    const result = createSharePreviewResult();
+    expect(result.berlinScore + result.score).toBe(12_450);
+  });
+
   it('selects two leaderboard rows on either side of the player', () => {
     const leaderboard = Array.from({ length: 8 }, (_, index) => ({
       instagram: index === 4 ? 'holyberg_' : `player${index + 1}`,

@@ -30,6 +30,10 @@ import {
 } from '../ui/theme';
 import { responsiveFontSize } from '../ui/mobileTypography';
 import { createBrandedScoreCard, shareScoreResult } from '../leaderboard/scoreShare';
+import {
+  createSharePreviewSnapshot,
+  isSharePreviewEnabled,
+} from '../leaderboard/sharePreview';
 
 export class ResultScene extends Phaser.Scene {
   /** Final results/leaderboard screen, not gameplay. */
@@ -98,7 +102,10 @@ export class ResultScene extends Phaser.Scene {
       this.result.score,
       this.result.bossScore,
     );
-    this.storedInstagram = readStoredInstagram(window.localStorage);
+    const sharePreview = isSharePreviewEnabled(window.location.search, import.meta.env.DEV);
+    const previewSnapshot = sharePreview ? createSharePreviewSnapshot() : undefined;
+    this.totalScore = previewSnapshot?.bestScore ?? this.totalScore;
+    this.storedInstagram = previewSnapshot?.instagram ?? readStoredInstagram(window.localStorage);
     const grade = getPerformanceGrade(this.result.accuracy);
     const title = this.add
       .text(DESIGN_WIDTH / 2, 68, 'SET COMPLETE', uiHeadingStyle('54px'))
@@ -118,13 +125,26 @@ export class ResultScene extends Phaser.Scene {
 
     this.createLeaderboardPanel();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeClaimModal());
-    void this.loadLeaderboard();
 
     // Built after every child exists, mirroring LevelCompleteScene: the
     // controller runs one onLayout from its own constructor, so there has to
     // be something to lay out by then.
     new OrientationController(this, { onLayout: (viewport) => this.layoutUi(viewport) });
     this.layoutUi();
+    if (previewSnapshot) {
+      this.claimed = previewSnapshot;
+      this.playerRank = previewSnapshot.rank;
+      this.renderTop10(previewSnapshot.top10);
+      this.renderClaimedPlayerRow(
+        previewSnapshot.instagram,
+        previewSnapshot.bestScore,
+        previewSnapshot.rank,
+      );
+      this.leaderboardStatus.setText(`YOU'RE #${previewSnapshot.rank} (DEV PREVIEW)`);
+      this.showReplayOptions(true);
+    } else {
+      void this.loadLeaderboard();
+    }
   }
 
   /**

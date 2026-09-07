@@ -21,6 +21,7 @@ import {
 import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/sceneryAssets';
 import { createEmptyRhythmResult } from '../level/level4/level4Flow';
 import { selectFallbackCharacter } from '../characters/characterSelection';
+import { createSharePreviewResult, isSharePreviewEnabled } from '../leaderboard/sharePreview';
 
 export class BootScene extends Phaser.Scene {
   /** Preloader/router only; there is nothing here for a pause menu to freeze. */
@@ -86,6 +87,10 @@ export class BootScene extends Phaser.Scene {
       this.scene.start('RhythmScene', {
         score: 500,
       });
+      return;
+    }
+    if (isSharePreviewEnabled(window.location.search, import.meta.env.DEV)) {
+      this.scene.start('ResultScene', createSharePreviewResult());
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'level4') {
