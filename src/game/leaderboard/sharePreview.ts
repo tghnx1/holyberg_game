@@ -1,10 +1,15 @@
 import type { ClaimedLeaderboardSnapshot } from './domain';
 import type { RhythmResult } from '../rhythm/types';
 
-/** The preview is intentionally reachable only from a DEV query route. */
+/**
+ * The unlinked production query route is deliberately read-only: it only
+ * supplies the local snapshot used to render/share a card. The older route
+ * remains a DEV convenience and is unavailable from a production build.
+ */
 export function isSharePreviewEnabled(search: string, isDev: boolean): boolean {
   const query = new URLSearchParams(search);
-  return isDev && query.get('scene') === 'result' && query.get('sharePreview') === '1';
+  return query.get('holyworldSharePreview') === '1'
+    || (isDev && query.get('scene') === 'result' && query.get('sharePreview') === '1');
 }
 
 export function createSharePreviewSnapshot(): ClaimedLeaderboardSnapshot {

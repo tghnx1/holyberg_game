@@ -140,7 +140,7 @@ export class ResultScene extends Phaser.Scene {
         previewSnapshot.bestScore,
         previewSnapshot.rank,
       );
-      this.leaderboardStatus.setText(`YOU'RE #${previewSnapshot.rank} (DEV PREVIEW)`);
+      this.leaderboardStatus.setText(`YOU'RE #${previewSnapshot.rank}`);
       this.showReplayOptions(true);
     } else {
       void this.loadLeaderboard();

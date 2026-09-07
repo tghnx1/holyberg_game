@@ -31,9 +31,11 @@ describe('score sharing', () => {
     expect(HOLYWORLD_GAME_URL).toBe('https://tghnx1.github.io/holyberg_game/');
   });
 
-  it('provides representative claimed data only for the DEV preview route', () => {
+  it('provides representative claimed data for the hidden read-only preview routes', () => {
     expect(isSharePreviewEnabled('?scene=result&sharePreview=1', true)).toBe(true);
     expect(isSharePreviewEnabled('?scene=result&sharePreview=1', false)).toBe(false);
+    expect(isSharePreviewEnabled('?holyworldSharePreview=1', false)).toBe(true);
+    expect(isSharePreviewEnabled('?holyworldSharePreview=1', true)).toBe(true);
     expect(isSharePreviewEnabled('?scene=result', true)).toBe(false);
 
     const snapshot = createSharePreviewSnapshot();
