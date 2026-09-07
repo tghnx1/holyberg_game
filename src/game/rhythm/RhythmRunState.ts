@@ -7,7 +7,6 @@ export interface RhythmRunResetState {
   starting: false;
   finished: false;
   lastBeat: -1;
-  tutorialReady: false;
   tutorial: undefined;
   tutorialNote: undefined;
   tutorialPrompt: undefined;
@@ -25,7 +24,6 @@ export function resetRhythmRunState(
     starting: false,
     finished: false,
     lastBeat: -1,
-    tutorialReady: false,
     tutorial: undefined,
     tutorialNote: undefined,
     tutorialPrompt: undefined,

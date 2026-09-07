@@ -90,8 +90,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   private activeOverlay?: Phaser.GameObjects.Container;
   private touchLabels: Phaser.GameObjects.Text[] = [];
   private tutorial?: TutorialProgress;
-  private tutorialReady = false;
   private tutorialNote?: Phaser.GameObjects.Container;
+  private tutorialNoteTween?: Phaser.Tweens.Tween;
   private tutorialPrompt?: Phaser.GameObjects.Text;
   private hitHere!: Phaser.GameObjects.Text;
   private touchDebug!: Phaser.GameObjects.Graphics;
@@ -143,9 +143,9 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.starting = reset.starting;
     this.finished = reset.finished;
     this.lastBeat = reset.lastBeat;
-    this.tutorialReady = reset.tutorialReady;
     this.tutorial = reset.tutorial;
     this.tutorialNote = reset.tutorialNote;
+    this.tutorialNoteTween = undefined;
     this.tutorialPrompt = reset.tutorialPrompt;
     this.touchLabels = [];
     this.touchDebugVisible = false;
@@ -506,7 +506,6 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       this.runCountdown(overlay, background, text);
       return;
     }
-    this.tutorialReady = false;
     const colorNames = ['ORANGE', 'PINK', 'PURPLE', 'YELLOW'];
     this.tutorialPrompt?.destroy();
     this.tutorialPrompt = this.rememberInstructionText(this.add.text(this.centerX, 300, `TAP ${colorNames[lane]}`, { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffffff', stroke: '#34103e', strokeThickness: 8 }).setOrigin(0.5).setDepth(RhythmDepth.UI), 38, 'heading');
@@ -514,7 +513,24 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     const symbol = this.add.text(0, 0, ['●', '■', '▲', '◆'][lane], { fontFamily: 'Arial', fontSize: '28px', color: '#130a1d' }).setOrigin(0.5);
     this.tutorialNote = this.add.container([-0.75, -0.25, 0.25, 0.75][lane] * HORIZON_HALF_WIDTH, HORIZON_Y, [shape, symbol]).setScale(0.2).setDepth(RhythmDepth.NOTES);
     this.tutorialRoot.add(this.tutorialNote);
-    this.tweens.add({ targets: this.tutorialNote, x: [-0.75, -0.25, 0.25, 0.75][lane] * HIT_LINE_HALF_WIDTH, y: HIT_LINE_Y, scale: 1.2, duration: 1500, ease: 'Cubic.in', onComplete: () => { this.tutorialReady = true; } });
+    this.tutorialNoteTween = this.tweens.add({
+      targets: this.tutorialNote,
+      x: [-0.75, -0.25, 0.25, 0.75][lane] * HIT_LINE_HALF_WIDTH,
+      y: HIT_LINE_Y,
+      scale: 1.2,
+      duration: 1500,
+      ease: 'Cubic.in',
+    });
+  }
+
+  /** A correct tutorial input owns the transition, not the demo note's travel tween. */
+  private clearTutorialStep(): void {
+    this.tutorialNoteTween?.stop();
+    this.tutorialNoteTween = undefined;
+    this.tutorialNote?.destroy();
+    this.tutorialNote = undefined;
+    this.tutorialPrompt?.destroy();
+    this.tutorialPrompt = undefined;
   }
 
   private bindLaneInput(): void {
@@ -558,8 +574,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     if (!inputGuarded && !this.inputGuard.allowLane(lane, this.time.now)) return;
     this.showPressFeedback(lane);
     if (this.tutorial && !this.tutorial.complete) {
-      if (this.tutorialReady && this.tutorial.hit(lane)) {
-        this.tutorialNote?.destroy(); this.tutorialPrompt?.destroy();
+      if (this.tutorial.hit(lane)) {
+        this.clearTutorialStep();
         this.showTutorialNote();
       }
       return;
@@ -800,6 +816,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.input.removeAllListeners();
     this.input.keyboard?.removeAllListeners();
     this.tutorial = undefined;
+    this.tutorialNoteTween?.stop();
+    this.tutorialNoteTween = undefined;
     this.tutorialNote = undefined;
     this.tutorialPrompt = undefined;
     this.touchLabels.length = 0;

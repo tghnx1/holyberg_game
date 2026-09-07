@@ -46,11 +46,17 @@ describe('rhythm touch onboarding', () => {
     expect(physicalToLogicalX(512, 100, 824)).toBeCloseTo(640);
   });
 
-  it('progresses tutorial only on its expected lane', () => {
+  it('advances tutorial immediately on each expected lane without requiring a note-arrival state', () => {
     const tutorial = new TutorialProgress();
     expect(tutorial.hit(1)).toBe(false);
     expect(tutorial.currentLane).toBe(0);
-    expect([0, 1, 2, 3].map((lane) => tutorial.hit(lane as 0 | 1 | 2 | 3))).toEqual([true, true, true, true]);
+    expect(tutorial.hit(0)).toBe(true);
+    expect(tutorial.currentLane).toBe(1);
+    expect(tutorial.hit(1)).toBe(true);
+    expect(tutorial.currentLane).toBe(2);
+    expect(tutorial.hit(2)).toBe(true);
+    expect(tutorial.currentLane).toBe(3);
+    expect(tutorial.hit(3)).toBe(true);
     expect(tutorial.complete).toBe(true);
   });
 

@@ -13,7 +13,6 @@ describe('RhythmScene replay state', () => {
       starting: false,
       finished: false,
       lastBeat: -1,
-      tutorialReady: false,
       tutorial: undefined,
       tutorialNote: undefined,
       tutorialPrompt: undefined,
