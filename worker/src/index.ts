@@ -32,7 +32,11 @@ interface DatabaseRow {
   verification_status: 'verified' | 'unverified';
 }
 
-const PRODUCTION_ORIGIN = 'https://tghnx1.github.io';
+const PRIMARY_PRODUCTION_ORIGIN = 'https://game.holyberg.net';
+const PRODUCTION_ORIGINS = new Set([
+  PRIMARY_PRODUCTION_ORIGIN,
+  'https://tghnx1.github.io',
+]);
 const DEVELOPMENT_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/;
 
 class D1LeaderboardStore implements LeaderboardStore {
@@ -112,9 +116,10 @@ class D1LeaderboardStore implements LeaderboardStore {
 function corsHeaders(request: Request): HeadersInit {
   const origin = request.headers.get('Origin');
   const allowed =
-    origin === PRODUCTION_ORIGIN || (origin !== null && DEVELOPMENT_ORIGIN.test(origin));
+    origin !== null &&
+    (PRODUCTION_ORIGINS.has(origin) || DEVELOPMENT_ORIGIN.test(origin));
   return {
-    'Access-Control-Allow-Origin': allowed ? origin : PRODUCTION_ORIGIN,
+    'Access-Control-Allow-Origin': allowed ? origin : PRIMARY_PRODUCTION_ORIGIN,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     Vary: 'Origin',
