@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   HOLYWORLD_GAME_URL,
+  STORY_CARD_HEIGHT,
+  STORY_CARD_WIDTH,
   selectStoryLeaderboardRows,
   scoreShareText,
   shareScoreResult,
@@ -23,6 +25,12 @@ const score = {
 const file = { name: 'holyworld-score.png', type: 'image/png' } as File;
 
 describe('score sharing', () => {
+  it('uses a full-resolution 9:16 Story canvas and the public game URL', () => {
+    expect(STORY_CARD_WIDTH).toBe(1080);
+    expect(STORY_CARD_HEIGHT).toBe(1920);
+    expect(HOLYWORLD_GAME_URL).toBe('https://tghnx1.github.io/holyberg_game/');
+  });
+
   it('provides representative claimed data only for the DEV preview route', () => {
     expect(isSharePreviewEnabled('?scene=result&sharePreview=1', true)).toBe(true);
     expect(isSharePreviewEnabled('?scene=result&sharePreview=1', false)).toBe(false);

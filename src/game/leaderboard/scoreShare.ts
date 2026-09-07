@@ -1,7 +1,11 @@
 import type { LeaderboardEntry } from './domain';
 
-export const HOLYWORLD_GAME_URL = 'https://game.holyberg.net/';
+export const HOLYWORLD_GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
 export const STORY_CARD_GAME_URL = 'tghnx1.github.io/holyberg_game/';
+export const STORY_CARD_WIDTH = 1080;
+export const STORY_CARD_HEIGHT = 1920;
+const STORY_CARD_LOGICAL_WIDTH = 720;
+const STORY_CARD_LOGICAL_HEIGHT = 1280;
 
 export interface ScoreShareData {
   rank: number;
@@ -150,20 +154,35 @@ function roundedRect(
   context.closePath();
 }
 
-/** Creates a compact 720x1280 (9:16) PNG suitable for mobile share sheets. */
+function setFittedRowHandle(
+  context: CanvasRenderingContext2D,
+  handle: string,
+  maxWidth: number,
+): void {
+  let size = 21;
+  do {
+    context.font = `bold ${size}px "Space Mono", monospace`;
+    if (context.measureText(handle).width <= maxWidth || size === 13) return;
+    size -= 1;
+  } while (size >= 13);
+}
+
+/** Creates a 1080x1920 (9:16) PNG suitable for Instagram Story share sheets. */
 export async function createBrandedScoreCard(data: ScoreShareData): Promise<File> {
   const canvas = document.createElement('canvas');
-  canvas.width = 720;
-  canvas.height = 1280;
+  canvas.width = STORY_CARD_WIDTH;
+  canvas.height = STORY_CARD_HEIGHT;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas is unavailable');
+  const scale = STORY_CARD_WIDTH / STORY_CARD_LOGICAL_WIDTH;
+  context.scale(scale, scale);
 
-  const gradient = context.createLinearGradient(0, 0, 720, 1280);
+  const gradient = context.createLinearGradient(0, 0, STORY_CARD_LOGICAL_WIDTH, STORY_CARD_LOGICAL_HEIGHT);
   gradient.addColorStop(0, '#080a07');
   gradient.addColorStop(0.58, '#12140f');
   gradient.addColorStop(1, '#071006');
   context.fillStyle = gradient;
-  context.fillRect(0, 0, 720, 1280);
+  context.fillRect(0, 0, STORY_CARD_LOGICAL_WIDTH, STORY_CARD_LOGICAL_HEIGHT);
 
   context.strokeStyle = '#39ff14';
   context.lineWidth = 8;
@@ -227,8 +246,9 @@ export async function createBrandedScoreCard(data: ScoreShareData): Promise<File
     context.textAlign = 'left';
     context.font = 'bold 22px "Space Mono", monospace';
     context.fillText(`#${row.rank}`, 106, rowY + 28);
-    context.font = 'bold 21px "Space Mono", monospace';
-    context.fillText(`@${row.instagram.slice(0, 17)}`, 177, rowY + 28, 250);
+    const handle = `@${row.instagram}`;
+    setFittedRowHandle(context, handle, row.isPlayer ? 265 : 250);
+    context.fillText(handle, 177, rowY + 28, row.isPlayer ? 265 : 250);
     if (row.isPlayer) {
       context.font = 'bold 15px "Space Mono", monospace';
       context.fillText('YOU', 448, rowY + 28);
