@@ -1,4 +1,4 @@
-export const HOLYWORLD_GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
+export const HOLYWORLD_GAME_URL = 'https://game.holyberg.net/';
 
 export interface ScoreShareData {
   rank: number;
