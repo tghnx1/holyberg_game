@@ -10,6 +10,7 @@ import {
 import {
   isValidInstagramUsername,
   normalizeInstagram,
+  type ClaimedLeaderboardSnapshot,
   type LeaderboardEntry,
 } from '../leaderboard/domain';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
@@ -56,7 +57,7 @@ export class ResultScene extends Phaser.Scene {
   private modalResolver?: (value: string | null) => void;
   /** Restores Phaser's normal key capture; set while the claim modal's input exists. */
   private releaseInstagramInputCapture?: () => void;
-  private claimed?: { instagram: string; bestScore: number; rank: number };
+  private claimed?: ClaimedLeaderboardSnapshot;
   private playerRank?: number;
   private storedInstagram = '';
   private submitting = false;
@@ -557,7 +558,12 @@ export class ResultScene extends Phaser.Scene {
     if (!this.claimed) return;
     try {
       const result = await shareScoreResult(
-        { rank: this.claimed.rank, score: this.claimed.bestScore },
+        {
+          rank: this.claimed.rank,
+          score: this.claimed.bestScore,
+          instagram: this.claimed.instagram,
+          leaderboard: this.claimed.top10,
+        },
         {
           navigator,
           createCardFile: createBrandedScoreCard,

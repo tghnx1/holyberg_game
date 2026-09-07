@@ -1,8 +1,20 @@
+import type { LeaderboardEntry } from './domain';
+
 export const HOLYWORLD_GAME_URL = 'https://game.holyberg.net/';
+export const STORY_CARD_GAME_URL = 'tghnx1.github.io/holyberg_game/';
 
 export interface ScoreShareData {
   rank: number;
   score: number;
+  instagram: string;
+  leaderboard: readonly LeaderboardEntry[];
+}
+
+export interface StoryLeaderboardRow {
+  rank: number;
+  instagram: string;
+  score: number;
+  isPlayer: boolean;
 }
 
 export type ScoreShareResult = 'file-shared' | 'text-shared' | 'copied' | 'prompted' | 'cancelled';
@@ -21,6 +33,52 @@ export interface ScoreShareDependencies {
 
 export function scoreShareText(data: ScoreShareData): string {
   return `I ranked #${data.rank} with ${data.score} points in HOLYWORLD. Can you beat my score?`;
+}
+
+function normalizedHandle(instagram: string): string {
+  return instagram.replace(/^@/, '').toLowerCase();
+}
+
+/**
+ * Selects only rows actually present in the claimed response. A player in
+ * Top 10 gets a five-row neighborhood; an outside player gets their own row
+ * plus available leaders because the API did not return invented neighbors.
+ */
+export function selectStoryLeaderboardRows(data: ScoreShareData): StoryLeaderboardRow[] {
+  const playerHandle = normalizedHandle(data.instagram);
+  const seen = new Set<string>();
+  const available: StoryLeaderboardRow[] = [];
+
+  data.leaderboard.forEach((entry, index) => {
+    const handle = normalizedHandle(entry.instagram);
+    if (!handle || seen.has(handle)) return;
+    seen.add(handle);
+    const isPlayer = handle === playerHandle;
+    available.push({
+      rank: isPlayer ? data.rank : index + 1,
+      instagram: handle,
+      score: isPlayer ? data.score : entry.bestScore,
+      isPlayer,
+    });
+  });
+
+  const playerIndex = available.findIndex((row) => row.isPlayer);
+  if (playerIndex >= 0) {
+    const start = Math.min(
+      Math.max(0, playerIndex - 2),
+      Math.max(0, available.length - 5),
+    );
+    return available.slice(start, start + 5);
+  }
+
+  const rows = available.slice(0, 4);
+  rows.push({
+    rank: data.rank,
+    instagram: playerHandle,
+    score: data.score,
+    isPlayer: true,
+  });
+  return rows.sort((left, right) => left.rank - right.rank);
 }
 
 function isShareCancellation(error: unknown): boolean {
@@ -132,38 +190,66 @@ export async function createBrandedScoreCard(data: ScoreShareData): Promise<File
   context.font = 'bold 30px "Space Mono", monospace';
   context.fillText('GLOBAL LEADERBOARD', 360, 230);
 
+  context.fillStyle = '#eef5ea';
+  context.font = 'bold 27px "Space Mono", monospace';
+  context.fillText('MY TOTAL SCORE', 360, 306);
+  context.fillStyle = '#39ff14';
+  context.font = 'bold 82px "Space Mono", monospace';
+  context.fillText(data.score.toLocaleString('en-US'), 360, 394);
+
   context.fillStyle = '#1b1f18';
-  roundedRect(context, 94, 310, 532, 500, 26);
+  roundedRect(context, 70, 442, 580, 410, 26);
   context.fill();
   context.strokeStyle = '#1f7a10';
   context.lineWidth = 4;
   context.stroke();
 
-  context.fillStyle = '#eef5ea';
-  context.font = 'bold 34px "Space Mono", monospace';
-  context.fillText('MY RANK', 360, 405);
-  context.fillStyle = '#aaff33';
-  context.font = 'bold 150px "Arcade Classic", "Archivo Black", sans-serif';
-  context.fillText(`#${data.rank}`, 360, 570);
+  context.fillStyle = '#93a191';
+  context.font = 'bold 22px "Space Mono", monospace';
+  context.fillText('LEADERBOARD', 360, 487);
+
+  const rows = selectStoryLeaderboardRows(data);
+  rows.forEach((row, index) => {
+    const rowY = 512 + index * 65;
+    if (row.isPlayer) {
+      context.fillStyle = '#39ff14';
+      roundedRect(context, 88, rowY, 544, 55, 12);
+      context.fill();
+      context.fillStyle = '#071006';
+    } else {
+      context.fillStyle = index % 2 === 0 ? '#242820' : '#1b1f18';
+      roundedRect(context, 88, rowY, 544, 55, 12);
+      context.fill();
+      context.fillStyle = '#d4ddd0';
+    }
+
+    context.textBaseline = 'middle';
+    context.textAlign = 'left';
+    context.font = 'bold 22px "Space Mono", monospace';
+    context.fillText(`#${row.rank}`, 106, rowY + 28);
+    context.font = 'bold 21px "Space Mono", monospace';
+    context.fillText(`@${row.instagram.slice(0, 17)}`, 177, rowY + 28, 250);
+    if (row.isPlayer) {
+      context.font = 'bold 15px "Space Mono", monospace';
+      context.fillText('YOU', 448, rowY + 28);
+    }
+    context.textAlign = 'right';
+    context.font = 'bold 20px "Space Mono", monospace';
+    context.fillText(row.score.toLocaleString('en-US'), 614, rowY + 28);
+  });
+  context.textBaseline = 'alphabetic';
+  context.textAlign = 'center';
 
   context.fillStyle = '#eef5ea';
-  context.font = 'bold 34px "Space Mono", monospace';
-  context.fillText('SCORE', 360, 660);
-  context.fillStyle = '#39ff14';
-  context.font = 'bold 74px "Space Mono", monospace';
-  context.fillText(data.score.toLocaleString('en-US'), 360, 752);
-
-  context.fillStyle = '#eef5ea';
-  context.font = 'bold 42px "Arcade Classic", "Archivo Black", sans-serif';
-  context.fillText('CAN YOU BEAT', 360, 930);
-  context.fillText('MY SCORE?', 360, 984);
+  context.font = 'bold 38px "Arcade Classic", "Archivo Black", sans-serif';
+  context.fillText('CAN YOU BEAT MY SCORE?', 360, 960);
 
   context.fillStyle = '#93a191';
   context.font = '24px "Space Mono", monospace';
-  context.fillText('PLAY NOW', 360, 1092);
+  context.fillText('PLAY NOW', 360, 1080);
   context.fillStyle = '#aaff33';
   context.font = 'bold 23px "Space Mono", monospace';
-  context.fillText(HOLYWORLD_GAME_URL, 360, 1140);
+  context.fillText(STORY_CARD_GAME_URL, 360, 1130);
 
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((value) => {
