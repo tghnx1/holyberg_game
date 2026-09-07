@@ -79,8 +79,17 @@ export function attachFullscreenExitControl(scene: Phaser.Scene): void {
     .setDepth(Depth.UI + 50)
     .setVisible(scene.scale.isFullscreen)
     .setInteractive({ useHandCursor: true });
+  let shuttingDown = false;
+
+  const canPlace = (): boolean =>
+    !shuttingDown
+    && scene.sys.settings.status !== Phaser.Scenes.SHUTDOWN
+    && scene.sys.settings.status !== Phaser.Scenes.DESTROYED
+    && button.active
+    && button.scene === scene;
 
   const place = (): void => {
+    if (!canPlace()) return;
     const margin = getViewportInfo(scene.scale).safeMargin;
     button.setPosition(scene.cameras.main.width - margin, margin);
     FullscreenExitReservedWidth.set(button.visible ? button.displayWidth : 0);
@@ -109,6 +118,7 @@ export function attachFullscreenExitControl(scene: Phaser.Scene): void {
   place();
 
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    shuttingDown = true;
     button.off('pointerdown', onDown);
     scene.scale.off(Phaser.Scale.Events.ENTER_FULLSCREEN, onEnter);
     scene.scale.off(Phaser.Scale.Events.LEAVE_FULLSCREEN, onLeave);

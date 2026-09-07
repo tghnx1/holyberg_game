@@ -38,6 +38,7 @@ export class HudSystem {
   private readonly scene: Phaser.Scene;
   /** Last string pushed to the score label; setText re-renders its texture. */
   private scoreText = '';
+  private destroyed = false;
 
   /** Touch-only: full-height screen zones, not created at all on desktop. */
   private duckZone?: Phaser.GameObjects.Zone;
@@ -184,6 +185,17 @@ export class HudSystem {
   }
 
   applyLayout(viewport: ViewportInfo): void {
+    // `PauseHudReservedWidth.set()` notifies synchronously. Scene shutdown
+    // marks SceneSystems inactive before its listeners run, so an update
+    // published by another HUD teardown must not touch Text canvases that
+    // Phaser is already destroying.
+    if (
+      this.destroyed
+      || this.scene.sys.settings.status === Phaser.Scenes.SHUTDOWN
+      || this.scene.sys.settings.status === Phaser.Scenes.DESTROYED
+      || !this.score.active
+      || !this.message.active
+    ) return;
     // Camera width follows the viewport aspect ratio under Scale.EXPAND, so
     // HUD elements anchor to the camera's own visible bounds rather than the
     // fixed design constants.
@@ -210,6 +222,8 @@ export class HudSystem {
 
   /** Releases every listener this system registered on the scene and game. */
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.releaseTouchCrouch();
     this.scene.input.off(Phaser.Input.Events.POINTER_UP, this.onPointerUp);
     this.scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, this.onPointerUp);

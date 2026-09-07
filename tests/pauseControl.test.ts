@@ -1,12 +1,13 @@
 import type Phaser from 'phaser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSceneEditorStateForTests, setSceneEditorActive } from '../src/game/systems/sceneEditorState';
+import { FullscreenExitReservedWidth } from '../src/game/responsive/FullscreenExitReservedWidth';
 
 vi.mock('phaser', () => ({
   default: {
     Input: { Events: { POINTER_DOWN: 'pointerdown' } },
     Scale: { Events: { RESIZE: 'resize' } },
-    Scenes: { Events: { SHUTDOWN: 'shutdown' } },
+    Scenes: { Events: { SHUTDOWN: 'shutdown' }, SHUTDOWN: 8, DESTROYED: 9 },
   },
 }));
 vi.mock('../src/game/systems/pause/PauseCoordinator', () => ({
@@ -22,6 +23,9 @@ function createText() {
     x: 0,
     y: 0,
     displayWidth: 72,
+    active: true,
+    destroyed: false,
+    scene: undefined as unknown,
     setOrigin: vi.fn().mockReturnThis(),
     setScrollFactor: vi.fn().mockReturnThis(),
     setDepth: vi.fn().mockReturnThis(),
@@ -40,8 +44,10 @@ function createText() {
 
 function createScene() {
   const keyboardListeners = new Map<string, (...args: unknown[]) => void>();
+  const shutdownListeners: Array<() => void> = [];
   const button = createText();
   const scene = {
+    sys: { settings: { status: 5 } },
     scale: {
       parentSize: { width: 1280, height: 720 },
       game: { device: { input: { touch: false } } },
@@ -63,16 +69,20 @@ function createScene() {
       },
     },
     events: {
-      once: vi.fn(),
+      once: vi.fn((event: string, listener: () => void) => {
+        if (event === 'shutdown') shutdownListeners.push(listener);
+      }),
     },
   };
-  return { scene, keyboardListeners };
+  button.scene = scene;
+  return { scene, keyboardListeners, shutdownListeners, button };
 }
 
 describe('pause control keyboard shortcuts', () => {
   beforeEach(() => {
     vi.mocked(requestPause).mockClear();
     __resetSceneEditorStateForTests();
+    FullscreenExitReservedWidth.set(0);
   });
 
   it('pauses on P when the editor is closed', () => {
@@ -96,5 +106,22 @@ describe('pause control keyboard shortcuts', () => {
     keyboardListeners.get('keydown-ESC')?.({ key: 'Escape' });
     expect(requestPause).toHaveBeenCalledTimes(1);
     expect(requestPause).toHaveBeenCalledWith(scene);
+  });
+
+  it('ignores a fullscreen reserved-width update once scene shutdown has started', () => {
+    const { scene, button, shutdownListeners } = createScene();
+    attachPauseControl(scene as unknown as Phaser.Scene);
+    button.setStyle.mockClear();
+
+    // Phaser marks the scene inactive before emitting SHUTDOWN listeners.
+    // This simulates the fullscreen control publishing width=0 first, before
+    // PauseControl has had a chance to unsubscribe its callback.
+    scene.sys.settings.status = 8;
+    FullscreenExitReservedWidth.set(64);
+    expect(button.setStyle).not.toHaveBeenCalled();
+
+    shutdownListeners.forEach((listener) => listener());
+    FullscreenExitReservedWidth.set(0);
+    expect(button.setStyle).not.toHaveBeenCalled();
   });
 });

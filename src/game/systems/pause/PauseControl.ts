@@ -99,8 +99,23 @@ export function attachPauseControl(scene: Phaser.Scene): void {
   // aren't guaranteed to be in every desktop font's fallback chain, which is
   // why the earlier "⏸" button could render as nothing at all on desktop.
   const pauseButton = makeHudButton(scene, 'II');
+  let shuttingDown = false;
+
+  /**
+   * SHUTDOWN sets SceneSystems to inactive before it emits its listeners.
+   * Reserved-width publishers are synchronous, so this must be checked by
+   * the callback itself rather than relying on which teardown listener runs
+   * first.
+   */
+  const canPlace = (): boolean =>
+    !shuttingDown
+    && scene.sys.settings.status !== Phaser.Scenes.SHUTDOWN
+    && scene.sys.settings.status !== Phaser.Scenes.DESTROYED
+    && pauseButton.active
+    && pauseButton.scene === scene;
 
   const place = (): void => {
+    if (!canPlace()) return;
     const viewport = getViewportInfo(scene.scale);
     const margin = viewport.safeMargin;
     const style = buttonStyle(viewport);
@@ -140,6 +155,7 @@ export function attachPauseControl(scene: Phaser.Scene): void {
   place();
 
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    shuttingDown = true;
     attached.delete(scene);
     scene.input.keyboard?.off('keydown-ESC', onEscapeKey);
     scene.input.keyboard?.off('keydown-P', onSaveKey);
