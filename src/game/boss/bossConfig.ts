@@ -87,15 +87,7 @@ export const ATTACK_SHAPES = {
   },
 } as const;
 
-/**
- * Escalating fight structure. Total duration is the sum of these phases.
- *
- * Each duration is 70% of what it was: the fight was outstaying its welcome,
- * so every phase simply runs for less time. The pattern, the gaps and the
- * telegraph scales are untouched, so a phase is the same fight with fewer
- * repetitions of it — reading and dodging an individual laser is exactly as
- * generous as before.
- */
+/** Escalating fight structure. Individual phase pacing is intentionally fixed. */
 export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
   {
     index: 0,
@@ -131,10 +123,18 @@ export const BOSS_PHASES: readonly BossPhaseDefinition[] = [
   },
 ];
 
-export const BOSS_FIGHT_DURATION_MS = BOSS_PHASES.reduce(
+/** Full authored schedule before the tail is cut. Kept for the cutoff invariant. */
+export const BOSS_FULL_FIGHT_DURATION_MS = BOSS_PHASES.reduce(
   (total, phase) => total + phase.durationMs,
   0,
 );
+
+/**
+ * The playable fight is the first half of the authored sequence. This is a
+ * schedule cutoff, not a tempo change: attacks that begin before it keep
+ * their complete telegraph/active/recovery timing.
+ */
+export const BOSS_FIGHT_DURATION_MS = BOSS_FULL_FIGHT_DURATION_MS / 2;
 
 /**
  * Telegraphs never drop below this, whatever the phase scaling says, so every

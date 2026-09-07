@@ -159,7 +159,7 @@ describe('boss fight director', () => {
     expect(first.result.score).toEqual(second.result.score);
   });
 
-  it('emits a phase change for every escalation', () => {
+  it('emits phase changes only within the shortened playable prefix', () => {
     const director = new BossFightDirector(bounds, 1);
     const phases: number[] = [];
     let guard = 0;
@@ -171,6 +171,6 @@ describe('boss fight director', () => {
       }
       guard += 1;
     }
-    expect(phases).toEqual([1, 2, 3]);
+    expect(phases).toEqual([1]);
   });
 });

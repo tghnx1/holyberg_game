@@ -4,6 +4,7 @@ import {
   ATTACK_SHAPES,
   ATTACK_TIMINGS,
   BOSS_FIGHT_DURATION_MS,
+  BOSS_FULL_FIGHT_DURATION_MS,
   BOSS_PHASES,
   BOSS_PLAYER,
   MINIMUM_TELEGRAPH_MS,
@@ -19,23 +20,17 @@ import type { ArenaBounds } from '../src/game/boss/types';
 
 const bounds: ArenaBounds = { minX: 70, maxX: 1210 };
 
-/**
- * The fight was shortened by 30%. These pin *how*: less of the same fight,
- * never a faster one, so a laser stays exactly as readable as it was.
- */
+/** The tail is cut, so early attacks retain their authored pacing. */
 describe('fight length', () => {
-  /** Phase durations before the 30% cut, in schedule order. */
-  const PREVIOUS_PHASE_DURATIONS_MS = [22_000, 24_000, 26_000, 14_000];
-  const PREVIOUS_TOTAL_MS = PREVIOUS_PHASE_DURATIONS_MS.reduce((a, b) => a + b, 0);
+  const FULL_AUTHORED_DURATION_MS = 60_200;
 
-  it('runs for 70% of its previous total', () => {
-    expect(BOSS_FIGHT_DURATION_MS).toBe(Math.round(PREVIOUS_TOTAL_MS * 0.7));
+  it('runs for the first half of the authored fight', () => {
+    expect(BOSS_FULL_FIGHT_DURATION_MS).toBe(FULL_AUTHORED_DURATION_MS);
+    expect(BOSS_FIGHT_DURATION_MS).toBe(30_100);
   });
 
-  it('takes the cut out of every phase, not one of them', () => {
-    BOSS_PHASES.forEach((phase, index) => {
-      expect(phase.durationMs).toBe(Math.round(PREVIOUS_PHASE_DURATIONS_MS[index] * 0.7));
-    });
+  it('keeps the authored phase pacing unchanged', () => {
+    expect(BOSS_PHASES.map((phase) => phase.durationMs)).toEqual([15_400, 16_800, 18_200, 9_800]);
   });
 
   it('shortens the fight by running fewer attacks, never faster ones', () => {
@@ -49,14 +44,21 @@ describe('fight length', () => {
     expect(BOSS_PHASES.map((phase) => phase.gapMs)).toEqual([900, 620, 480, 360]);
   });
 
-  it('still gives every phase enough room for its whole pattern', () => {
+  it('schedules only the authored prefix before the cutoff', () => {
     const byPhase = new Map<number, number>();
     for (const attack of buildFightPlan(bounds, 1).attacks) {
       byPhase.set(attack.phaseIndex, (byPhase.get(attack.phaseIndex) ?? 0) + 1);
+      expect(attack.startMs).toBeLessThan(BOSS_FIGHT_DURATION_MS);
     }
-    for (const phase of BOSS_PHASES) {
-      expect(byPhase.get(phase.index) ?? 0).toBeGreaterThanOrEqual(phase.pattern.length);
-    }
+    expect([...byPhase.keys()].sort()).toEqual([0, 1]);
+  });
+
+  it('preserves every pre-cutoff attack exactly as authored', () => {
+    const shortened = buildFightPlan(bounds, 17);
+    const full = buildFightPlan(bounds, 17, BOSS_PHASES, BOSS_FULL_FIGHT_DURATION_MS);
+    expect(shortened.attacks).toEqual(
+      full.attacks.filter((attack) => attack.startMs < BOSS_FIGHT_DURATION_MS),
+    );
   });
 });
 
@@ -78,12 +80,15 @@ describe('fight plan', () => {
     }
   });
 
-  it('schedules attacks across every configured phase', () => {
+  it('reports the shortened playable duration while allowing the final live attack to resolve', () => {
     const plan = buildFightPlan(bounds, 3);
-    expect(plan.attacks.length).toBeGreaterThan(10);
+    expect(plan.attacks.length).toBeGreaterThan(1);
     const phasesUsed = new Set(plan.attacks.map((attack) => attack.phaseIndex));
-    expect([...phasesUsed].sort()).toEqual(BOSS_PHASES.map((phase) => phase.index));
+    expect([...phasesUsed].sort()).toEqual([0, 1]);
     expect(plan.totalDurationMs).toBe(BOSS_FIGHT_DURATION_MS);
+    const finalAttack = plan.attacks.at(-1)!;
+    expect(finalAttack.startMs).toBeLessThan(BOSS_FIGHT_DURATION_MS);
+    expect(finalAttack.startMs + getAttackDurationMs(finalAttack)).toBeGreaterThan(BOSS_FIGHT_DURATION_MS);
   });
 
   it('never overlaps two damage windows, so no combination is unavoidable', () => {
@@ -142,6 +147,6 @@ describe('phase lookup', () => {
     expect(getPhaseAt(0).index).toBe(0);
     expect(getPhaseAt(BOSS_PHASES[0].durationMs - 1).index).toBe(0);
     expect(getPhaseAt(BOSS_PHASES[0].durationMs).index).toBe(1);
-    expect(getPhaseAt(BOSS_FIGHT_DURATION_MS + 10_000).index).toBe(BOSS_PHASES.length - 1);
+    expect(getPhaseAt(BOSS_FULL_FIGHT_DURATION_MS + 10_000).index).toBe(BOSS_PHASES.length - 1);
   });
 });

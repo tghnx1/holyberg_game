@@ -13,6 +13,7 @@
 import {
   ATTACK_SHAPES,
   ATTACK_TIMINGS,
+  BOSS_FIGHT_DURATION_MS,
   BOSS_PHASES,
   MINIMUM_TELEGRAPH_MS,
 } from './bossConfig';
@@ -110,18 +111,26 @@ export function buildFightPlan(
   bounds: ArenaBounds,
   seed = 1,
   phases: readonly BossPhaseDefinition[] = BOSS_PHASES,
+  fightDurationMs: number = BOSS_FIGHT_DURATION_MS,
 ): FightPlan {
   const random = createRandom(seed);
   const attacks: ScheduledAttack[] = [];
   let cursorMs = 0;
   let id = 0;
+  const fullDurationMs = phases.reduce((total, phase) => total + phase.durationMs, 0);
+  const cutoffMs = Math.min(fullDurationMs, Math.max(0, fightDurationMs));
 
   for (const phase of phases) {
+    if (cursorMs >= cutoffMs) break;
     const phaseEndMs = cursorMs + phase.durationMs;
     let patternIndex = 0;
     // Ease into each phase so a new pattern never opens mid-reaction.
     cursorMs += phase.gapMs;
     for (;;) {
+      // The tail is removed by declining to start another telegraph after the
+      // cutoff. A telegraph that started before it remains live and is allowed
+      // to resolve naturally by BossFightDirector.
+      if (cursorMs >= cutoffMs) break;
       const type = phase.pattern[patternIndex % phase.pattern.length];
       const timing = buildTiming(type, phase);
       const attack: ScheduledAttack = {
@@ -142,7 +151,7 @@ export function buildFightPlan(
     cursorMs = phaseEndMs;
   }
 
-  return { attacks, totalDurationMs: cursorMs };
+  return { attacks, totalDurationMs: cutoffMs };
 }
 
 /** Index of the phase running at `nowMs`, clamped to the last phase. */

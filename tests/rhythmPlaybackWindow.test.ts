@@ -26,6 +26,22 @@ describe('rhythm playback window', () => {
     });
   });
 
+  it('cuts the final 40% of the main playable window without changing its start', () => {
+    const window = resolveRhythmPlaybackWindow(
+      { startSeconds: 30.7, endSeconds: 66.28, preRollSeconds: 3 },
+      100,
+    );
+    const notes = [
+      { time: 30.7, lane: 0, duration: 0, velocity: 1 },
+      { time: 66.279, lane: 1, duration: 0, velocity: 1 },
+      { time: 66.28, lane: 2, duration: 0, velocity: 1 },
+      { time: 80, lane: 3, duration: 0, velocity: 1 },
+    ] as const;
+
+    expect(window).toMatchObject({ startSeconds: 30.7, endSeconds: 66.28, audioStartSeconds: 27.7 });
+    expect(selectRhythmNotesInWindow(notes, window.startSeconds, window.endSeconds)).toEqual(notes.slice(0, 2));
+  });
+
   it('keeps note selection unchanged when pre-roll changes', () => {
     const baseWindow = resolveRhythmPlaybackWindow({ startSeconds: 30, endSeconds: 40, preRollSeconds: 1 }, 50);
     const longWindow = resolveRhythmPlaybackWindow({ startSeconds: 30, endSeconds: 40, preRollSeconds: 5 }, 50);
