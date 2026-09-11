@@ -84,14 +84,30 @@ export class BootScene extends Phaser.Scene {
       // treat a missing selection as the routing bug it would be.
       selectFallbackCharacter(query.get('character') ?? undefined);
     }
+    if (isSharePreviewEnabled(window.location.search, import.meta.env.DEV)) {
+      this.scene.start('ResultScene', createSharePreviewResult());
+      return;
+    }
+    // A final result the player never settled (claimed, or explicitly
+    // skipped/restarted) outlives a mobile reload or crash, so the leaderboard
+    // claim can still be finished instead of the run silently starting over.
+    //
+    // This outranks the DEV `?scene=` routes on purpose: reaching the boss
+    // through `?scene=boss` leaves that parameter in the URL, so a reload on
+    // the result screen would otherwise replay the boss and drop the very
+    // result this is here to protect. `?recover=0` opts out, keeping every
+    // direct route independently cold-loadable with a result still pending.
+    if (query.get('recover') !== '0') {
+      const pendingResult = readPendingFinalResult(window.localStorage);
+      if (pendingResult) {
+        this.scene.start('ResultScene', pendingResult);
+        return;
+      }
+    }
     if (import.meta.env.DEV && developmentScene === 'rhythm') {
       this.scene.start('RhythmScene', {
         score: 500,
       });
-      return;
-    }
-    if (isSharePreviewEnabled(window.location.search, import.meta.env.DEV)) {
-      this.scene.start('ResultScene', createSharePreviewResult());
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'level4') {
@@ -116,14 +132,6 @@ export class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
       const scriptId = query.get('script') ?? 'metro-magician';
       this.scene.start('DialogueScene', { scriptId });
-      return;
-    }
-    // A final result the player never settled (claimed or explicitly
-    // skipped/restarted) outlives a mobile reload or crash, so the leaderboard
-    // claim can still be finished instead of the run silently starting over.
-    const pendingResult = readPendingFinalResult(window.localStorage);
-    if (pendingResult) {
-      this.scene.start('ResultScene', pendingResult);
       return;
     }
     // Character Select comes first and starts the opening dialogue itself;
