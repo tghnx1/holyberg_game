@@ -510,6 +510,15 @@ export class ResultScene extends Phaser.Scene {
         modal.style.top = `${Math.max(0, viewport.offsetTop)}px`;
         modal.style.height = `${Math.max(1, viewport.height)}px`;
         modal.style.width = `${Math.max(1, viewport.width || window.innerWidth)}px`;
+        const input = modal.querySelector<HTMLInputElement>('#holyberg-instagram');
+        if (input && document.activeElement === input) {
+          const rect = input.getBoundingClientRect();
+          const top = Math.max(0, viewport.offsetTop);
+          const bottom = top + viewport.height;
+          if (rect.top < top || rect.bottom > bottom) {
+            input.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
+        }
       };
       const viewport = window.visualViewport;
       viewport?.addEventListener('resize', updateOverlayViewport);
