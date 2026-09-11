@@ -22,6 +22,7 @@ import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/scener
 import { createEmptyRhythmResult } from '../level/level4/level4Flow';
 import { selectFallbackCharacter } from '../characters/characterSelection';
 import { createSharePreviewResult, isSharePreviewEnabled } from '../leaderboard/sharePreview';
+import { readPendingFinalResult } from '../leaderboard/pendingResult';
 
 export class BootScene extends Phaser.Scene {
   /** Preloader/router only; there is nothing here for a pause menu to freeze. */
@@ -115,6 +116,14 @@ export class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
       const scriptId = query.get('script') ?? 'metro-magician';
       this.scene.start('DialogueScene', { scriptId });
+      return;
+    }
+    // A final result the player never settled (claimed or explicitly
+    // skipped/restarted) outlives a mobile reload or crash, so the leaderboard
+    // claim can still be finished instead of the run silently starting over.
+    const pendingResult = readPendingFinalResult(window.localStorage);
+    if (pendingResult) {
+      this.scene.start('ResultScene', pendingResult);
       return;
     }
     // Character Select comes first and starts the opening dialogue itself;

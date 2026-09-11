@@ -34,6 +34,10 @@ import {
   createSharePreviewSnapshot,
   isSharePreviewEnabled,
 } from '../leaderboard/sharePreview';
+import {
+  clearPendingFinalResult,
+  savePendingFinalResult,
+} from '../leaderboard/pendingResult';
 
 export class ResultScene extends Phaser.Scene {
   /** Final results/leaderboard screen, not gameplay. */
@@ -103,6 +107,15 @@ export class ResultScene extends Phaser.Scene {
       this.result.bossScore,
     );
     const sharePreview = isSharePreviewEnabled(window.location.search, import.meta.env.DEV);
+    if (!sharePreview) {
+      // Mirrored before anything can interrupt the claim: a mobile reload or
+      // crash from here on restores this exact screen (same result, same total
+      // score) through BootScene instead of restarting the campaign. Cleared
+      // once the player claims, skips, or restarts on purpose.
+      if (!savePendingFinalResult(window.localStorage, this.result)) {
+        console.warn('[Leaderboard] final result could not be saved for reload recovery');
+      }
+    }
     const previewSnapshot = sharePreview ? createSharePreviewSnapshot() : undefined;
     this.totalScore = previewSnapshot?.bestScore ?? this.totalScore;
     this.storedInstagram = previewSnapshot?.instagram ?? readStoredInstagram(window.localStorage);
@@ -269,9 +282,13 @@ export class ResultScene extends Phaser.Scene {
     this.shareButton = this.createButton(902, 533, 'SHARE YOUR SCORE', () => {
       void this.shareScore();
     }).setVisible(false);
+    // Hidden until the run is settled — a stray tap must never throw away a
+    // score the player has not claimed or explicitly given up on.
     this.restartAction = this.createTextAction(902, 642, 'RESTART FULL GAME', () => {
+      if (!this.isRunSettled()) return;
+      clearPendingFinalResult(window.localStorage);
       this.scene.start('BerlinScene');
-    }).setVisible(!showClaimUi);
+    }).setVisible(false);
     this.retryAction = this.createTextAction(902, 511, 'RETRY SCORE UPDATE', () => {
       void this.updateStoredScore();
     }).setVisible(false);
@@ -381,6 +398,7 @@ export class ResultScene extends Phaser.Scene {
   private skipClaim(): void {
     if (this.submitting || this.claimed) return;
     this.skipped = true;
+    clearPendingFinalResult(window.localStorage);
     this.claimButton.setVisible(false);
     this.instagramInput.setVisible(false);
     this.skipAction.setVisible(false);
@@ -388,9 +406,14 @@ export class ResultScene extends Phaser.Scene {
     this.showReplayOptions(false);
   }
 
+  /** The score is either on the leaderboard or knowingly abandoned. */
+  private isRunSettled(): boolean {
+    return this.claimed !== undefined || this.skipped;
+  }
+
   private showReplayOptions(claimed: boolean): void {
     this.shareButton.setVisible(claimed);
-    this.restartAction.setVisible(true);
+    this.restartAction.setVisible(this.isRunSettled());
   }
 
   private async updateStoredScore(): Promise<void> {
@@ -425,6 +448,7 @@ export class ResultScene extends Phaser.Scene {
         });
       }
       this.claimed = response;
+      clearPendingFinalResult(window.localStorage);
       this.renderTop10(response.top10);
       this.renderClaimedPlayerRow(response.instagram, response.bestScore, response.rank);
       this.leaderboardStatus.setText(`YOU'RE #${response.rank}`);
@@ -446,6 +470,9 @@ export class ResultScene extends Phaser.Scene {
     );
     this.leaderboardStatus.setText("COULDN'T UPDATE YOUR BEST SCORE");
     this.retryAction.setVisible(true);
+    // Without this the run has no settled state: RETRY keeps the score alive,
+    // Skip is the deliberate way to give it up and unlock RESTART FULL GAME.
+    this.skipAction.setVisible(true);
     this.showReplayOptions(false);
   }
 
@@ -544,6 +571,7 @@ export class ResultScene extends Phaser.Scene {
         });
       }
       this.claimed = response;
+      clearPendingFinalResult(window.localStorage);
       if (!saveStoredInstagram(window.localStorage, response.instagram)) {
         console.warn('[Leaderboard] Instagram username could not be saved locally');
       }
