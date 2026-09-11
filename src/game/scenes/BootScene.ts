@@ -22,7 +22,7 @@ import { createSceneryFrames, getSceneryAssetUrls } from '../level/berlin/scener
 import { createEmptyRhythmResult } from '../level/level4/level4Flow';
 import { selectFallbackCharacter } from '../characters/characterSelection';
 import { createSharePreviewResult, isSharePreviewEnabled } from '../leaderboard/sharePreview';
-import { readPendingFinalResult } from '../leaderboard/pendingResult';
+import { resolvePendingFinalResultRoute } from '../leaderboard/pendingResult';
 
 export class BootScene extends Phaser.Scene {
   /** Preloader/router only; there is nothing here for a pause menu to freeze. */
@@ -98,7 +98,7 @@ export class BootScene extends Phaser.Scene {
     // result this is here to protect. `?recover=0` opts out, keeping every
     // direct route independently cold-loadable with a result still pending.
     if (query.get('recover') !== '0') {
-      const pendingResult = readPendingFinalResult(window.localStorage);
+      const pendingResult = resolvePendingFinalResultRoute(query, window.localStorage);
       if (pendingResult) {
         this.scene.start('ResultScene', pendingResult);
         return;

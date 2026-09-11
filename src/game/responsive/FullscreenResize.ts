@@ -45,9 +45,22 @@ function measureHost(fullscreen: boolean): { width: number; height: number } {
 }
 
 export function setupFullscreenResize(game: Phaser.Game): void {
+  let keyboardFocused = false;
+  let lastApplied: { width: number; height: number } | undefined;
+
+  const isTextEntry = (target: EventTarget | null): target is HTMLElement => {
+    if (!target || typeof (target as HTMLElement).tagName !== 'string') return false;
+    const element = target as HTMLElement & { type?: string; isContentEditable?: boolean };
+    if (element.tagName === 'TEXTAREA' || element.isContentEditable) return true;
+    return element.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file'].includes(element.type ?? 'text');
+  };
+
   const apply = (): void => {
+    if (keyboardFocused) return;
     const { width, height } = measureHost(game.scale.isFullscreen);
     if (width <= 0 || height <= 0) return;
+    if (lastApplied?.width === width && lastApplied.height === height) return;
+    lastApplied = { width, height };
     game.scale.setParentSize(width, height);
     const gameWidth = game.scale.gameSize.width;
     const gameHeight = game.scale.gameSize.height;
@@ -62,13 +75,26 @@ export function setupFullscreenResize(game: Phaser.Game): void {
   // the common case (a plain resize) from waiting a frame.
   let queued = 0;
   const applyNow = (): void => {
-    apply();
+    if (keyboardFocused) return;
     if (queued) cancelAnimationFrame(queued);
     queued = requestAnimationFrame(() => {
       queued = 0;
       apply();
     });
   };
+
+  const onFocusIn = (event: FocusEvent): void => {
+    if (isTextEntry(event.target) && getFullscreenHost().contains(event.target)) keyboardFocused = true;
+  };
+  const onFocusOut = (event: FocusEvent): void => {
+    if (!isTextEntry(event.target) || !getFullscreenHost().contains(event.target)) return;
+    // A focus handoff between fields must keep the keyboard guard active.
+    if (isTextEntry(event.relatedTarget) && getFullscreenHost().contains(event.relatedTarget)) return;
+    keyboardFocused = false;
+    applyNow();
+  };
+  document.addEventListener('focusin', onFocusIn);
+  document.addEventListener('focusout', onFocusOut);
 
   window.addEventListener('resize', applyNow);
   window.addEventListener('orientationchange', applyNow);

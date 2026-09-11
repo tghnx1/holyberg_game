@@ -115,3 +115,12 @@ export function clearPendingFinalResult(storage: PendingResultStorage): void {
     // A storage that refuses writes simply keeps no recovery state.
   }
 }
+
+/** Boot routing decision kept pure so a fresh page boot can be tested without Phaser. */
+export function resolvePendingFinalResultRoute(
+  query: URLSearchParams,
+  storage: PendingResultStorage,
+): RhythmResult | undefined {
+  if (query.get('recover') === '0') return undefined;
+  return readPendingFinalResult(storage);
+}

@@ -5,6 +5,7 @@ import {
   parsePendingFinalResult,
   readPendingFinalResult,
   savePendingFinalResult,
+  resolvePendingFinalResultRoute,
   type PendingResultStorage,
 } from '../src/game/leaderboard/pendingResult';
 import type { RhythmResult } from '../src/game/rhythm/types';
@@ -124,5 +125,15 @@ describe('pending final result recovery', () => {
     expect(savePendingFinalResult(storage, finalResult())).toBe(false);
     expect(readPendingFinalResult(storage)).toBeUndefined();
     expect(() => clearPendingFinalResult(storage)).not.toThrow();
+  });
+
+  it('routes a fresh boot back to ResultScene until the run is explicitly settled', () => {
+    const storage = new MemoryStorage();
+    const result = finalResult();
+    savePendingFinalResult(storage, result);
+    expect(resolvePendingFinalResultRoute(new URLSearchParams(), storage)).toEqual(result);
+    expect(resolvePendingFinalResultRoute(new URLSearchParams('recover=0'), storage)).toBeUndefined();
+    clearPendingFinalResult(storage);
+    expect(resolvePendingFinalResultRoute(new URLSearchParams(), storage)).toBeUndefined();
   });
 });

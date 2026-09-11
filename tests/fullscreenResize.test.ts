@@ -1,64 +1,91 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('phaser', () => ({ default: {
-  Scale: { Events: { ENTER_FULLSCREEN: 'enterfullscreen', LEAVE_FULLSCREEN: 'leavefullscreen' } },
+  Scale: { Events: { ENTER_FULLSCREEN: 'enter', LEAVE_FULLSCREEN: 'leave' } },
   Core: { Events: { READY: 'ready' } },
 } }));
+
 import { setupFullscreenResize } from '../src/game/responsive/FullscreenResize';
 
 class Emitter {
-  handlers = new Map<string, (() => void)[]>();
-  on(event: string, callback: () => void) {
-    this.handlers.set(event, [...this.handlers.get(event) ?? [], callback]);
-  }
-  once(event: string, callback: () => void) { this.on(event, callback); }
-  addEventListener(event: string, callback: () => void) { this.on(event, callback); }
-  emit(event: string) { this.handlers.get(event)?.forEach((callback) => callback()); }
+  private listeners = new Map<string, (() => void)[]>();
+  on(event: string, listener: () => void): void { this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]); }
+  once(event: string, listener: () => void): void { this.on(event, listener); }
+  addEventListener(event: string, listener: () => void): void { this.on(event, listener); }
+  emit(event: string, payload?: unknown): void { for (const listener of this.listeners.get(event) ?? []) (listener as (event?: unknown) => void)(payload); }
 }
 
-describe('iOS Chrome viewport recovery around replay', () => {
+function setup() {
+  const documentEmitter = new Emitter();
+  const visual = Object.assign(new Emitter(), { height: 390, offsetTop: 0 });
+  const style: Record<string, unknown> = { removeProperty: (key: string) => delete style[key] };
+  const host = {
+    style,
+    clientWidth: 844,
+    clientHeight: 390,
+    contains: (element: unknown) => element === input,
+    getBoundingClientRect: () => ({ width: 844, height: 390 }),
+  };
+  const input = { tagName: 'INPUT', type: 'text' };
+  const active = { value: null as unknown };
+  const originalDocument = globalThis.document;
+  const originalWindow = globalThis.window;
+  vi.stubGlobal('document', Object.assign(documentEmitter, {
+    activeElement: active.value,
+    getElementById: () => host,
+  }));
+  vi.stubGlobal('window', Object.assign(new Emitter(), {
+    innerWidth: 844, innerHeight: 390, visualViewport: visual,
+  }));
+  vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/128 Mobile Safari/604.1' });
+  const frames: (() => void)[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: () => void) => { frames.push(callback); return frames.length; });
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  const camera = { setSize: vi.fn() };
+  const scale = Object.assign(new Emitter(), {
+    isFullscreen: false,
+    gameSize: { width: 844 / 390 * 720, height: 720 },
+    setParentSize: vi.fn((width: number, height: number) => { scale.gameSize = { width: width / height * 720, height: 720 }; }),
+  });
+  const game = { scale, events: new Emitter(), scene: { getScenes: () => [{ cameras: { main: camera } }] } };
+  setupFullscreenResize(game as never);
+  game.events.emit('ready');
+  frames.splice(0).forEach((frame) => frame());
+  scale.setParentSize.mockClear();
+  camera.setSize.mockClear();
+  return { documentEmitter, visual, active, input, game, camera, frames, originalDocument, originalWindow };
+}
+
+describe('FullscreenResize keyboard guard', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('restores the host, canvas logical size and active camera after keyboard/browser changes', () => {
-    const visual = Object.assign(new Emitter(), { height: 390, offsetTop: 0 });
-    const browser = Object.assign(new Emitter(), { innerWidth: 844, innerHeight: 390, visualViewport: visual });
-    const style: Record<string, unknown> = { removeProperty(key: string) { delete style[key]; } };
-    const host = {
-      style, clientWidth: 844, clientHeight: 390,
-      getBoundingClientRect: () => ({ width: 844, height: parseFloat(String(style.height ?? '390')) }),
-    };
-    vi.stubGlobal('document', { getElementById: () => host });
-    vi.stubGlobal('window', browser);
-    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 CriOS/128.0 Mobile/15E148 Safari/604.1' });
-    const nextFrame: (() => void)[] = [];
-    vi.stubGlobal('requestAnimationFrame', (callback: () => void) => nextFrame.push(callback));
-    vi.stubGlobal('cancelAnimationFrame', vi.fn());
-    const camera = { setSize: vi.fn() };
-    const events = new Emitter();
-    const scale = Object.assign(new Emitter(), {
-      isFullscreen: false,
-      gameSize: { width: 720, height: 720 },
-      setParentSize(width: number, height: number) {
-        this.gameSize = { width: width / height * 720, height: 720 };
-      },
-    });
-    const game = { scale, events, scene: { getScenes: () => [{ cameras: { main: camera } }] } };
-    setupFullscreenResize(game as never);
-    events.emit('ready');
-    expect(host.getBoundingClientRect().height).toBe(390);
-
-    // Entering a username in Results, closing the keyboard, then replaying
-    // while Chrome's toolbar changes. No full page reload is involved.
-    for (const [height, offsetTop, event] of [[180, 95, 'resize'], [330, 60, 'scroll'], [390, 0, 'resize']] as const) {
-      visual.height = height;
-      visual.offsetTop = offsetTop;
-      visual.emit(event);
-      nextFrame.splice(0).forEach((callback) => callback());
-      expect(host.getBoundingClientRect().height).toBe(height);
-      expect(style.top).toBe(`${offsetTop}px`);
-      expect(camera.setSize).toHaveBeenLastCalledWith(844 / height * 720, 720);
+  it('keeps Phaser dimensions unchanged through repeated visualViewport keyboard events', () => {
+    const h = setup();
+    h.active.value = h.input;
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = h.input;
+    h.documentEmitter.emit('focusin', { target: h.input });
+    for (const height of [180, 160, 180]) {
+      h.visual.height = height;
+      h.visual.emit('resize');
+      h.visual.emit('scroll');
     }
-    expect(host.getBoundingClientRect().height).toBe(390);
-    expect(style.top).toBe('0px');
+    expect(h.game.scale.setParentSize).not.toHaveBeenCalled();
+    expect(h.camera.setSize).not.toHaveBeenCalled();
+  });
+
+  it('applies exactly one deferred viewport update after blur', () => {
+    const h = setup();
+    h.active.value = h.input;
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = h.input;
+    h.documentEmitter.emit('focusin', { target: h.input });
+    h.visual.height = 180;
+    h.visual.emit('resize');
+    h.active.value = null;
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
+    h.visual.height = 380;
+    h.documentEmitter.emit('focusout', { target: h.input });
+    while (h.frames.length) h.frames.splice(0).forEach((frame) => frame());
+    expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
+    expect(h.camera.setSize).toHaveBeenCalledTimes(1);
   });
 });
