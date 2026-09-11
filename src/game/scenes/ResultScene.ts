@@ -66,6 +66,7 @@ export class ResultScene extends Phaser.Scene {
   private modalResolver?: (value: string | null) => void;
   /** Restores Phaser's normal key capture; set while the claim modal's input exists. */
   private releaseInstagramInputCapture?: () => void;
+  private releaseClaimViewportListeners?: () => void;
   private claimed?: ClaimedLeaderboardSnapshot;
   private playerRank?: number;
   private storedInstagram = '';
@@ -503,6 +504,22 @@ export class ResultScene extends Phaser.Scene {
         </form>`;
       document.getElementById('game')?.appendChild(modal);
       this.modal = modal;
+      const updateOverlayViewport = (): void => {
+        const viewport = window.visualViewport;
+        if (!viewport) return;
+        modal.style.top = `${Math.max(0, viewport.offsetTop)}px`;
+        modal.style.height = `${Math.max(1, viewport.height)}px`;
+        modal.style.width = `${Math.max(1, viewport.width || window.innerWidth)}px`;
+      };
+      const viewport = window.visualViewport;
+      viewport?.addEventListener('resize', updateOverlayViewport);
+      viewport?.addEventListener('scroll', updateOverlayViewport);
+      this.releaseClaimViewportListeners = () => {
+        viewport?.removeEventListener('resize', updateOverlayViewport);
+        viewport?.removeEventListener('scroll', updateOverlayViewport);
+        this.releaseClaimViewportListeners = undefined;
+      };
+      updateOverlayViewport();
       const form = modal.querySelector('form');
       const input = modal.querySelector('input');
       const error = modal.querySelector<HTMLElement>('.leaderboard-claim-error');
@@ -535,6 +552,7 @@ export class ResultScene extends Phaser.Scene {
         );
         input.focus();
         input.select();
+        input.scrollIntoView({ block: 'center', inline: 'nearest' });
       }
     });
     return this.modalPromise;
@@ -542,6 +560,7 @@ export class ResultScene extends Phaser.Scene {
 
   private removeClaimModal(): void {
     releaseKeyboardResizeGuard();
+    this.releaseClaimViewportListeners?.();
     this.releaseInstagramInputCapture?.();
     this.releaseInstagramInputCapture = undefined;
     this.modal?.remove();

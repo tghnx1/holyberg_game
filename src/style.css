@@ -79,12 +79,13 @@ canvas {
 @keyframes rotate-phone { to { transform: rotate(72deg); } }
 
 .leaderboard-claim-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 9000;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   background: rgb(4 6 4 / 85%);
   touch-action: manipulation;
   user-select: auto;
@@ -100,6 +101,9 @@ canvas {
   background: #12140f;
   box-shadow: 0 0 24px rgb(57 255 20 / 25%), 0 18px 70px #000;
   color: #eef5ea;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .leaderboard-claim-title {
@@ -129,6 +133,8 @@ canvas {
   touch-action: manipulation;
   user-select: text;
   -webkit-user-select: text;
+  min-width: 0;
+  caret-color: #39ff14;
 }
 
 .leaderboard-claim-dialog input:focus { border-color: #39ff14; box-shadow: 0 0 0 3px rgb(57 255 20 / 20%); }
@@ -149,4 +155,15 @@ canvas {
   background: #1b1f18;
   color: #eef5ea;
   border: 1px solid #1f7a10;
+}
+
+@media (max-width: 600px) {
+  .leaderboard-claim-overlay { align-items: flex-start; }
+  .leaderboard-claim-dialog {
+    width: min(520px, 100%);
+    margin: auto 0;
+    padding: 20px;
+  }
+  .leaderboard-claim-actions { flex-wrap: wrap; }
+  .leaderboard-claim-actions button { flex: 1 1 140px; }
 }
