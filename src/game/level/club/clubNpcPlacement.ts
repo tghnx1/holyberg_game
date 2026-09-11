@@ -9,24 +9,23 @@ import { CLUB_NPC_GROUP_IDS, getClubNpcGroup, type ClubNpcGroupId } from './club
  * back — without touching `ClubNpcLayer` or `ClubScene`. Same split, and the
  * same ratio-based convention, as `dialogueStationLayout.ts`.
  *
- * Every value is a ratio of the live camera size rather than an absolute
- * pixel, so one file works at any viewport and aspect ratio: the club rooms
- * are letterboxed by Scale.EXPAND, which keeps the logical height at 720 but
- * lets the width vary a lot between a phone and a desktop.
+ * Ratios describe the canonical 1280x720 desktop composition. ClubNpcLayer
+ * projects it with the room background's cover fit and inverts that projection
+ * before editor saves, so figures stay attached to the room on other screens.
  */
 
 export interface ClubNpcPlacement {
   group: ClubNpcGroupId;
-  /** Horizontal centre, as a fraction of camera width. */
+  /** Horizontal centre, as a fraction of the reference width. */
   xRatio: number;
   /**
-   * Rendered height of the *drawn figures* as a fraction of camera height.
+   * Rendered height of the *drawn figures* as a fraction of the reference height.
    * Measured against the group's `contentHeight`, not its canvas, so the
    * same number means the same apparent size for every group.
    */
   heightRatio: number;
   /**
-   * Floor line this group stands on, as a fraction of camera height. Higher
+   * Floor line this group stands on, as a fraction of the reference height. Higher
    * up the frame (a smaller number) reads as further back in the room. Omitted
    * means the player's own floor line, i.e. standing level with them.
    */

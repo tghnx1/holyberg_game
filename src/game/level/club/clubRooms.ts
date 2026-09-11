@@ -10,6 +10,8 @@ export interface ClubRoom {
   label: string;
   /** Streamed straight from this URL; never preloaded into the Phaser cache. */
   videoUrl: string;
+  /** Source video dimensions; also frame the poster and stationary room objects. */
+  artSize: { width: number; height: number };
   /**
    * First frame of `videoUrl`, small enough to sit in the boot load. Shown
    * while the video is still opening, so entering a room never shows the
@@ -41,6 +43,7 @@ export const CLUB_ROOMS: readonly ClubRoom[] = [
     id: 'lounge',
     label: 'MADAME CLAUDE — LOUNGE',
     videoUrl: 'assets/level_2/animation_1.mp4',
+    artSize: { width: 1600, height: 686 },
     posterKey: 'club-room-1-poster',
     posterUrl: 'assets/level_2/room_1_poster.webp',
   },
@@ -48,6 +51,7 @@ export const CLUB_ROOMS: readonly ClubRoom[] = [
     id: 'corridor',
     label: 'MADAME CLAUDE — CORRIDOR',
     videoUrl: 'assets/level_2/animation_2.mp4',
+    artSize: { width: 1470, height: 630 },
     posterKey: 'club-room-2-poster',
     posterUrl: 'assets/level_2/room_2_poster.webp',
     videoShiftY: 20,
@@ -57,6 +61,7 @@ export const CLUB_ROOMS: readonly ClubRoom[] = [
     id: 'backstage',
     label: 'MADAME CLAUDE — BACKSTAGE',
     videoUrl: 'assets/level_2/animation_3.mp4',
+    artSize: { width: 1470, height: 630 },
     posterKey: 'club-room-3-poster',
     posterUrl: 'assets/level_2/room_3_poster.webp',
   },
@@ -64,6 +69,7 @@ export const CLUB_ROOMS: readonly ClubRoom[] = [
     id: 'dancefloor',
     label: 'MADAME CLAUDE — DANCEFLOOR',
     videoUrl: 'assets/level_2/animation_4.mp4',
+    artSize: { width: 1920, height: 1080 },
     posterKey: 'club-room-4-poster',
     posterUrl: 'assets/level_2/room_4_poster.webp',
   },

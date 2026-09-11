@@ -1,4 +1,6 @@
 import type Phaser from 'phaser';
+import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../../constants';
+import { resolveClubRoomProjection } from './clubRoomLayout';
 import { footOffset, loopedFrameIndex } from '../../characters/characterAnimation';
 import type { EditableObject } from '../../systems/SceneEditor';
 import { getClubNpcGroup, type ClubNpcGroupArt } from './clubNpcAssets';
@@ -176,16 +178,18 @@ export class ClubNpcLayer {
   private applyTransform(instance: NpcInstance, cameraWidth: number, cameraHeight: number): void {
     const transform = resolveClubNpcTransform(
       instance.placement,
-      cameraWidth,
-      cameraHeight,
+      DESIGN_WIDTH,
+      DESIGN_HEIGHT,
       this.fallbackBaselineRatio,
     );
-    instance.sprite.setScale(transform.scale);
+    const projection = resolveClubRoomProjection(this.roomId, cameraWidth, cameraHeight);
+    const scale = transform.scale * projection.scale;
+    instance.sprite.setScale(scale);
     // Pushing down by the scaled foot gap is what puts the drawn feet on the
     // floor line rather than the bottom of a largely empty canvas.
     instance.sprite.setPosition(
-      Math.round(transform.x),
-      Math.round(transform.y + footOffset(instance.art.footGap, transform.scale)),
+      Math.round(projection.x + transform.x * projection.scale),
+      Math.round(projection.y + transform.y * projection.scale + footOffset(instance.art.footGap, scale)),
     );
   }
 
@@ -256,17 +260,18 @@ export class ClubNpcLayer {
     transform: { x: number; y: number; scaleY: number },
   ): void {
     const camera = this.scene.cameras.main;
+    const projection = resolveClubRoomProjection(this.roomId, camera.width, camera.height);
     instance.placement = toClubNpcPlacement(
       instance.placement,
       {
-        x: transform.x,
+        x: (transform.x - projection.x) / projection.scale,
         // The sprite itself sits below the authored floor line by its scaled
         // foot gap. Remove that rendering-only displacement before persisting.
-        y: transform.y - footOffset(instance.art.footGap, transform.scaleY),
-        scale: transform.scaleY,
+        y: (transform.y - footOffset(instance.art.footGap, transform.scaleY) - projection.y) / projection.scale,
+        scale: transform.scaleY / projection.scale,
       },
-      camera.width,
-      camera.height,
+      DESIGN_WIDTH,
+      DESIGN_HEIGHT,
     );
   }
 
@@ -324,6 +329,7 @@ export class ClubNpcLayer {
     snapshot: readonly { id: string; x: number; y: number; scaleX: number; scaleY: number }[],
   ): ClubNpcPlacement[] {
     const camera = this.scene.cameras.main;
+    const projection = resolveClubRoomProjection(this.roomId, camera.width, camera.height);
     const byId = new Map(snapshot.map((entry) => [entry.id, entry]));
     const placements = this.instances.map((instance) => {
       const entry = byId.get(instance.id);
@@ -331,12 +337,12 @@ export class ClubNpcLayer {
       return toClubNpcPlacement(
         instance.placement,
         {
-          x: entry.x,
-          y: entry.y - footOffset(instance.art.footGap, entry.scaleY),
-          scale: entry.scaleY,
+          x: (entry.x - projection.x) / projection.scale,
+          y: (entry.y - footOffset(instance.art.footGap, entry.scaleY) - projection.y) / projection.scale,
+          scale: entry.scaleY / projection.scale,
         },
-        camera.width,
-        camera.height,
+        DESIGN_WIDTH,
+        DESIGN_HEIGHT,
       );
     });
     // Keep this room's edited coordinates active immediately. The HTTP save

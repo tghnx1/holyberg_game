@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { gameAudio } from '../audio/GameAudio';
-import { Depth, GROUND_Y, DESIGN_HEIGHT } from '../constants';
+import { Depth, GROUND_Y, DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
 import { queueCharacterWalk } from '../characters/characterAssets';
 import { footOffset } from '../characters/characterAnimation';
 import {
@@ -29,6 +29,7 @@ import {
   resolveClubRoomTransition,
   type ClubRoomEdge,
 } from '../level/club/clubRooms';
+import { resolveClubRoomArtFrame, resolveClubRoomProjection } from '../level/club/clubRoomLayout';
 import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
 import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
@@ -475,6 +476,24 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   // ---------------------------------------------------------------- rooms
 
   private enterRoom(roomIndex: number, enterFrom: ClubRoomEdge): void {
+    const minimum = getClubRoomMinimumAssets(roomIndex);
+    const assets = [...minimum.images, ...getClubStoryActorIdleAssets(minimum.room.id, this.storyCast)];
+    if (!assets.every((asset) => this.textures.exists(asset.key))) {
+      const loader = this.runtimeAssets;
+      if (!loader || this.transitioning) return;
+      // Keep the complete outgoing room visible until the destination is ready.
+      this.transitioning = true;
+      void loader.load(assets).then(() => {
+        if (this.runtimeAssets !== loader) return;
+        this.transitioning = false;
+        if (!assets.every((asset) => this.textures.exists(asset.key))) {
+          console.warn('[ClubScene] room assets unavailable', minimum.room.id);
+          return;
+        }
+        this.enterRoom(roomIndex, enterFrom);
+      });
+      return;
+    }
     this.roomIndex = roomIndex;
     const room = CLUB_ROOMS[roomIndex];
     this.roomLabel.setText(room.label);
@@ -532,31 +551,14 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.prefetchNeighbour(roomIndex + 1);
   }
 
-  /**
-   * Shows each item from `CLUB_ROOM_SCENERY_ITEMS` only in its own room, and
-   * hides it everywhere else. Demand-loaded the same way the story actor's
-   * idle art is: nothing about it is needed until the player actually
-   * reaches that room.
-   */
+  /** Room entry guarantees the current furniture is registered before showing it. */
   private updateRoomScenery(roomId: string): void {
     for (const item of CLUB_ROOM_SCENERY_ITEMS) {
-      if (item.roomId !== roomId) {
-        this.roomScenery.get(item.editableId)?.setVisible(false);
-        continue;
-      }
-      if (this.textures.exists(item.textureKey)) {
+      if (item.roomId === roomId && this.textures.exists(item.textureKey)) {
         this.showRoomSceneryItem(item);
-        continue;
+      } else {
+        this.roomScenery.get(item.editableId)?.setVisible(false);
       }
-      void this.runtimeAssets
-        ?.load([{ key: item.textureKey, url: item.url }])
-        .then(() => {
-          // The player may have left this room, or Level 2 entirely, while
-          // this was in flight; showing it then would place it in the wrong
-          // room.
-          if (!this.scene.isActive() || this.roomIndexId() !== roomId) return;
-          this.showRoomSceneryItem(item);
-        });
     }
   }
 
@@ -675,9 +677,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     if (!this.textures.exists(frame.key)) return;
     const baseScale = resolveGameplayScale(actor.character, 'idle');
     const authoredScale = saved?.scale ?? placement.scale;
-    const scale = baseScale * authoredScale;
-    const x = (saved?.xRatio ?? placement.xRatio) * this.cameras.main.width;
-    const baseline = (saved?.yRatio ?? placement.baselineRatio) * this.cameras.main.height;
+    const projection = resolveClubRoomProjection(placement.roomId, this.cameras.main.width, this.cameras.main.height);
+    const scale = baseScale * authoredScale * projection.scale;
+    const x = projection.x + (saved?.xRatio ?? placement.xRatio) * DESIGN_WIDTH * projection.scale;
+    const baseline = projection.y + (saved?.yRatio ?? placement.baselineRatio) * DESIGN_HEIGHT * projection.scale;
     actor.sprite
       .setTexture(frame.key)
       .setFlipX(saved?.flipX === true)
@@ -725,13 +728,12 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
         const frame = resolveLocomotionFrame(actor.character, 'idle', this.time.now);
         const baseScale = resolveGameplayScale(actor.character, 'idle');
         const scale = transform.scaleY;
+        const projection = resolveClubRoomProjection(placement.roomId, this.cameras.main.width, this.cameras.main.height);
         setSceneObjectLayout(this.scene.key, placement.layoutId, {
           ...getSceneObjectLayout(this.scene.key, placement.layoutId),
-          xRatio: this.cameras.main.width > 0 ? transform.x / this.cameras.main.width : 0,
-          yRatio: this.cameras.main.height > 0
-            ? (transform.y - footOffset(frame.footGap, scale)) / this.cameras.main.height
-            : 0,
-          scale: baseScale > 0 ? scale / baseScale : placement.scale,
+          xRatio: (transform.x - projection.x) / projection.scale / DESIGN_WIDTH,
+          yRatio: (transform.y - footOffset(frame.footGap, scale) - projection.y) / projection.scale / DESIGN_HEIGHT,
+          scale: baseScale > 0 ? scale / baseScale / projection.scale : placement.scale,
         });
         this.layoutStoryMask(actor, frame.bodyHeight * scale);
       },
@@ -841,7 +843,10 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     const room = CLUB_ROOMS[roomIndex];
     if (!room) return;
     void this.runtimeAssets?.load([
-      { key: room.posterKey, url: room.posterUrl },
+      ...getClubRoomMinimumAssets(roomIndex).images,
+      ...getClubStoryActorIdleAssets(room.id, this.storyCast),
+    ]);
+    void this.runtimeAssets?.load([
       ...collectClubNpcFrames(getRoomNpcGroups(room.id)),
     ]);
   }
@@ -969,18 +974,11 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
    */
   private layoutRoomArt(
     target: Phaser.GameObjects.Image | Phaser.GameObjects.Video,
-    naturalWidth: number,
-    naturalHeight: number,
   ): void {
-    const room = CLUB_ROOMS[this.roomIndex];
-    const shiftY = room?.videoShiftY ?? 0;
-    const overscanFloor = room?.videoOverscan ?? 1;
     const camera = this.cameras.main;
-    const cover = Math.max(camera.width / naturalWidth, camera.height / naturalHeight);
-    const required = (camera.height + 2 * shiftY) / (naturalHeight * cover);
-    const scale = cover * Math.max(overscanFloor, required);
-    target.setDisplaySize(naturalWidth * scale, naturalHeight * scale);
-    target.setPosition(camera.width / 2, camera.height / 2 + shiftY);
+    const frame = resolveClubRoomArtFrame(CLUB_ROOMS[this.roomIndex], camera.width, camera.height);
+    target.setDisplaySize(frame.width, frame.height);
+    target.setPosition(frame.x, frame.y);
   }
 
   private layoutPoster(): void {
@@ -988,7 +986,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     if (!poster || poster.width <= 0 || poster.height <= 0) return;
     // The still shares the video's placement exactly, so the handover when
     // the video starts is invisible.
-    this.layoutRoomArt(poster, poster.width, poster.height);
+    this.layoutRoomArt(poster);
   }
 
   private layoutVideo(): void {
@@ -1004,7 +1002,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
       video.setVisible(false);
       return;
     }
-    this.layoutRoomArt(video, naturalWidth, naturalHeight);
+    this.layoutRoomArt(video);
     video.setVisible(true);
   }
 
@@ -1028,9 +1026,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Ratio-based, so the crowd re-seats itself on the new viewport.
     this.npcs?.layout();
     this.layoutStoryActor();
-    // Same reason: a scenery item authored as a fraction of the camera must
-    // be re-placed against the *new* camera size, not left at wherever it
-    // last landed.
+    // Keep furniture aligned with the background and its performer after resize.
     this.layoutRoomScenery();
 
     // Keep the player inside the new width, and on the floor line.

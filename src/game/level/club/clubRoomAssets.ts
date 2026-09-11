@@ -1,6 +1,7 @@
 import { collectClubNpcFirstFrames, type ClubNpcFrame } from './clubNpcAssets';
 import { getRoomNpcGroups } from './clubNpcPlacement';
 import { CLUB_ROOMS, type ClubRoom } from './clubRooms';
+import { getClubRoomSceneryForRoom } from './clubRoomScenery';
 
 export interface ClubRoomMinimumAssets {
   room: ClubRoom;
@@ -17,6 +18,7 @@ export function getClubRoomMinimumAssets(roomIndex: number): ClubRoomMinimumAsse
     room,
     images: [
       { key: room.posterKey, url: room.posterUrl },
+      ...getClubRoomSceneryForRoom(room.id).map((item) => ({ key: item.textureKey, url: item.url })),
       ...collectClubNpcFirstFrames(getRoomNpcGroups(room.id)),
     ],
   };

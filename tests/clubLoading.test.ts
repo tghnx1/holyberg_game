@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ClubRuntimeAssetLoader } from '../src/game/level/club/ClubRuntimeAssetLoader';
 import { getClubRoomMinimumAssets } from '../src/game/level/club/clubRoomAssets';
+import { getClubRoomSceneryForRoom, CLUB_ROOM_SCENERY_ITEMS } from '../src/game/level/club/clubRoomScenery';
 import { CLUB_ROOMS } from '../src/game/level/club/clubRooms';
 
 class FakeEmitter {
@@ -66,6 +67,29 @@ describe('Club cold-load requirements', () => {
       expect(minimum.images[0]).toEqual({ key: room.posterKey, url: room.posterUrl });
       expect(minimum.images.some((asset) => asset.url.endsWith('/01.webp'))).toBe(true);
     }
+  });
+
+  it('blocks on current-room furniture, without decoding furniture from other rooms', () => {
+    for (const [index, room] of CLUB_ROOMS.entries()) {
+      const keys = getClubRoomMinimumAssets(index).images.map((asset) => asset.key);
+      for (const item of CLUB_ROOM_SCENERY_ITEMS) {
+        expect(keys.includes(item.textureKey)).toBe(item.roomId === room.id);
+      }
+    }
+  });
+
+  it('keeps a cold destination pending until its furniture batch completes', async () => {
+    const harness = loaderHarness();
+    const runtime = new ClubRuntimeAssetLoader(harness.scene as never);
+    const minimum = getClubRoomMinimumAssets(1);
+    let ready = false;
+    const done = runtime.load(minimum.images).then(() => { ready = true; });
+    await flushQueue();
+    expect(ready).toBe(false);
+    expect(harness.queued.map((asset) => asset.key)).toContain(getClubRoomSceneryForRoom('corridor')[0].textureKey);
+    harness.complete();
+    await done;
+    expect(ready).toBe(true);
   });
 
   it('serializes room-tail and neighbour batches through one Phaser loader', async () => {

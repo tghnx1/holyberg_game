@@ -87,6 +87,33 @@ function buildLayer(roomId: string, loadedKeys?: Set<string>) {
 const ROOM = 'lounge';
 
 describe('editing the ambient club crowd', () => {
+  it('keeps the dancefloor crowd aligned through mobile resize and editor save', () => {
+    const { scene } = createScene();
+    const layer = new ClubNpcLayer(scene as never, 10, 0.9);
+    layer.setRoom('dancefloor');
+    const object = layer.getEditableObjects()[0];
+    const desktop = { x: object.target.x, y: object.target.y, scale: object.target.scaleY };
+    scene.cameras.main.width = 1600;
+    layer.layout();
+    expect(Math.abs(object.target.x - desktop.x * 1.25)).toBeLessThanOrEqual(1);
+    expect(Math.abs(object.target.y - (360 + (desktop.y - 360) * 1.25))).toBeLessThanOrEqual(1);
+    expect(object.target.scaleY).toBeCloseTo(desktop.scale * 1.25);
+    object.onChange?.({
+      x: object.target.x, y: object.target.y,
+      scaleX: object.target.scaleX, scaleY: object.target.scaleY,
+    });
+    const saved = layer.buildLayoutFromSnapshot([{ id: object.id,
+      x: object.target.x, y: object.target.y,
+      scaleX: object.target.scaleX, scaleY: object.target.scaleY,
+    }]);
+    expect(saved[0].heightRatio).toBeCloseTo(getRoomNpcPlacements('dancefloor')[0].heightRatio);
+    scene.cameras.main.width = 1280;
+    layer.layout();
+    expect(Math.abs(object.target.x - desktop.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(object.target.y - desktop.y)).toBeLessThanOrEqual(1);
+    expect(object.target.scaleY).toBeCloseTo(desktop.scale);
+  });
+
   it('keeps the last valid frame until a progressive-load frame is registered', () => {
     const firstFrames = new Set(
       getRoomNpcPlacements(ROOM).map((placement) => getClubNpcGroup(placement.group).frames[0].key),

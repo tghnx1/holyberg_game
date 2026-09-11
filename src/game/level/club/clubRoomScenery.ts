@@ -5,20 +5,16 @@
  * no dialogue trigger, no gameplay logic, and nothing here is consulted by
  * ClubScene's walking, edge or completion rules.
  *
- * Position is authored as a fraction of the *live camera* width/height, the
- * same convention `clubNpcPlacement.ts` uses for the ambient crowd — not a
- * fixed-1280px `DESIGN_SPACE` point, which is what the boss/player's
- * presentation *offsets* use. Club's room video/background is fit to
- * whatever the live viewport actually is (wider than 1280 on a wide
- * landscape phone), so a scenery item authored as a DESIGN_SPACE point drifts
- * away from the room art it's supposed to sit on as the viewport widens; a
- * camera-ratio point scales with the same art it's drawn over instead.
+ * Positions and scales describe the canonical desktop composition. Rendering
+ * projects that composition through the room background's cover fit; editor
+ * saves invert the projection so mobile edits preserve desktop placement.
  *
  * One registry rather than one module per item, so adding the next piece of
  * room dressing is a new `CLUB_ROOM_SCENERY_ITEMS` entry, not a new file with
  * the same read/write plumbing copy-pasted into it.
  */
 import { DESIGN_HEIGHT, DESIGN_WIDTH } from '../../constants';
+import { resolveClubRoomProjection } from './clubRoomLayout';
 import { getSceneObjectLayout, setSceneObjectLayout } from '../../systems/sceneLayout';
 
 interface DesignPoint {
@@ -63,13 +59,7 @@ export interface ClubRoomSceneryTransform {
   scale: number;
 }
 
-/**
- * Reads one item's authored transform against the *live* camera size, falling
- * back to its default point (itself expressed as a fraction of the canonical
- * DESIGN_WIDTH/DESIGN_HEIGHT box, so the default composition is unchanged at
- * that aspect ratio — only a viewport wider or narrower than it now shifts
- * the deck along with the room art instead of staying at a fixed pixel x).
- */
+/** Resolve an authored desktop transform through the room's live framing. */
 export function resolveClubRoomSceneryTransform(
   sceneKey: string,
   item: ClubRoomSceneryItem,
@@ -79,10 +69,11 @@ export function resolveClubRoomSceneryTransform(
   const layout = getSceneObjectLayout(sceneKey, item.editableId);
   const xRatio = layout?.xRatio ?? item.defaultPoint.x / DESIGN_WIDTH;
   const yRatio = layout?.yRatio ?? item.defaultPoint.y / DESIGN_HEIGHT;
+  const projection = resolveClubRoomProjection(item.roomId, cameraWidth, cameraHeight);
   return {
-    x: xRatio * cameraWidth,
-    y: yRatio * cameraHeight,
-    scale: layout?.scale ?? item.defaultScale,
+    x: projection.x + xRatio * DESIGN_WIDTH * projection.scale,
+    y: projection.y + yRatio * DESIGN_HEIGHT * projection.scale,
+    scale: (layout?.scale ?? item.defaultScale) * projection.scale,
   };
 }
 
@@ -94,10 +85,11 @@ export function persistClubRoomScenery(
   cameraWidth: number,
   cameraHeight: number,
 ): void {
+  const projection = resolveClubRoomProjection(item.roomId, cameraWidth, cameraHeight);
   setSceneObjectLayout(sceneKey, item.editableId, {
-    xRatio: cameraWidth > 0 ? transform.x / cameraWidth : 0,
-    yRatio: cameraHeight > 0 ? transform.y / cameraHeight : 0,
-    scale: transform.scale,
+    xRatio: (transform.x - projection.x) / projection.scale / DESIGN_WIDTH,
+    yRatio: (transform.y - projection.y) / projection.scale / DESIGN_HEIGHT,
+    scale: transform.scale / projection.scale,
   });
 }
 

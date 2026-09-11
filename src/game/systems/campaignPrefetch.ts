@@ -9,6 +9,7 @@ import { chooseLevel4NpcCharacter } from '../level/level4/level4Flow';
 import { collectClubNpcFirstFrames, collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
 import { CLUB_ROOMS } from '../level/club/clubRooms';
+import { getClubRoomSceneryForRoom } from '../level/club/clubRoomScenery';
 import {
   characterForClubStorySlot,
   resolveClubStoryCast,
@@ -128,6 +129,7 @@ export function getClubAssetPackage(
     ...roomNpcAssets(first.id, 'HIGH'),
     asset(CLUB_ROOMS[1].videoUrl, 'HIGH', 'video'),
     asset(CLUB_ROOMS[1].posterUrl, 'HIGH'),
+    ...getClubRoomSceneryForRoom(CLUB_ROOMS[1].id).map((item) => asset(item.url, 'HIGH')),
     ...roomNpcAssets(CLUB_ROOMS[1].id, 'HIGH'),
     ...characterAssets(story('barkeeper'), ['idle'], 'HIGH'),
   ];
@@ -135,6 +137,7 @@ export function getClubAssetPackage(
     full.push(
       asset(room.videoUrl, 'LOW', 'video'),
       asset(room.posterUrl, 'LOW'),
+      ...getClubRoomSceneryForRoom(room.id).map((item) => asset(item.url, 'LOW')),
       ...roomNpcAssets(room.id, 'LOW'),
     );
   }

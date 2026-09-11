@@ -87,52 +87,31 @@ describe('Club room scenery', () => {
     expect(reloaded.scale).toBeCloseTo(0.65);
   });
 
-  describe('mobile viewport drift (fix: keep Club DJ deck aligned on mobile)', () => {
-    it.each(CLUB_ROOM_SCENERY_ITEMS)(
-      '$editableId keeps the same position ratio (not the same pixel x) on a wide landscape phone',
-      (item) => {
-        const desktop = resolveClubRoomSceneryTransform(SCENE, item, DESKTOP_WIDTH, DESKTOP_HEIGHT);
-        const widePhone = resolveClubRoomSceneryTransform(SCENE, item, WIDE_PHONE_WIDTH, WIDE_PHONE_HEIGHT);
-
-        // The bug: staying at the same absolute x reads as drifting left
-        // relative to the room video/background, which is fit to the wider
-        // live camera. A ratio-of-camera point scales with it instead.
-        expect(widePhone.x).not.toBeCloseTo(desktop.x);
-        expect(widePhone.x / WIDE_PHONE_WIDTH).toBeCloseTo(desktop.x / DESKTOP_WIDTH);
-        expect(widePhone.y / WIDE_PHONE_HEIGHT).toBeCloseTo(desktop.y / DESKTOP_HEIGHT);
-        // Same visual scale regardless of viewport width.
-        expect(widePhone.scale).toBe(desktop.scale);
-      },
-    );
-
-    it('re-resolves an authored (moved) position against a new camera size the same way, keeping its ratio', () => {
-      persistClubRoomScenery(SCENE, djConsole, { x: 900, y: 600, scale: 0.8 }, DESKTOP_WIDTH, DESKTOP_HEIGHT);
-
-      const desktop = resolveClubRoomSceneryTransform(SCENE, djConsole, DESKTOP_WIDTH, DESKTOP_HEIGHT);
-      const widePhone = resolveClubRoomSceneryTransform(SCENE, djConsole, WIDE_PHONE_WIDTH, WIDE_PHONE_HEIGHT);
-
-      expect(desktop.x).toBeCloseTo(900);
-      expect(widePhone.x).toBeCloseTo(900 * (WIDE_PHONE_WIDTH / DESKTOP_WIDTH));
-      expect(widePhone.scale).toBe(0.8);
+  describe('mobile room composition', () => {
+    it('moves the bar with the centre of the uncropped corridor, without stretching its offset', () => {
+      persistClubRoomScenery(SCENE, bar, { x: 1000, y: 650, scale: 0.8 }, DESKTOP_WIDTH, DESKTOP_HEIGHT);
+      const phone = resolveClubRoomSceneryTransform(SCENE, bar, WIDE_PHONE_WIDTH, WIDE_PHONE_HEIGHT);
+      // The extra 320px reveals 160px on either side of this wider-than-screen video.
+      expect(phone).toEqual({ x: 1160, y: 650, scale: 0.8 });
     });
 
-    it('P-save from a wide phone still round-trips to the same visual position on that same phone size', () => {
-      // Editor drag happens live against the phone's own camera; the
-      // resulting x/y are already phone-space when persisted.
-      const draggedX = 0.65 * WIDE_PHONE_WIDTH;
-      const draggedY = 0.8 * WIDE_PHONE_HEIGHT;
-      persistClubRoomScenery(
-        SCENE,
-        djConsole,
-        { x: draggedX, y: draggedY, scale: 0.55 },
-        WIDE_PHONE_WIDTH,
-        WIDE_PHONE_HEIGHT,
-      );
+    it('scales both the DJ deck and its vertical offset with the 16:9 dancefloor cover crop', () => {
+      persistClubRoomScenery(SCENE, djConsole, { x: 900, y: 600, scale: 0.8 }, DESKTOP_WIDTH, DESKTOP_HEIGHT);
+      const phone = resolveClubRoomSceneryTransform(SCENE, djConsole, WIDE_PHONE_WIDTH, WIDE_PHONE_HEIGHT);
+      expect(phone.x).toBeCloseTo(1125);
+      expect(phone.y).toBeCloseTo(660); // centre 360 + (600 - 360) * 1.25
+      expect(phone.scale).toBeCloseTo(1);
+    });
 
-      const reloaded = resolveClubRoomSceneryTransform(SCENE, djConsole, WIDE_PHONE_WIDTH, WIDE_PHONE_HEIGHT);
-      expect(reloaded.x).toBeCloseTo(draggedX);
-      expect(reloaded.y).toBeCloseTo(draggedY);
-      expect(reloaded.scale).toBeCloseTo(0.55);
+    it.each(CLUB_ROOM_SCENERY_ITEMS)('$editableId preserves desktop authoring after a phone save and disk reload', (item) => {
+      persistClubRoomScenery(SCENE, item, { x: 950, y: 650, scale: 0.8 }, DESKTOP_WIDTH, DESKTOP_HEIGHT);
+      const phone = resolveClubRoomSceneryTransform(SCENE, item, 1900, 720);
+      persistClubRoomScenery(SCENE, item, phone, 1900, 720);
+      resetSceneLayout(JSON.parse(JSON.stringify(buildSceneLayoutPayload(SCENE))));
+      const desktop = resolveClubRoomSceneryTransform(SCENE, item, DESKTOP_WIDTH, DESKTOP_HEIGHT);
+      expect(desktop.x).toBeCloseTo(950);
+      expect(desktop.y).toBeCloseTo(650);
+      expect(desktop.scale).toBeCloseTo(0.8);
     });
   });
 
