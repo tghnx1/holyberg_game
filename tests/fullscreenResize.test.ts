@@ -54,7 +54,7 @@ function setup() {
   vi.runAllTimers();
   scale.setParentSize.mockClear();
   camera.setSize.mockClear();
-  return { documentEmitter, visual, active, input, game, camera, frames, originalDocument, originalWindow };
+  return { documentEmitter, visual, active, input, host, game, camera, frames, originalDocument, originalWindow };
 }
 
 describe('FullscreenResize keyboard guard', () => {
@@ -100,7 +100,7 @@ describe('FullscreenResize keyboard guard', () => {
     h.active.value = h.input;
     (globalThis.document as unknown as { activeElement: unknown }).activeElement = h.input;
     h.documentEmitter.emit('focusin', { target: h.input });
-    for (const height of [180, 240, 320, 390]) {
+    for (const height of [180, 240, 320, 320, 390]) {
       h.visual.height = height;
       h.visual.emit('resize');
       h.visual.emit('scroll');
@@ -126,5 +126,17 @@ describe('FullscreenResize keyboard guard', () => {
     h.visual.emit('resize');
     vi.advanceTimersByTime(200);
     expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates host top when only the visual viewport offset changes', () => {
+    const h = setup();
+    h.game.scale.setParentSize.mockClear();
+    h.camera.setSize.mockClear();
+    h.visual.offsetTop = 24;
+    h.visual.emit('scroll');
+    vi.advanceTimersByTime(200);
+    expect(h.host.style.top).toBe('24px');
+    expect(h.game.scale.setParentSize).not.toHaveBeenCalled();
+    expect(h.camera.setSize).not.toHaveBeenCalled();
   });
 });

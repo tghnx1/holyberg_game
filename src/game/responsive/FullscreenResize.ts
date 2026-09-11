@@ -57,7 +57,7 @@ export function releaseKeyboardResizeGuard(): void {
 
 export function setupFullscreenResize(game: Phaser.Game): void {
   let keyboardFocused = false;
-  let lastApplied: { width: number; height: number } | undefined;
+  let lastApplied: { width: number; height: number; top: number; usesVisibleViewportHeight: boolean } | undefined;
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const isTextEntry = (target: EventTarget | null): target is HTMLElement => {
@@ -78,9 +78,16 @@ export function setupFullscreenResize(game: Phaser.Game): void {
     const layout = measureHost(game.scale.isFullscreen);
     const { width, height } = layout;
     if (width <= 0 || height <= 0) return;
-    if (lastApplied?.width === width && lastApplied.height === height) return;
-    lastApplied = { width, height };
+    const hostChanged = !lastApplied
+      || lastApplied.width !== width
+      || lastApplied.height !== height
+      || lastApplied.top !== layout.top
+      || lastApplied.usesVisibleViewportHeight !== layout.usesVisibleViewportHeight;
+    if (!hostChanged) return;
+    const phaserChanged = !lastApplied || lastApplied.width !== width || lastApplied.height !== height;
+    lastApplied = { width, height, top: layout.top, usesVisibleViewportHeight: layout.usesVisibleViewportHeight };
     applyHostStyle(layout);
+    if (!phaserChanged) return;
     game.scale.setParentSize(width, height);
     const gameWidth = game.scale.gameSize.width;
     const gameHeight = game.scale.gameSize.height;
