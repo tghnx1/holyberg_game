@@ -21,24 +21,22 @@ export interface GameHostViewportLayout {
 }
 
 /**
- * iOS Safari is the one supported browser where the layout viewport can keep
- * the old `100dvh` box while the actually visible height moves with the
- * collapsing address/tool bars. Width deliberately remains the host width:
+ * Windowed iOS browsers can keep the old `100dvh` box while the actually
+ * visible height moves with the address/tool bars or keyboard. This also
+ * applies to Chrome on iOS when returning from Results to replay. Width deliberately remains the host width:
  * feeding visualViewport.width into Scale.EXPAND reintroduces side gutters.
  */
-export function isWindowedIosSafari(userAgent: string, fullscreen: boolean): boolean {
+export function isWindowedIosBrowser(userAgent: string, fullscreen: boolean): boolean {
   if (fullscreen) return false;
   const ios = /iPhone|iPad|iPod/i.test(userAgent);
-  const safari = /Safari/i.test(userAgent);
-  const anotherIosBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|Instagram/i.test(userAgent);
-  return ios && safari && !anotherIosBrowser;
+  return ios;
 }
 
 export function resolveGameHostViewport(input: GameHostViewportInput): GameHostViewportLayout {
   const width = input.hostWidth > 0 ? input.hostWidth : input.fallbackWidth;
   const hostHeight = input.hostHeight > 0 ? input.hostHeight : input.fallbackHeight;
   const useVisibleHeight =
-    isWindowedIosSafari(input.userAgent, input.fullscreen) &&
+    isWindowedIosBrowser(input.userAgent, input.fullscreen) &&
     input.visualViewport !== undefined &&
     input.visualViewport.height > 0;
 

@@ -9,7 +9,7 @@ import { resolveGameHostViewport } from './visibleViewportLayout';
  *
  * Width always comes from the host (`100vw`) so Scale.EXPAND keeps the
  * wide-screen composition and never reintroduces side gutters. Windowed iOS
- * Safari is the narrow exception for height: its browser chrome can move the
+ * browsers are the exception for height: their browser chrome can move the
  * visible viewport without making `100dvh`/the host follow reliably, so only
  * the live visual height and vertical offset are applied there.
  */
