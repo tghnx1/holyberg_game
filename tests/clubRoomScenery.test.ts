@@ -95,11 +95,13 @@ describe('Club room scenery', () => {
       expect(phone).toEqual({ x: 1160, y: 650, scale: 0.8 });
     });
 
+    // The crop is anchored on the room's floor line rather than the centre of
+    // the screen, so the deck keeps standing on the same floorboards.
     it('scales both the DJ deck and its vertical offset with the 16:9 dancefloor cover crop', () => {
       persistClubRoomScenery(SCENE, djConsole, { x: 900, y: 600, scale: 0.8 }, DESKTOP_WIDTH, DESKTOP_HEIGHT);
       const phone = resolveClubRoomSceneryTransform(SCENE, djConsole, WIDE_PHONE_WIDTH, WIDE_PHONE_HEIGHT);
       expect(phone.x).toBeCloseTo(1125);
-      expect(phone.y).toBeCloseTo(660); // centre 360 + (600 - 360) * 1.25
+      expect(phone.y).toBeCloseTo(572.5); // floor 710 + (600 - 710) * 1.25
       expect(phone.scale).toBeCloseTo(1);
     });
 

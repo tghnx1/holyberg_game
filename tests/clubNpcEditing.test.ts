@@ -96,7 +96,9 @@ describe('editing the ambient club crowd', () => {
     scene.cameras.main.width = 1600;
     layer.layout();
     expect(Math.abs(object.target.x - desktop.x * 1.25)).toBeLessThanOrEqual(1);
-    expect(Math.abs(object.target.y - (360 + (desktop.y - 360) * 1.25))).toBeLessThanOrEqual(1);
+    // Scaled about the room's floor line (710), not the middle of the screen:
+    // the crowd stands on the floor, so that is the line the crop keeps still.
+    expect(Math.abs(object.target.y - (710 + (desktop.y - 710) * 1.25))).toBeLessThanOrEqual(1);
     expect(object.target.scaleY).toBeCloseTo(desktop.scale * 1.25);
     object.onChange?.({
       x: object.target.x, y: object.target.y,

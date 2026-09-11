@@ -1,13 +1,10 @@
 import Phaser from 'phaser';
 import { LEVEL4_ASSET_KEYS } from '../level/level4/level4Assets';
-import { BOSS_ART, BOSS_PLATFORM } from './bossAssets';
+import { BOSS_ART } from './bossAssets';
 import { BOSS_ARENA } from './bossConfig';
 import { BossDepth } from './bossConstants';
-import { getCoverImageLayout } from './bossArenaLayout';
+import { resolveBossArenaFrames } from './bossArenaLayout';
 import type { ArenaBounds } from './types';
-
-const HOLYWORLD_BACKGROUND_SOURCE_WIDTH = 1672;
-const HOLYWORLD_BACKGROUND_SOURCE_HEIGHT = 940;
 
 /** Static arena furniture: Holyworld backdrop, authored platform and walls. */
 export class BossArena {
@@ -37,26 +34,18 @@ export class BossArena {
 
   redraw(): void {
     const { width, height } = this.scene.cameras.main;
-    const backgroundLayout = getCoverImageLayout(
-      width,
-      height,
-      HOLYWORLD_BACKGROUND_SOURCE_WIDTH,
-      HOLYWORLD_BACKGROUND_SOURCE_HEIGHT,
-    );
+    // Physics/gameplay still uses BOSS_ARENA.floorY. Both images are drawn
+    // through the one arena transform, which is grounded on that same floor
+    // line, so the backdrop's ground, the platform's grass lip and the
+    // player's feet stay on it whatever the viewport's aspect ratio is.
+    const frames = resolveBossArenaFrames(width, height);
     this.background
-      .setPosition(backgroundLayout.x, backgroundLayout.y)
-      .setDisplaySize(backgroundLayout.displayWidth, backgroundLayout.displayHeight);
-
-    // Physics/gameplay still uses BOSS_ARENA.floorY. The PNG is positioned by
-    // its measured first non-transparent row so its grass lip lands on that
-    // exact standing surface, independent of viewport width.
-    const platformScale = width / BOSS_PLATFORM.sourceWidth;
+      .setPosition(frames.backdrop.x, frames.backdrop.y)
+      .setDisplaySize(frames.backdrop.width, frames.backdrop.height);
     this.platform
-      .setPosition(width / 2, BOSS_ARENA.floorY - BOSS_PLATFORM.visibleTopRow * platformScale - 70)
-      .setDisplaySize(
-        BOSS_PLATFORM.sourceWidth * platformScale,
-        BOSS_PLATFORM.sourceHeight * platformScale,
-      );
+      // Origin (0.5, 0): the PNG hangs from its top edge.
+      .setPosition(frames.platform.x, frames.platform.y - frames.platform.height / 2)
+      .setDisplaySize(frames.platform.width, frames.platform.height);
   }
 
   destroy(): void {

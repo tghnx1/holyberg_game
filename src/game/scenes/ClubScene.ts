@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { gameAudio } from '../audio/GameAudio';
-import { Depth, GROUND_Y, DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
+import { Depth, DESIGN_HEIGHT, DESIGN_WIDTH } from '../constants';
 import { queueCharacterWalk } from '../characters/characterAssets';
 import { footOffset } from '../characters/characterAnimation';
 import {
@@ -29,7 +29,12 @@ import {
   resolveClubRoomTransition,
   type ClubRoomEdge,
 } from '../level/club/clubRooms';
-import { resolveClubRoomArtFrame, resolveClubRoomProjection } from '../level/club/clubRoomLayout';
+import {
+  clubFloorY,
+  resolveClubRoomArtFrame,
+  resolveClubRoomProjection,
+  CLUB_FLOOR_RATIO,
+} from '../level/club/clubRoomLayout';
 import { ClubNpcLayer } from '../level/club/ClubNpcLayer';
 import { collectClubNpcFrames } from '../level/club/clubNpcAssets';
 import { getRoomNpcGroups } from '../level/club/clubNpcPlacement';
@@ -108,15 +113,6 @@ const EDGE_MARGIN = 46;
 const ENTRY_INSET = 96;
 /** Matches Player.syncVisual, so the player stands exactly as in Berlin. */
 const FOOT_NUDGE = 10;
-/**
- * How far below Berlin's ground line the club floor sits, in logical pixels
- * at the 720-high design size. The room videos are framed lower than the
- * street, so the player stands further down the frame here. This is the knob to
- * turn to move him up or down: positive is down.
- */
-const FLOOR_DROP = 100;
-/** Floor line as a fraction of the logical height, which EXPAND pins at 720. */
-const FLOOR_RATIO = (GROUND_Y + FLOOR_DROP) / DESIGN_HEIGHT;
 
 /**
  * Level 2: three club interiors the player walks through, each a looping
@@ -231,7 +227,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Above the room video and poster, below the player: the crowd is part of
     // the room, and the player walks in front of it. Well below Depth.UI, so
     // it can never cover the HUD.
-    this.npcs = new ClubNpcLayer(this, Depth.ENVIRONMENT, FLOOR_RATIO);
+    this.npcs = new ClubNpcLayer(this, Depth.ENVIRONMENT, CLUB_FLOOR_RATIO);
 
     this.playerSprite = this.add
       .sprite(0, 0, this.character.gameplay.idle!.key)
@@ -352,7 +348,8 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     }
     // Right is the artwork's natural facing; left mirrors it.
     this.playerSprite.setFlipX((this.facing === -1) !== getPlayerVisualOffset(this.scene.key).flipX);
-    const anchor = this.playerAnchor(frame.footGap, baseScale);
+    const projection = this.roomProjection();
+    const anchor = this.playerAnchor(frame.footGap, baseScale, projection.scale);
     // Visual only: the saved offset moves the drawn sprite, never `walkX`, so
     // room edges and transitions trigger at exactly the same places.
     const visual = getPlayerVisualOffset(this.scene.key);
@@ -361,17 +358,33 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
         this.character,
         resolveLocomotionPose(this.character, motion),
         visual.scale,
-      ),
+      ) * projection.scale,
     );
+    // The authored offset is a displacement in the *room*, so it rides the
+    // room transform like the body it belongs to.
     this.playerSprite.setPosition(
-      Math.round(anchor.x + visual.offsetX),
-      Math.round(anchor.y + visual.offsetY),
+      Math.round(anchor.x + visual.offsetX * projection.scale),
+      Math.round(anchor.y + visual.offsetY * projection.scale),
     );
   }
 
-  /** Where gameplay wants the player drawn, before any editor offset. */
-  private playerAnchor(footGap: number, scale: number): { x: number; y: number } {
-    return { x: this.walkX, y: this.floorY() + footOffset(footGap, scale) + FOOT_NUDGE };
+  /**
+   * Where gameplay wants the player drawn, before any editor offset.
+   *
+   * `walkX` is a live screen position — the room is walked from edge to edge,
+   * whatever the viewport is — while everything vertical is a design-space
+   * distance from the room's own floor line, and so is scaled by the room
+   * transform.
+   */
+  private playerAnchor(
+    footGap: number,
+    scale: number,
+    projectionScale = this.roomProjection().scale,
+  ): { x: number; y: number } {
+    return {
+      x: this.walkX,
+      y: this.floorY() + (footOffset(footGap, scale) + FOOT_NUDGE) * projectionScale,
+    };
   }
 
   // ------------------------------------------------------- EditableScene
@@ -391,6 +404,9 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
         sprite: this.playerSprite,
         getAnchor: () => this.playerAnchor(frame.footGap, baseScale()),
         getBaseScale: baseScale,
+        // Level 2 draws the player through the room transform, so an edit made
+        // on a phone saves the same design-space values a desktop edit would.
+        getDesignScale: () => this.roomProjection().scale,
         refresh: () => this.applyWalkFrame(false),
       }),
     ];
@@ -923,7 +939,19 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
   // ----------------------------------------------------------- responsive
 
   private floorY(): number {
-    return this.cameras.main.height * FLOOR_RATIO;
+    return clubFloorY(this.cameras.main.height);
+  }
+
+  /**
+   * The room transform the background, furniture and crowd are drawn through.
+   * The player rides it too, so he is the same size relative to the room — and
+   * standing on the same floorboards — on a phone's wider viewport as on a
+   * desktop, instead of keeping a desktop-sized body on a floor line the rest
+   * of the room has moved away from.
+   */
+  private roomProjection(): { x: number; y: number; scale: number } {
+    const camera = this.cameras.main;
+    return resolveClubRoomProjection(CLUB_ROOMS[this.roomIndex].id, camera.width, camera.height);
   }
 
   /**

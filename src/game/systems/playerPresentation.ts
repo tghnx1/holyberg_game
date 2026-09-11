@@ -75,6 +75,14 @@ export interface PlayerEditableOptions {
   getAnchor: () => { x: number; y: number };
   /** The sprite's own natural scale from the character manifest. */
   getBaseScale: () => number;
+  /**
+   * How much the scene scales one design-space unit by before drawing —
+   * Level 2's room transform, for instance. Everything persisted here is
+   * design-space, so a scene that draws through a transform has to have it
+   * divided back out. Defaults to 1: a scene that draws design units
+   * one-to-one, which is every scene at the design size.
+   */
+  getDesignScale?: () => number;
   /** Re-applies the sprite's position/scale after the editor changes them. */
   refresh: () => void;
 }
@@ -94,6 +102,10 @@ export function createPlayerEditable(
   options: PlayerEditableOptions,
 ): EditableObject {
   const { sprite, getAnchor, getBaseScale, refresh } = options;
+  const designScale = (): number => {
+    const scale = options.getDesignScale?.() ?? 1;
+    return scale > 0 ? scale : 1;
+  };
   return {
     id: PLAYER_EDITABLE_ID,
     label: 'PLAYER (visual only)',
@@ -106,10 +118,14 @@ export function createPlayerEditable(
     onChange: (transform) => {
       const anchor = getAnchor();
       const base = getBaseScale();
+      const drawn = designScale();
       setSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID, {
         ...getSceneObjectLayout(scene.scene.key, PLAYER_EDITABLE_ID),
-        ...layoutRatiosFromDesignPoint({ x: transform.x - anchor.x, y: transform.y - anchor.y }),
-        scale: base > 0 ? transform.scaleY / base : 1,
+        ...layoutRatiosFromDesignPoint({
+          x: (transform.x - anchor.x) / drawn,
+          y: (transform.y - anchor.y) / drawn,
+        }),
+        scale: base > 0 ? transform.scaleY / base / drawn : 1,
       });
       refresh();
     },
