@@ -16,6 +16,7 @@ class Emitter {
 }
 
 function setup() {
+  vi.useFakeTimers();
   const documentEmitter = new Emitter();
   const visual = Object.assign(new Emitter(), { height: 390, offsetTop: 0 });
   const style: Record<string, unknown> = { removeProperty: (key: string) => delete style[key] };
@@ -50,7 +51,7 @@ function setup() {
   const game = { scale, events: new Emitter(), scene: { getScenes: () => [{ cameras: { main: camera } }] } };
   setupFullscreenResize(game as never);
   game.events.emit('ready');
-  frames.splice(0).forEach((frame) => frame());
+  vi.runAllTimers();
   scale.setParentSize.mockClear();
   camera.setSize.mockClear();
   return { documentEmitter, visual, active, input, game, camera, frames, originalDocument, originalWindow };
@@ -84,13 +85,18 @@ describe('FullscreenResize keyboard guard', () => {
     (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
     h.visual.height = 380;
     h.documentEmitter.emit('focusout', { target: h.input });
-    for (let i = 0; i < 3 && h.frames.length; i += 1) h.frames.splice(0).forEach((frame) => frame());
+    vi.advanceTimersByTime(200);
     expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
     expect(h.camera.setSize).toHaveBeenCalledTimes(1);
   });
 
   it('waits for the final stable keyboard-close height', () => {
     const h = setup();
+    h.visual.height = 400;
+    h.visual.emit('resize');
+    vi.advanceTimersByTime(200);
+    h.game.scale.setParentSize.mockClear();
+    h.camera.setSize.mockClear();
     h.active.value = h.input;
     (globalThis.document as unknown as { activeElement: unknown }).activeElement = h.input;
     h.documentEmitter.emit('focusin', { target: h.input });
@@ -98,13 +104,13 @@ describe('FullscreenResize keyboard guard', () => {
       h.visual.height = height;
       h.visual.emit('resize');
       h.visual.emit('scroll');
-      h.frames.splice(0).forEach((frame) => frame());
+      vi.advanceTimersByTime(200);
       expect(h.game.scale.setParentSize).not.toHaveBeenCalled();
     }
     h.active.value = null;
     (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
     releaseKeyboardResizeGuard();
-    for (let i = 0; i < 3 && h.frames.length; i += 1) h.frames.splice(0).forEach((frame) => frame());
+    vi.advanceTimersByTime(200);
     expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
     expect(h.game.scale.setParentSize).toHaveBeenLastCalledWith(844, 390);
   });
@@ -118,7 +124,7 @@ describe('FullscreenResize keyboard guard', () => {
     (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
     h.visual.height = 380;
     h.visual.emit('resize');
-    for (let i = 0; i < 3 && h.frames.length; i += 1) h.frames.splice(0).forEach((frame) => frame());
+    vi.advanceTimersByTime(200);
     expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
   });
 });

@@ -13,7 +13,7 @@ import { resolveGameHostViewport } from './visibleViewportLayout';
  * visible viewport without making `100dvh`/the host follow reliably, so only
  * the live visual height and vertical offset are applied there.
  */
-function measureHost(fullscreen: boolean): { width: number; height: number } {
+function measureHost(fullscreen: boolean): { width: number; height: number; top: number; usesVisibleViewportHeight: boolean } {
   const host = getFullscreenHost();
   // Fractional and layout-accurate, including while a fullscreen transition
   // is still settling; clientWidth/Height are the integer fallback.
@@ -31,6 +31,11 @@ function measureHost(fullscreen: boolean): { width: number; height: number } {
       : undefined,
   });
 
+  return layout;
+}
+
+function applyHostStyle(layout: { height: number; top: number; usesVisibleViewportHeight: boolean }): void {
+  const host = getFullscreenHost();
   if (layout.usesVisibleViewportHeight) {
     host.style.top = `${layout.top}px`;
     host.style.bottom = 'auto';
@@ -41,7 +46,6 @@ function measureHost(fullscreen: boolean): { width: number; height: number } {
     host.style.removeProperty('height');
   }
 
-  return { width: layout.width, height: layout.height };
 }
 
 const keyboardGuardReleases = new Set<() => void>();
@@ -54,9 +58,7 @@ export function releaseKeyboardResizeGuard(): void {
 export function setupFullscreenResize(game: Phaser.Game): void {
   let keyboardFocused = false;
   let lastApplied: { width: number; height: number } | undefined;
-  let settleFrame = 0;
-  let lastSample: { width: number; height: number } | undefined;
-  let stableSamples = 0;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const isTextEntry = (target: EventTarget | null): target is HTMLElement => {
     if (!target || typeof (target as HTMLElement).tagName !== 'string') return false;
@@ -73,10 +75,12 @@ export function setupFullscreenResize(game: Phaser.Game): void {
 
   const apply = (): void => {
     if (keyboardFocused) return;
-    const { width, height } = measureHost(game.scale.isFullscreen);
+    const layout = measureHost(game.scale.isFullscreen);
+    const { width, height } = layout;
     if (width <= 0 || height <= 0) return;
     if (lastApplied?.width === width && lastApplied.height === height) return;
     lastApplied = { width, height };
+    applyHostStyle(layout);
     game.scale.setParentSize(width, height);
     const gameWidth = game.scale.gameSize.width;
     const gameHeight = game.scale.gameSize.height;
@@ -86,27 +90,15 @@ export function setupFullscreenResize(game: Phaser.Game): void {
   };
 
   // During keyboard close iOS emits several heights (for example 180, 240,
-  // 320, 390). Require two identical animation-frame samples before applying
-  // the final size, so Phaser never renders an intermediate keyboard height.
+  // 320, 390). A short debounce from the LAST event avoids applying any
+  // intermediate height while the keyboard animation is still running.
   const scheduleApply = (released = false): void => {
     if (!released && refreshKeyboardFocus()) return;
-    if (settleFrame) return;
-    lastSample = undefined;
-    stableSamples = 0;
-    const sample = (): void => {
-      settleFrame = 0;
-      if (refreshKeyboardFocus()) return;
-      const current = measureHost(game.scale.isFullscreen);
-      if (lastSample?.width === current.width && lastSample.height === current.height) stableSamples += 1;
-      else stableSamples = 1;
-      lastSample = current;
-      if (stableSamples >= 2) {
-        apply();
-        return;
-      }
-      settleFrame = requestAnimationFrame(sample);
-    };
-    settleFrame = requestAnimationFrame(sample);
+    if (settleTimer !== undefined) clearTimeout(settleTimer);
+    settleTimer = setTimeout(() => {
+      settleTimer = undefined;
+      if (!refreshKeyboardFocus()) apply();
+    }, 200);
   };
 
   const onFocusIn = (event: FocusEvent): void => {
