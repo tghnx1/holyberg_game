@@ -44,15 +44,31 @@ function measureHost(fullscreen: boolean): { width: number; height: number } {
   return { width: layout.width, height: layout.height };
 }
 
+const keyboardGuardReleases = new Set<() => void>();
+
+/** Call when a focused DOM input is removed without dispatching focusout. */
+export function releaseKeyboardResizeGuard(): void {
+  for (const release of keyboardGuardReleases) release();
+}
+
 export function setupFullscreenResize(game: Phaser.Game): void {
   let keyboardFocused = false;
   let lastApplied: { width: number; height: number } | undefined;
+  let settleFrame = 0;
+  let lastSample: { width: number; height: number } | undefined;
+  let stableSamples = 0;
 
   const isTextEntry = (target: EventTarget | null): target is HTMLElement => {
     if (!target || typeof (target as HTMLElement).tagName !== 'string') return false;
     const element = target as HTMLElement & { type?: string; isContentEditable?: boolean };
     if (element.tagName === 'TEXTAREA' || element.isContentEditable) return true;
     return element.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file'].includes(element.type ?? 'text');
+  };
+
+  const refreshKeyboardFocus = (): boolean => {
+    const active = document.activeElement;
+    keyboardFocused = isTextEntry(active) && getFullscreenHost().contains(active);
+    return keyboardFocused;
   };
 
   const apply = (): void => {
@@ -69,18 +85,28 @@ export function setupFullscreenResize(game: Phaser.Game): void {
     });
   };
 
-  // Orientation and fullscreen changes fire before the new layout has been
-  // committed, so the element would still measure at its old size. Measuring
-  // again on the next frame catches the settled box; the immediate pass keeps
-  // the common case (a plain resize) from waiting a frame.
-  let queued = 0;
-  const applyNow = (): void => {
-    if (keyboardFocused) return;
-    if (queued) cancelAnimationFrame(queued);
-    queued = requestAnimationFrame(() => {
-      queued = 0;
-      apply();
-    });
+  // During keyboard close iOS emits several heights (for example 180, 240,
+  // 320, 390). Require two identical animation-frame samples before applying
+  // the final size, so Phaser never renders an intermediate keyboard height.
+  const scheduleApply = (released = false): void => {
+    if (!released && refreshKeyboardFocus()) return;
+    if (settleFrame) return;
+    lastSample = undefined;
+    stableSamples = 0;
+    const sample = (): void => {
+      settleFrame = 0;
+      if (refreshKeyboardFocus()) return;
+      const current = measureHost(game.scale.isFullscreen);
+      if (lastSample?.width === current.width && lastSample.height === current.height) stableSamples += 1;
+      else stableSamples = 1;
+      lastSample = current;
+      if (stableSamples >= 2) {
+        apply();
+        return;
+      }
+      settleFrame = requestAnimationFrame(sample);
+    };
+    settleFrame = requestAnimationFrame(sample);
   };
 
   const onFocusIn = (event: FocusEvent): void => {
@@ -91,16 +117,24 @@ export function setupFullscreenResize(game: Phaser.Game): void {
     // A focus handoff between fields must keep the keyboard guard active.
     if (isTextEntry(event.relatedTarget) && getFullscreenHost().contains(event.relatedTarget)) return;
     keyboardFocused = false;
-    applyNow();
+    scheduleApply();
   };
+  const release = (): void => {
+    keyboardFocused = false;
+    // The caller may invoke this before removing the DOM node; do not inspect
+    // activeElement again until the node has actually disappeared.
+    scheduleApply(true);
+  };
+  keyboardGuardReleases.add(release);
   document.addEventListener('focusin', onFocusIn);
   document.addEventListener('focusout', onFocusOut);
 
-  window.addEventListener('resize', applyNow);
-  window.addEventListener('orientationchange', applyNow);
-  window.visualViewport?.addEventListener('resize', applyNow);
-  window.visualViewport?.addEventListener('scroll', applyNow);
-  game.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, applyNow);
-  game.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, applyNow);
-  game.events.once(Phaser.Core.Events.READY, applyNow);
+  const onViewportChange = (): void => scheduleApply();
+  window.addEventListener('resize', onViewportChange);
+  window.addEventListener('orientationchange', onViewportChange);
+  window.visualViewport?.addEventListener('resize', onViewportChange);
+  window.visualViewport?.addEventListener('scroll', onViewportChange);
+  game.scale.on(Phaser.Scale.Events.ENTER_FULLSCREEN, onViewportChange);
+  game.scale.on(Phaser.Scale.Events.LEAVE_FULLSCREEN, onViewportChange);
+  game.events.once(Phaser.Core.Events.READY, onViewportChange);
 }

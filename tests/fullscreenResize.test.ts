@@ -5,7 +5,7 @@ vi.mock('phaser', () => ({ default: {
   Core: { Events: { READY: 'ready' } },
 } }));
 
-import { setupFullscreenResize } from '../src/game/responsive/FullscreenResize';
+import { releaseKeyboardResizeGuard, setupFullscreenResize } from '../src/game/responsive/FullscreenResize';
 
 class Emitter {
   private listeners = new Map<string, (() => void)[]>();
@@ -84,8 +84,41 @@ describe('FullscreenResize keyboard guard', () => {
     (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
     h.visual.height = 380;
     h.documentEmitter.emit('focusout', { target: h.input });
-    while (h.frames.length) h.frames.splice(0).forEach((frame) => frame());
+    for (let i = 0; i < 3 && h.frames.length; i += 1) h.frames.splice(0).forEach((frame) => frame());
     expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
     expect(h.camera.setSize).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the final stable keyboard-close height', () => {
+    const h = setup();
+    h.active.value = h.input;
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = h.input;
+    h.documentEmitter.emit('focusin', { target: h.input });
+    for (const height of [180, 240, 320, 390]) {
+      h.visual.height = height;
+      h.visual.emit('resize');
+      h.visual.emit('scroll');
+      h.frames.splice(0).forEach((frame) => frame());
+      expect(h.game.scale.setParentSize).not.toHaveBeenCalled();
+    }
+    h.active.value = null;
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
+    releaseKeyboardResizeGuard();
+    for (let i = 0; i < 3 && h.frames.length; i += 1) h.frames.splice(0).forEach((frame) => frame());
+    expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
+    expect(h.game.scale.setParentSize).toHaveBeenLastCalledWith(844, 390);
+  });
+
+  it('releases safely when the still-focused input is removed on submit or cancel', () => {
+    const h = setup();
+    h.active.value = h.input;
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = h.input;
+    h.documentEmitter.emit('focusin', { target: h.input });
+    releaseKeyboardResizeGuard();
+    (globalThis.document as unknown as { activeElement: unknown }).activeElement = null;
+    h.visual.height = 380;
+    h.visual.emit('resize');
+    for (let i = 0; i < 3 && h.frames.length; i += 1) h.frames.splice(0).forEach((frame) => frame());
+    expect(h.game.scale.setParentSize).toHaveBeenCalledTimes(1);
   });
 });

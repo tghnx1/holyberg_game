@@ -15,6 +15,7 @@ import {
 } from '../leaderboard/domain';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import { releaseKeyboardResizeGuard } from '../responsive/FullscreenResize';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { computeResultFit } from './resultLayout';
 import { combineAllScores, getPerformanceGrade } from '../rhythm/ScoreSystem';
@@ -540,6 +541,7 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private removeClaimModal(): void {
+    releaseKeyboardResizeGuard();
     this.releaseInstagramInputCapture?.();
     this.releaseInstagramInputCapture = undefined;
     this.modal?.remove();
