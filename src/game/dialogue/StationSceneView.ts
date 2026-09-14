@@ -96,6 +96,8 @@ export class StationSceneView {
   private arrivingFloorY = 0;
   private seatedBaseY = 0;
   private arrivingBaseY = 0;
+  private readonly seatedFloats: boolean;
+  private readonly arrivingFloats: boolean;
   private readonly flipStates: Partial<Record<StationObjectKey, boolean>> = {};
   /** The arriving actor's entrance frames, in order. */
   private readonly appearFrames: readonly CharacterAssetRef[];
@@ -123,6 +125,8 @@ export class StationSceneView {
       layoutId: 'station-scene',
       label: 'METRO DIALOGUE SCENE',
     });
+    this.seatedFloats = this.cast.seated.id === 'disus';
+    this.arrivingFloats = this.cast.arriving.id === 'disus';
     for (const key of ['background', 'train', 'foreground', 'seated', 'arriving'] as StationObjectKey[]) {
       this.flipStates[key] = this.layout[key].flipX === true;
     }
@@ -309,8 +313,8 @@ export class StationSceneView {
 
   update(now: number): void {
     const bob = Math.sin(now / 700) * 5;
-    this.seated.setY(this.seatedBaseY + bob);
-    this.arriving.setY(this.arrivingBaseY + bob);
+    this.seated.setY(this.seatedBaseY + (this.seatedFloats ? bob : 0));
+    this.arriving.setY(this.arrivingBaseY + (this.arrivingFloats ? bob : 0));
   }
 
   /**
