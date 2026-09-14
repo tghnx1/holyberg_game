@@ -19,6 +19,7 @@ export interface StationObjectLayout {
   xRatio: number;
   yRatio: number;
   heightRatio: number;
+  flipX?: boolean;
 }
 
 export interface DialogueStationLayoutConfig {

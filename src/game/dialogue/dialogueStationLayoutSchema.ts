@@ -11,6 +11,7 @@ function isStationObjectLayout(value: unknown): value is StationObjectLayout {
   const record = value as Record<string, unknown>;
   return (
     isFiniteNumber(record.xRatio) && isFiniteNumber(record.yRatio) && isFiniteNumber(record.heightRatio)
+    && (record.flipX === undefined || typeof record.flipX === 'boolean')
   );
 }
 

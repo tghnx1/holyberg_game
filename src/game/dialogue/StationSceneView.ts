@@ -181,7 +181,7 @@ export class StationSceneView {
       STATION_CANONICAL_HEIGHT,
       nativeHeight,
     );
-    image.setPosition(resolved.x, resolved.y).setScale(resolved.scale);
+    image.setPosition(resolved.x, resolved.y).setScale(resolved.scale).setFlipX(entry.flipX === true);
   }
 
   private buildBackdropLayer(
@@ -323,6 +323,11 @@ export class StationSceneView {
           label: entry.label,
           getNativeSize: () => ({ width: entry.target.width, height: entry.nativeHeight }),
           onChange: entry.onChange,
+          flipHorizontal: () => {
+            entry.target.setFlipX(!entry.target.flipX);
+            const layoutEntry = this.layout[entry.id];
+            layoutEntry.flipX = entry.target.flipX;
+          },
         })),
     ];
   }
