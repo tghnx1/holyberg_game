@@ -94,6 +94,8 @@ export class StationSceneView {
   private trainDepartX = 0;
   /** Recomputed from the arriving actor's settled rest transform on every edit. */
   private arrivingFloorY = 0;
+  private seatedBaseY = 0;
+  private arrivingBaseY = 0;
   private readonly flipStates: Partial<Record<StationObjectKey, boolean>> = {};
   /** The arriving actor's entrance frames, in order. */
   private readonly appearFrames: readonly CharacterAssetRef[];
@@ -150,9 +152,11 @@ export class StationSceneView {
 
     // Actors go last so both stay visible above first_plan_metro.
     this.seated = this.buildSeatedActor();
+    this.seatedBaseY = this.seated.y;
     children.push(this.seated);
 
     this.arriving = this.buildArrivingActor();
+    this.arrivingBaseY = this.arriving.y;
     children.push(this.arriving);
     this.recomputeArrivingFloor();
 
@@ -295,11 +299,18 @@ export class StationSceneView {
       frameDurationMs: APPEAR_FRAME_DURATION_MS,
       onShowFrame: (frame) => {
         this.arriving.setTexture(frame.key);
-        this.arriving.setY(this.floorForFrame(frame));
+        this.arrivingBaseY = this.floorForFrame(frame);
+        this.arriving.setY(this.arrivingBaseY);
       },
       schedule: (delayMs, callback) => this.scene.time.delayedCall(delayMs, callback),
       onComplete,
     });
+  }
+
+  update(now: number): void {
+    const bob = Math.sin(now / 700) * 5;
+    this.seated.setY(this.seatedBaseY + bob);
+    this.arriving.setY(this.arrivingBaseY + bob);
   }
 
   /**

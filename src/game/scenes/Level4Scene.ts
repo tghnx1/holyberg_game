@@ -873,7 +873,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     actor.sprite
       .setFlipX((actor.facing < 0) !== visual.flipX)
       .setScale(renderedScale)
-      .setPosition(anchor.x + visual.offsetX, anchor.y + visual.offsetY);
+      .setPosition(
+        anchor.x + visual.offsetX,
+        anchor.y + visual.offsetY + (actor.character.id === 'disus' ? Math.sin(now / 700) * 5 : 0),
+      );
   }
 
   /** Where gameplay wants this actor drawn, before any editor offset. */

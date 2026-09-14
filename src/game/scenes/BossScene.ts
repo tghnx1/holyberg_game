@@ -410,6 +410,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     };
 
     let sprite: Phaser.GameObjects.Sprite | undefined;
+    let settledY = 0;
     // The dialogue clone lives in DialogueScene, not here — and BossScene is
     // *paused* underneath it for the whole final dialogue (see
     // `launchCurrentSceneDialogue`'s `scene.scene.pause(sourceSceneKey)`), so
@@ -441,6 +442,10 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
           .setVisible(false);
         return sprite;
       },
+      update: (target, now) => {
+        if (!settledY) settledY = target.y;
+        target.setY(settledY + Math.sin(now / 700) * 5);
+      },
     };
 
     const playArrival = (onComplete: () => void): void => {
@@ -458,7 +463,8 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
         frameDurationMs: DISUS_APPEAR_FRAME_MS,
         onShowFrame: (frame) => {
           live.setTexture(frame.key);
-          live.setY(floorForFrame(frame) - camera.scrollY);
+          settledY = floorForFrame(frame) - camera.scrollY;
+          live.setY(settledY);
         },
         schedule: (delayMs, callback) => clock.time.delayedCall(delayMs, callback),
         onComplete,
