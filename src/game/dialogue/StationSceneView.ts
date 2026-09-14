@@ -94,6 +94,7 @@ export class StationSceneView {
   private trainDepartX = 0;
   /** Recomputed from the arriving actor's settled rest transform on every edit. */
   private arrivingFloorY = 0;
+  private readonly flipStates: Partial<Record<StationObjectKey, boolean>> = {};
   /** The arriving actor's entrance frames, in order. */
   private readonly appearFrames: readonly CharacterAssetRef[];
   /**
@@ -120,6 +121,9 @@ export class StationSceneView {
       layoutId: 'station-scene',
       label: 'METRO DIALOGUE SCENE',
     });
+    for (const key of ['background', 'train', 'foreground', 'seated', 'arriving'] as StationObjectKey[]) {
+      this.flipStates[key] = this.layout[key].flipX === true;
+    }
     // Read before any actor is built; capability validation upstream has
     // already guaranteed both are present for this cast.
     this.appearFrames = cast.arriving.dialogue.appear;
@@ -325,8 +329,7 @@ export class StationSceneView {
           onChange: entry.onChange,
           flipHorizontal: () => {
             entry.target.setFlipX(!entry.target.flipX);
-            const layoutEntry = this.layout[entry.id];
-            layoutEntry.flipX = entry.target.flipX;
+            this.flipStates[entry.id] = entry.target.flipX;
           },
         })),
     ];
@@ -343,7 +346,7 @@ export class StationSceneView {
       seated: CHARACTER_CANVAS_HEIGHT,
       arriving: CHARACTER_CANVAS_HEIGHT,
     };
-    return buildStationLayoutFromSnapshot(
+    const next = buildStationLayoutFromSnapshot(
       this.layout,
       snapshot,
       heightById,
@@ -355,6 +358,10 @@ export class StationSceneView {
         train: this.trainRestTransform,
       },
     );
+    for (const key of Object.keys(this.flipStates) as StationObjectKey[]) {
+      next[key].flipX = this.flipStates[key] === true;
+    }
+    return next;
   }
 
   destroy(): void {
