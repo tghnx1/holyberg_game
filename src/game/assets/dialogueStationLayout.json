@@ -2,26 +2,31 @@
   "background": {
     "xRatio": -0.09110000000000001,
     "yRatio": 0,
-    "heightRatio": 1
+    "heightRatio": 1,
+    "flipX": false
   },
   "train": {
     "xRatio": 0.17007997751568735,
     "yRatio": 1.2003060024877443,
-    "heightRatio": 1.4374773757208004
+    "heightRatio": 1.4374773757208004,
+    "flipX": false
   },
   "foreground": {
     "xRatio": -0.08988576921520201,
     "yRatio": -0.002130631377097894,
-    "heightRatio": 1
+    "heightRatio": 1,
+    "flipX": false
   },
   "seated": {
     "xRatio": 0.5649530079183726,
     "yRatio": 0.7490186930360766,
-    "heightRatio": 0.32878967065955117
+    "heightRatio": 0.32878967065955117,
+    "flipX": false
   },
   "arriving": {
-    "xRatio": 0.33697005369890354,
-    "yRatio": 0.772610599462715,
-    "heightRatio": 0.5137022081472579
+    "xRatio": 0.3455737461168996,
+    "yRatio": 0.696227464593749,
+    "heightRatio": 0.5137022081472579,
+    "flipX": true
   }
 }
