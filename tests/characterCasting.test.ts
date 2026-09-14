@@ -28,9 +28,9 @@ import {
  */
 const known = getAllCharacters();
 
-/** Mirrors the real magician rule so the shipped configuration is exercised. */
+/** Mirrors the real disus rule so the shipped configuration is exercised. */
 const rules = {
-  magician: {
+  disus: {
     defaultCharacter: 'disus',
     replacementsByPlayer: { disus: 'atmos' },
     allowSameAsPlayer: false,
@@ -80,22 +80,22 @@ describe('reference resolution', () => {
 describe('role casting', () => {
   it('uses the default when no replacement applies', () => {
     selectCharacter('atmos');
-    expect(resolveCharacterRole('magician', rules).id).toBe('disus');
+    expect(resolveCharacterRole('disus', rules).id).toBe('disus');
   });
 
   it('applies the replacement when the selected player matches', () => {
     // Stand-in for Disus becoming playable: the rule keyed on 'disus' fires.
     const disusPlayable = {
-      magician: {
+      disus: {
         defaultCharacter: 'disus',
         replacementsByPlayer: { klaus: 'atmos' },
         allowSameAsPlayer: false,
       },
     } as const satisfies Record<string, CastingRule>;
     selectCharacter('klaus');
-    expect(resolveCharacterRole('magician', disusPlayable).id).toBe('atmos');
+    expect(resolveCharacterRole('disus', disusPlayable).id).toBe('atmos');
     selectCharacter('atmos');
-    expect(resolveCharacterRole('magician', disusPlayable).id).toBe('disus');
+    expect(resolveCharacterRole('disus', disusPlayable).id).toBe('disus');
   });
 
   it('changes who is cast when the selected player changes', () => {
@@ -138,12 +138,12 @@ describe('role casting', () => {
   });
 
   it('resolves roles without a selection, since the default needs no player', () => {
-    expect(resolveCharacterRole('magician', rules).id).toBe('disus');
+    expect(resolveCharacterRole('disus', rules).id).toBe('disus');
   });
 
   it('does not mutate the selection', () => {
     selectCharacter('klaus');
-    resolveCharacterRole('magician', rules);
+    resolveCharacterRole('disus', rules);
     resolveCharacterRef(playerRef(), rules);
     resolveCharacterRef(characterRef('disus'), rules);
     expect(getSelectedCharacterId()).toBe('klaus');
@@ -209,20 +209,20 @@ describe('casting validation', () => {
 });
 
 describe('shipped configuration', () => {
-  it('models the Magician as a role rather than baking Disus in', () => {
-    expect(isCharacterRoleId('magician')).toBe(true);
-    expect(CASTING_RULES.magician.defaultCharacter).toBe('disus');
-    expect(CASTING_RULES.magician.allowSameAsPlayer).toBe(false);
-    expect(CASTING_RULES.magician.replacementsByPlayer.disus).toBe('atmos');
+  it('models the Disus as a role rather than baking Disus in', () => {
+    expect(isCharacterRoleId('disus')).toBe(true);
+    expect(CASTING_RULES.disus.defaultCharacter).toBe('disus');
+    expect(CASTING_RULES.disus.allowSameAsPlayer).toBe(false);
+    expect(CASTING_RULES.disus.replacementsByPlayer.disus).toBe('atmos');
   });
 
-  it('preserves today’s casting: player Atmos sees Disus as the Magician', () => {
+  it('preserves today’s casting: player Atmos sees Disus as the Disus', () => {
     selectCharacter('atmos');
-    expect(resolveCharacterRole('magician').id).toBe('disus');
+    expect(resolveCharacterRole('disus').id).toBe('disus');
   });
 
   it('narrows a runtime string to a role id, or rejects it', () => {
-    expect(parseRoleId('magician')).toBe('magician');
+    expect(parseRoleId('disus')).toBe('disus');
     expect(() => parseRoleId('wizard')).toThrow(/Unknown story role "wizard"/);
   });
 });
@@ -230,12 +230,12 @@ describe('shipped configuration', () => {
 describe('speaker name stays independent of casting', () => {
   it('lets a line label the speaker differently from who was cast', () => {
     selectCharacter('atmos');
-    const line = { speaker: roleRef('magician'), speakerName: 'THE MAGICIAN' } as const;
+    const line = { speaker: roleRef('disus'), speakerName: 'DISUS' } as const;
     const cast = resolveCharacterRef(line.speaker, rules);
-    // Cast as Disus, still labelled THE MAGICIAN.
+    // Cast as Disus, still labelled DISUS.
     expect(cast.id).toBe('disus');
     expect(cast.name).toBe('Disus');
-    expect(line.speakerName).toBe('THE MAGICIAN');
+    expect(line.speakerName).toBe('DISUS');
   });
 
   it('falls back to the resolved character’s own name when no override is given', () => {

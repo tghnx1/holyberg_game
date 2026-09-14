@@ -71,7 +71,7 @@ type CharacterRef =
   | { type: 'character'; characterId: string };
 ```
 
-Magician casting is an existing story rule; resolve it through the current casting system rather than hardcoding names in reusable rendering.
+Disus casting is an existing story rule; resolve it through the current casting system rather than hardcoding names in reusable rendering.
 
 ## Dialogue architecture
 
@@ -81,7 +81,7 @@ Use:
 
 ```text
 playerRef()             → selected player
-roleRef('magician')     → story role
+roleRef('disus')        → story role
 characterRef('<id>')    → intentionally fixed concrete character
 ```
 
@@ -181,7 +181,7 @@ Club video/background startup must not block scene playability. A missing or fai
 
 Level 4 uses canonical world coordinates and shared editor/persistence infrastructure.
 
-Preserve existing door, NPC, magician, gap/ending and camera-flow behavior unless the task explicitly changes it.
+Preserve existing door, NPC, Disus, gap/ending and camera-flow behavior unless the task explicitly changes it.
 
 Do not derive Level 4 world positions from live viewport width.
 

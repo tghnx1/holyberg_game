@@ -3,11 +3,11 @@ import { buildBossEndingDialogue, buildBossResult } from '../src/game/boss/bossE
 import { createEmptyRhythmResult } from '../src/game/level/level4/level4Flow';
 
 describe('Boss ending flow', () => {
-  it('uses the shared dialogue scene contract for the final Magician line', () => {
+  it('uses the shared dialogue scene contract for the final Disus line', () => {
     const script = buildBossEndingDialogue();
-    expect(script.id).toBe('boss-final-magician');
+    expect(script.id).toBe('boss-final-disus');
     expect(script.sceneId).toBe('currentScene');
-    expect(script.defaultSpeaker).toEqual({ type: 'role', role: 'magician' });
+    expect(script.defaultSpeaker).toEqual({ type: 'role', role: 'disus' });
   });
 
   it('preserves the incoming rhythm result and adds the existing boss score fields', () => {

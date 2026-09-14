@@ -16,7 +16,7 @@ export interface DialogueLine {
   speaker?: CharacterRef;
   /**
    * Overrides the displayed speaker name for just this line (e.g. keeping
-   * "THE MAGICIAN" as the label while the portrait itself is Disus).
+   * "DISUS" as the label while the portrait itself is a different character).
    * Falls back to the portrait config's own name, then the script's default.
    *
    * Independent of `speaker`: the label is a story decision and does not have

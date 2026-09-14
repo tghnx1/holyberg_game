@@ -130,7 +130,7 @@ export class BootScene extends Phaser.Scene {
       return;
     }
     if (import.meta.env.DEV && developmentScene === 'dialogue') {
-      const scriptId = query.get('script') ?? 'metro-magician';
+      const scriptId = query.get('script') ?? 'metro-disus';
       this.scene.start('DialogueScene', { scriptId });
       return;
     }

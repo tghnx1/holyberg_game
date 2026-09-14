@@ -61,11 +61,11 @@ export interface DialogueSceneCast {
 export const DIALOGUE_SCENE_CASTS = {
   metroStation: {
     seatedActor: playerRef(),
-    arrivingActor: roleRef('magician'),
+    arrivingActor: roleRef('disus'),
   },
   toilet: {
     seatedActor: playerRef(),
-    arrivingActor: roleRef('magician'),
+    arrivingActor: roleRef('disus'),
   },
 } as const satisfies Partial<Record<DialogueSceneId, DialogueSceneCast>>;
 
@@ -132,8 +132,8 @@ export function getSpeakerRef(line: DialogueLine, script: DialogueScript): Chara
  * Resolves one line's speaker.
  *
  * The displayed name prefers the line's explicit override, because the label
- * is a story decision — the opening dialogue calls its speaker "THE MAGICIAN"
- * while the character performing the role is Disus.
+ * is a story decision — the opening dialogue calls its speaker "DISUS"
+ * while the character performing the role may not always be Disus.
  */
 export function resolveDialogueSpeaker(
   line: DialogueLine,

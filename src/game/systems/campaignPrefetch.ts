@@ -212,7 +212,7 @@ export function getFinalAssetPackage(selected: CharacterDefinition): CampaignAss
     stage: 'Final',
     critical: unique([
       ...characterAssets(selected, ['portrait'], 'CRITICAL'),
-      ...characterAssets(resolveCharacterRole('magician'), ['portrait'], 'CRITICAL'),
+      ...characterAssets(resolveCharacterRole('disus'), ['portrait'], 'CRITICAL'),
     ]),
     full: [],
   };

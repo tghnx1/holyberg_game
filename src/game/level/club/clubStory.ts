@@ -56,14 +56,14 @@ export class ClubStoryCastingError extends Error {
 }
 
 /**
- * Resolves all three Club performers once. The non-Magician pool wins when
+ * Resolves all three Club performers once. The non-Disus pool wins when
  * it can fill every slot; otherwise the role performer is used only as the
  * last available distinct character.
  */
 export function resolveClubStoryCast(
   selected: CharacterDefinition = getSelectedCharacter(),
   playable: readonly CharacterDefinition[] = getPlayableCharacters(),
-  magician: CharacterDefinition = resolveCharacterRole('magician'),
+  disus: CharacterDefinition = resolveCharacterRole('disus'),
 ): ClubStoryCast {
   const available = playable.filter((character) => character.id !== selected.id);
   if (available.length < 3) {
@@ -72,10 +72,10 @@ export function resolveClubStoryCast(
         `but only ${available.length} are available.`,
     );
   }
-  const preferred = available.filter((character) => character.id !== magician.id);
+  const preferred = available.filter((character) => character.id !== disus.id);
   const ordered = preferred.length >= 3
     ? preferred
-    : [...preferred, ...available.filter((character) => character.id === magician.id)];
+    : [...preferred, ...available.filter((character) => character.id === disus.id)];
   const [dj1, barkeeper, dj3] = ordered;
   return { dj1Id: dj1.id, barkeeperId: barkeeper.id, dj3Id: dj3.id };
 }

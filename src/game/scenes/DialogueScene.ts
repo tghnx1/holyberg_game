@@ -9,7 +9,7 @@ import {
   dialogueBodyTextWidth,
   type DialogueLayoutMetrics,
 } from '../dialogue/dialogueLayoutMetrics';
-import { getDialogueScript, METRO_MAGICIAN_DIALOGUE } from '../dialogue/dialogueScripts';
+import { getDialogueScript, METRO_DISUS_DIALOGUE } from '../dialogue/dialogueScripts';
 import {
   DIALOGUE_TIMING,
   getHoldDurationMs,
@@ -48,7 +48,7 @@ import { UI_COLORS, UI_FONTS, uiHeadingStyle } from '../ui/theme';
 import { getUiTypography } from '../ui/mobileTypography';
 
 export interface DialogueSceneData {
-  /** Id from dialogueScripts; defaults to the metro/Magician dialogue. */
+  /** Id from dialogueScripts; defaults to the metro/Disus dialogue. */
   scriptId?: string;
   /** Optional dynamic script, used when another scene builds the dialogue at runtime. */
   script?: DialogueScript;
@@ -156,7 +156,7 @@ export class DialogueScene extends Phaser.Scene implements PausableScene, Editab
   }
 
   init(data: DialogueSceneData): void {
-    this.script = data.script ?? (getDialogueScript(data.scriptId ?? '') ?? METRO_MAGICIAN_DIALOGUE);
+    this.script = data.script ?? (getDialogueScript(data.scriptId ?? '') ?? METRO_DISUS_DIALOGUE);
     this.payload = data.payload ?? {};
     this.sceneCastOverride = data.sceneCast;
     this.stageSnapshot = data.stageSnapshot;

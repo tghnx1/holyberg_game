@@ -192,8 +192,8 @@ const DIALOGUE_PROXIMITY = 55 * TOILET_SCALE;
 
 const LEVEL4_WORLD_WIDTH = TOILET_STRIP_WIDTH * TOILET_SCALE + DESIGN_WIDTH;
 const NPC_WAIT_FACING: 1 | -1 = -1;
-const LEVEL4_DIALOGUE_RESUMED_EVENT = 'level4-magician-dialogue-complete';
-const MAGICIAN_DISAPPEAR_FRAME_MS = 90;
+const LEVEL4_DIALOGUE_RESUMED_EVENT = 'level4-disus-dialogue-complete';
+const DISUS_DISAPPEAR_FRAME_MS = 90;
 
 /**
  * Defaults for the toilet-to-Holyworld gap cutscene (see
@@ -1480,7 +1480,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
       script: bundle.script,
       resumeEvent: LEVEL4_DIALOGUE_RESUMED_EVENT,
     }).catch((error: unknown) => {
-      console.error('[Level4Scene] could not open Magician dialogue', error);
+      console.error('[Level4Scene] could not open Disus dialogue', error);
       this.controlsLocked = false;
     });
   }
@@ -1502,7 +1502,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
   private startPostDialogueCutscene(): void {
     this.controlsLocked = true;
     this.player.motion = 'walk';
-    // The Magician is already authored beside the stall. Only the player
+    // Disus is already authored beside the stall. Only the player
     // enters; moving the NPC here would override the editor's placement.
     this.npc.motion = 'idle';
 
@@ -1611,7 +1611,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
         // has actually finished so no thin vertical strip is left standing
         // in front of the NPC's exit walk.
         this.stallDoor.setVisible(false);
-        this.disappearMagician();
+        this.disappearDisus();
       },
     });
   }
@@ -1638,7 +1638,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
    * instead, so the exit reads identically everywhere and only takes as long
    * as the extra ground needs.
    */
-  private disappearMagician(): void {
+  private disappearDisus(): void {
     gameAudio(this).playSfx('disusAppearDisappear');
     // The pair are no longer parked on the zone, so authoring it must stop
     // dragging them around mid-exit.
@@ -1647,7 +1647,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     this.npc.motion = 'idle';
     const frames = [...this.npcCharacter.dialogue.appear].reverse();
     if (frames.length === 0) {
-      // A replacement Magician may not yet have authored appear frames. Keep
+      // A replacement Disus may not yet have authored appear frames. Keep
       // the same materialisation language (scale/alpha disappearance) without
       // borrowing another character's artwork.
       this.tweens.add({
@@ -1655,7 +1655,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
         alpha: 0,
         scaleX: 0,
         scaleY: 0,
-        duration: MAGICIAN_DISAPPEAR_FRAME_MS * 6,
+        duration: DISUS_DISAPPEAR_FRAME_MS * 6,
         onComplete: () => {
           this.npc.sprite.setVisible(false);
           this.npcDisappearing = false;
@@ -1675,10 +1675,10 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
       );
       index += 1;
       if (index < frames.length) {
-        this.time.delayedCall(MAGICIAN_DISAPPEAR_FRAME_MS, showNext);
+        this.time.delayedCall(DISUS_DISAPPEAR_FRAME_MS, showNext);
         return;
       }
-      this.time.delayedCall(MAGICIAN_DISAPPEAR_FRAME_MS, () => {
+      this.time.delayedCall(DISUS_DISAPPEAR_FRAME_MS, () => {
         this.npc.sprite.setVisible(false);
         this.npcDisappearing = false;
         this.resumePlay();

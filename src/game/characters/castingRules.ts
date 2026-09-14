@@ -34,18 +34,18 @@ export interface CastingRule {
 }
 
 /**
- * The only role the current game has. The opening dialogue's "THE MAGICIAN"
- * is performed by Disus today; modelling that as a role rather than baking
- * Disus into the renderer is what lets the pairing flip when the player is
- * Disus.
+ * The only role the current game has. The opening dialogue's "DISUS"
+ * label is performed by Disus today; modelling that as a role rather than
+ * baking Disus into the renderer is what lets the pairing flip when the
+ * player is Disus.
  *
  * Deliberately nothing else — roles are added when a scene needs one, not
  * speculatively.
  */
 export const CASTING_RULES = {
-  magician: {
+  disus: {
     defaultCharacter: 'disus',
-    // Anticipates Disus becoming playable: the Magician then becomes Atmos so
+    // Anticipates Disus becoming playable: the role then becomes Atmos so
     // the player is never talking to themselves.
     replacementsByPlayer: { disus: 'atmos' },
     allowSameAsPlayer: false,

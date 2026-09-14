@@ -56,9 +56,9 @@ import { bossTelegraphWindowId } from '../boss/bossEmeraldWindows';
 /** Editable id for the boss's own presentation. */
 const BOSS_EDITABLE_ID = 'boss';
 /** Editable id for Disus's presentation in the final dialogue only. */
-const MAGICIAN_EDITABLE_ID = 'boss-final-magician';
+const DISUS_EDITABLE_ID = 'boss-final-disus';
 /** Matches the opening metro dialogue's entrance pacing. */
-const MAGICIAN_APPEAR_FRAME_MS = 90;
+const DISUS_APPEAR_FRAME_MS = 90;
 
 /** Upper bound on a single simulated frame, in milliseconds. */
 const MAX_FRAME_DELTA_MS = 50;
@@ -115,7 +115,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
    * shown in normal gameplay — only its authored transform matters, read by
    * `buildCurrentSceneDialogueStage` when it builds the real dialogue clone.
    */
-  private magicianAnchor?: Phaser.GameObjects.Sprite;
+  private disusAnchor?: Phaser.GameObjects.Sprite;
 
   constructor() {
     super('BossScene');
@@ -159,7 +159,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     // Disus is a live actor only in the final dialogue, staged over this
     // scene's own captured frame; his entrance needs the same asset groups
     // the opening metro dialogue does.
-    queueCharacterAssets(this, resolveCharacterRef(roleRef('magician')), ['appear', 'idle']);
+    queueCharacterAssets(this, resolveCharacterRef(roleRef('disus')), ['appear', 'idle']);
     queueSceneAudio(this, 'BossScene');
     EmeraldLayer.queueAssets(this);
     const profile = getRuntimeAssetQualityProfile(this.game, this.scale);
@@ -194,7 +194,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     this.hud = new BossHud(this);
     this.emeralds = new EmeraldLayer(this, this.scene.key);
     this.emeralds.setBounds(this.bounds);
-    this.magicianAnchor = this.buildMagicianAnchor();
+    this.disusAnchor = this.buildDisusAnchor();
     this.events.on(BOSS_ENDING_DIALOGUE_RESUMED_EVENT, this.showEndingChoices, this);
 
     this.applyAuthoredPresentation();
@@ -234,10 +234,10 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
    * (not a displacement from a gameplay anchor, since he doesn't move) that
    * only the final dialogue's `buildCurrentSceneDialogueStage` ever reads.
    */
-  private buildMagicianAnchor(): Phaser.GameObjects.Sprite {
-    const magician = resolveCharacterRef(roleRef('magician'));
-    const idleFrame = magician.gameplay.idle!;
-    const layout = getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID);
+  private buildDisusAnchor(): Phaser.GameObjects.Sprite {
+    const disus = resolveCharacterRef(roleRef('disus'));
+    const idleFrame = disus.gameplay.idle!;
+    const layout = getSceneObjectLayout(this.scene.key, DISUS_EDITABLE_ID);
     const point = designPointFromLayout(layout, {
       x: this.cameras.main.width / 2,
       y: BOSS_ARENA.floorY,
@@ -251,10 +251,10 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
   }
 
   /** Re-applies Disus's persisted transform after an editor change. */
-  private applyMagicianPresentation(): void {
-    const anchor = this.magicianAnchor;
+  private applyDisusPresentation(): void {
+    const anchor = this.disusAnchor;
     if (!anchor) return;
-    const layout = getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID);
+    const layout = getSceneObjectLayout(this.scene.key, DISUS_EDITABLE_ID);
     const point = designPointFromLayout(layout, { x: anchor.x, y: anchor.y });
     anchor.setPosition(point.x, point.y).setScale(layout?.scale ?? 1).setFlipX(layout?.flipX === true);
   }
@@ -339,7 +339,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
         this.boss.updateDialogueClone(target as Phaser.GameObjects.Container, now),
     };
 
-    const magicianActor = this.buildMagicianActor(camera);
+    const disusActor = this.buildDisusActor(camera);
     const defeatedAsh = this.player.defeatedDisplayObject;
     const playerActor = this.player.isDefeated && defeatedAsh
       ? liveSpriteActor(this, {
@@ -357,9 +357,9 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       : liveSpriteActor(this, player);
 
     return {
-      actors: [bossActor, playerActor, magicianActor.actor],
+      actors: [bossActor, playerActor, disusActor.actor],
       buildEditorSave: () => this.buildEditorSave(),
-      playArrival: (onComplete) => magicianActor.playArrival(onComplete),
+      playArrival: (onComplete) => disusActor.playArrival(onComplete),
     };
   }
 
@@ -368,16 +368,16 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
    * his appear frames (same ~90ms/frame pacing as the opening metro
    * dialogue), then settles on `gameplay/idle.png`. His transform is a real
    * `CurrentSceneLiveActor`, editable/persisted the same way the boss and
-   * player are, via the invisible `magicianAnchor` created in `create()`.
+   * player are, via the invisible `disusAnchor` created in `create()`.
    */
-  private buildMagicianActor(camera: Phaser.Cameras.Scene2D.Camera): {
+  private buildDisusActor(camera: Phaser.Cameras.Scene2D.Camera): {
     actor: CurrentSceneLiveActor;
     playArrival: (onComplete: () => void) => void;
   } {
-    const anchor = this.magicianAnchor!;
-    const magician = resolveCharacterRef(roleRef('magician'));
-    const appearFrames = magician.dialogue.appear;
-    const idleFrame = magician.gameplay.idle!;
+    const anchor = this.disusAnchor!;
+    const disus = resolveCharacterRef(roleRef('disus'));
+    const appearFrames = disus.dialogue.appear;
+    const idleFrame = disus.gameplay.idle!;
     // The floor line every frame's own foot gap is measured from, taken from
     // the anchor's authored (settled/idle) position, exactly as the metro
     // dialogue derives its own arrival floor from its settled pose.
@@ -386,26 +386,26 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       floorY + footOffset(frame.footGap, anchor.scaleY);
 
     const source: EditableObject = {
-      id: MAGICIAN_EDITABLE_ID,
+      id: DISUS_EDITABLE_ID,
       label: 'DISUS',
       target: anchor,
       resizable: true,
       getNativeSize: () => ({ width: anchor.frame.realWidth, height: anchor.frame.realHeight }),
       onChange: (transform) => {
-        setSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID, {
+        setSceneObjectLayout(this.scene.key, DISUS_EDITABLE_ID, {
           ...layoutRatiosFromDesignPoint({ x: transform.x, y: transform.y }),
           scale: transform.scaleY,
-          flipX: getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID)?.flipX === true,
+          flipX: getSceneObjectLayout(this.scene.key, DISUS_EDITABLE_ID)?.flipX === true,
         });
-        this.applyMagicianPresentation();
+        this.applyDisusPresentation();
       },
       flipHorizontal: () => {
-        const current = getSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID);
-        setSceneObjectLayout(this.scene.key, MAGICIAN_EDITABLE_ID, {
+        const current = getSceneObjectLayout(this.scene.key, DISUS_EDITABLE_ID);
+        setSceneObjectLayout(this.scene.key, DISUS_EDITABLE_ID, {
           ...current,
           flipX: current?.flipX !== true,
         });
-        this.applyMagicianPresentation();
+        this.applyDisusPresentation();
       },
     };
 
@@ -419,7 +419,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     // `create` is actually handed — DialogueScene's own live clock.
     let dialogueScene: Phaser.Scene | undefined;
     const actor: CurrentSceneLiveActor = {
-      id: MAGICIAN_EDITABLE_ID,
+      id: DISUS_EDITABLE_ID,
       label: 'DISUS',
       source,
       sourceScrollX: camera.scrollX,
@@ -455,7 +455,7 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
       stepAppearFrames({
         frames: appearFrames,
         settledFrame: idleFrame,
-        frameDurationMs: MAGICIAN_APPEAR_FRAME_MS,
+        frameDurationMs: DISUS_APPEAR_FRAME_MS,
         onShowFrame: (frame) => {
           live.setTexture(frame.key);
           live.setY(floorForFrame(frame) - camera.scrollY);

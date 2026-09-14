@@ -15,7 +15,7 @@ import {
   resolveDialogueSpeaker,
   resolveSceneCast,
 } from '../src/game/dialogue/dialogueCast';
-import { METRO_MAGICIAN_DIALOGUE } from '../src/game/dialogue/dialogueScripts';
+import { METRO_DISUS_DIALOGUE } from '../src/game/dialogue/dialogueScripts';
 import {
   buildLevel4DialogueBundle,
   chooseLevel4NpcCharacter,
@@ -25,7 +25,7 @@ import type { DialogueScript } from '../src/game/dialogue/types';
 const script = (overrides: Partial<DialogueScript>): DialogueScript => ({
   id: 'test',
   sceneId: 'metroStation',
-  defaultSpeaker: roleRef('magician'),
+  defaultSpeaker: roleRef('disus'),
   lines: [{ text: 'HI' }],
   nextScene: 'BerlinScene',
   ...overrides,
@@ -45,7 +45,7 @@ describe('speaker resolution', () => {
   });
 
   it('resolves a role ref through casting', () => {
-    const s = script({ lines: [{ text: 'HI', speaker: roleRef('magician') }] });
+    const s = script({ lines: [{ text: 'HI', speaker: roleRef('disus') }] });
     expect(resolveDialogueSpeaker(s.lines[0], s).character.id).toBe('disus');
   });
 
@@ -55,13 +55,13 @@ describe('speaker resolution', () => {
   });
 
   it('falls back to the script default when a line has no speaker', () => {
-    const s = script({ defaultSpeaker: roleRef('magician'), lines: [{ text: 'HI' }] });
+    const s = script({ defaultSpeaker: roleRef('disus'), lines: [{ text: 'HI' }] });
     expect(resolveDialogueSpeaker(s.lines[0], s).character.id).toBe('disus');
   });
 
   it('lets a line override the script default', () => {
     const s = script({
-      defaultSpeaker: roleRef('magician'),
+      defaultSpeaker: roleRef('disus'),
       lines: [{ text: 'HI', speaker: playerRef() }],
     });
     expect(resolveDialogueSpeaker(s.lines[0], s).character.id).toBe('atmos');
@@ -74,13 +74,13 @@ describe('displayed name', () => {
     expect(resolveDialogueSpeaker(s.lines[0], s).displayName).toBe('Atmos');
   });
 
-  it('prefers an explicit override, which is how THE MAGICIAN stays labelled', () => {
+  it('prefers an explicit override, which is how DISUS stays labelled', () => {
     const s = script({
-      lines: [{ text: 'HI', speaker: roleRef('magician'), speakerName: 'THE MAGICIAN' }],
+      lines: [{ text: 'HI', speaker: roleRef('disus'), speakerName: 'DISUS' }],
     });
     const resolved = resolveDialogueSpeaker(s.lines[0], s);
     expect(resolved.character.id).toBe('disus');
-    expect(resolved.displayName).toBe('THE MAGICIAN');
+    expect(resolved.displayName).toBe('DISUS');
   });
 
   it('follows the selected character when the line has no override', () => {
@@ -91,28 +91,28 @@ describe('displayed name', () => {
 });
 
 describe('the shipped opening dialogue', () => {
-  it('keeps all four opening lines on the Magician', () => {
-    const ids = METRO_MAGICIAN_DIALOGUE.lines.map(
-      (line) => resolveDialogueSpeaker(line, METRO_MAGICIAN_DIALOGUE).character.id,
+  it('keeps all four opening lines on the Disus', () => {
+    const ids = METRO_DISUS_DIALOGUE.lines.map(
+      (line) => resolveDialogueSpeaker(line, METRO_DISUS_DIALOGUE).character.id,
     );
     expect(ids).toEqual(['disus', 'disus', 'disus', 'disus']);
   });
 
-  it('keeps the Magician label while cast as Disus', () => {
-    const names = METRO_MAGICIAN_DIALOGUE.lines.map(
-      (line) => resolveDialogueSpeaker(line, METRO_MAGICIAN_DIALOGUE).displayName,
+  it('keeps the Disus label while cast as Disus', () => {
+    const names = METRO_DISUS_DIALOGUE.lines.map(
+      (line) => resolveDialogueSpeaker(line, METRO_DISUS_DIALOGUE).displayName,
     );
-    expect(names).toEqual(['THE MAGICIAN', 'THE MAGICIAN', 'THE MAGICIAN', 'THE MAGICIAN']);
+    expect(names).toEqual(['DISUS', 'DISUS', 'DISUS', 'DISUS']);
   });
 
   it('does not recast an opening line as the selected player', () => {
     selectCharacter('klaus');
     const resolved = resolveDialogueSpeaker(
-      METRO_MAGICIAN_DIALOGUE.lines[1],
-      METRO_MAGICIAN_DIALOGUE,
+      METRO_DISUS_DIALOGUE.lines[1],
+      METRO_DISUS_DIALOGUE,
     );
     expect(resolved.character.id).toBe('disus');
-    expect(resolved.displayName).toBe('THE MAGICIAN');
+    expect(resolved.displayName).toBe('DISUS');
   });
 });
 
@@ -121,12 +121,12 @@ describe('scene actors', () => {
     expect(DIALOGUE_SCENE_CASTS.metroStation.seatedActor).toEqual({ type: 'player' });
     expect(DIALOGUE_SCENE_CASTS.metroStation.arrivingActor).toEqual({
       type: 'role',
-      role: 'magician',
+      role: 'disus',
     });
   });
 
-  it('seats the player and lands the Magician role', () => {
-    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
+  it('seats the player and lands the Disus role', () => {
+    const cast = resolveSceneCast(METRO_DISUS_DIALOGUE);
     expect(cast.seated.id).toBe('atmos');
     expect(cast.arriving.id).toBe('disus');
   });
@@ -152,13 +152,13 @@ describe('scene actors', () => {
 
   it('reseats when the selected character changes', () => {
     selectCharacter('klaus');
-    expect(resolveSceneCast(METRO_MAGICIAN_DIALOGUE).seated.id).toBe('klaus');
+    expect(resolveSceneCast(METRO_DISUS_DIALOGUE).seated.id).toBe('klaus');
   });
 });
 
 describe('cast collection for loading', () => {
   it('lists only the characters this dialogue can show', () => {
-    const cast = resolveDialogueCast(METRO_MAGICIAN_DIALOGUE).map((c) => c.id).sort();
+    const cast = resolveDialogueCast(METRO_DISUS_DIALOGUE).map((c) => c.id).sort();
     expect(cast).toEqual(['atmos', 'disus']);
   });
 
@@ -175,19 +175,19 @@ describe('cast collection for loading', () => {
   });
 
   it('never returns every discovered character', () => {
-    const cast = resolveDialogueCast(METRO_MAGICIAN_DIALOGUE);
+    const cast = resolveDialogueCast(METRO_DISUS_DIALOGUE);
     expect(cast.length).toBeLessThan(3);
   });
 });
 
 describe('capability validation', () => {
   it('accepts the shipped dialogue with Atmos selected', () => {
-    expect(() => assertDialogueCastCapabilities(METRO_MAGICIAN_DIALOGUE)).not.toThrow();
+    expect(() => assertDialogueCastCapabilities(METRO_DISUS_DIALOGUE)).not.toThrow();
   });
 
   it('accepts it for any playable character', () => {
     selectCharacter('klaus');
-    expect(() => assertDialogueCastCapabilities(METRO_MAGICIAN_DIALOGUE)).not.toThrow();
+    expect(() => assertDialogueCastCapabilities(METRO_DISUS_DIALOGUE)).not.toThrow();
   });
 
   it('rejects a speaker with no portrait, naming the dialogue and character', () => {
@@ -243,8 +243,8 @@ describe('no selection is an error, never a silent default', () => {
     resetCharacterSelection();
     const s = script({ lines: [{ text: 'HI', speaker: playerRef() }] });
     expect(() => resolveDialogueSpeaker(s.lines[0], s)).toThrow(/No character selected/);
-    expect(() => resolveSceneCast(METRO_MAGICIAN_DIALOGUE)).toThrow(/No character selected/);
-    expect(() => assertDialogueCastCapabilities(METRO_MAGICIAN_DIALOGUE)).toThrow(
+    expect(() => resolveSceneCast(METRO_DISUS_DIALOGUE)).toThrow(/No character selected/);
+    expect(() => assertDialogueCastCapabilities(METRO_DISUS_DIALOGUE)).toThrow(
       /No character selected/,
     );
   });
@@ -255,7 +255,7 @@ describe('the arriving actor needs a pose to settle on', () => {
     const disus = getCharacter('disus');
     expect(disus.capabilities.appearAnimation).toBe(true);
     expect(disus.gameplay.idle).toBeDefined();
-    expect(() => assertDialogueCastCapabilities(METRO_MAGICIAN_DIALOGUE)).not.toThrow();
+    expect(() => assertDialogueCastCapabilities(METRO_DISUS_DIALOGUE)).not.toThrow();
   });
 
   it('rejects an entrance with no idle to settle on', () => {
@@ -283,7 +283,7 @@ describe('required capabilities follow what each scene actually draws', () => {
   // playable character — none of them have one — so DialogueScene threw in
   // preload *after* Level4Scene had already shut itself down, leaving Level 4
   // frozen at the NPC with no scene running.
-  it('stages the Level 4 current-scene snapshot with the Magician portrait', () => {
+  it('stages the Level 4 current-scene snapshot with the Disus portrait', () => {
     const player = getCharacter('atmos');
     const npc = chooseLevel4NpcCharacter(player);
     expect(npc.id).not.toBe(player.id);
@@ -334,32 +334,32 @@ describe('everything the metro scene draws is actually loaded', () => {
     // Regression: the settled pose is gameplay/idle.png, which the dialogue
     // groups originally omitted, so the actor became a missing-texture square
     // the moment its entrance finished.
-    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
-    const keys = queuedKeys(METRO_MAGICIAN_DIALOGUE);
+    const cast = resolveSceneCast(METRO_DISUS_DIALOGUE);
+    const keys = queuedKeys(METRO_DISUS_DIALOGUE);
     expect(cast.arriving.gameplay.idle).toBeDefined();
     expect(keys.has(cast.arriving.gameplay.idle!.key)).toBe(true);
   });
 
   it('queues every frame of the arriving actor’s entrance', () => {
-    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
-    const keys = queuedKeys(METRO_MAGICIAN_DIALOGUE);
+    const cast = resolveSceneCast(METRO_DISUS_DIALOGUE);
+    const keys = queuedKeys(METRO_DISUS_DIALOGUE);
     expect(cast.arriving.dialogue.appear.length).toBeGreaterThan(0);
     for (const frame of cast.arriving.dialogue.appear) expect(keys.has(frame.key)).toBe(true);
   });
 
   it('queues the seated actor’s pose and both portraits of every speaker', () => {
-    const cast = resolveSceneCast(METRO_MAGICIAN_DIALOGUE);
-    const keys = queuedKeys(METRO_MAGICIAN_DIALOGUE);
+    const cast = resolveSceneCast(METRO_DISUS_DIALOGUE);
+    const keys = queuedKeys(METRO_DISUS_DIALOGUE);
     expect(keys.has(cast.seated.dialogue.metroSit!.key)).toBe(true);
-    for (const line of METRO_MAGICIAN_DIALOGUE.lines) {
-      const { character } = resolveDialogueSpeaker(line, METRO_MAGICIAN_DIALOGUE);
+    for (const line of METRO_DISUS_DIALOGUE.lines) {
+      const { character } = resolveDialogueSpeaker(line, METRO_DISUS_DIALOGUE);
       expect(keys.has(character.dialogue.portraitIdle!.key)).toBe(true);
       expect(keys.has(character.dialogue.portraitTalk!.key)).toBe(true);
     }
   });
 
   it('still does not pull the run, jump, crouch or damage sets', () => {
-    const keys = [...queuedKeys(METRO_MAGICIAN_DIALOGUE)];
+    const keys = [...queuedKeys(METRO_DISUS_DIALOGUE)];
     for (const group of ['run', 'jump', 'crouch', 'damage']) {
       expect(keys.some((key) => key.includes(`:gameplay:${group}:`))).toBe(false);
     }
@@ -374,7 +374,7 @@ describe('portrait assets come from the manifest', () => {
   });
 
   it('needs no hand-maintained speaker registry to find them', () => {
-    const s = script({ lines: [{ text: 'HI', speaker: roleRef('magician') }] });
+    const s = script({ lines: [{ text: 'HI', speaker: roleRef('disus') }] });
     const { character } = resolveDialogueSpeaker(s.lines[0], s);
     expect(character.dialogue.portraitIdle).toBeDefined();
     expect(character.dialogue.portraitTalk).toBeDefined();

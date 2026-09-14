@@ -12,13 +12,13 @@ export const BOSS_ENDING_TIMING = {
 
 export function buildBossEndingDialogue(): DialogueScript {
   return {
-    id: 'boss-final-magician',
+    id: 'boss-final-disus',
     sceneId: 'currentScene',
     title: 'HOLYWORLD',
-    defaultSpeaker: roleRef('magician'),
+    defaultSpeaker: roleRef('disus'),
     lines: [{
       text: "Ah. Sorry. He does this. Give him a century, he'll grow out of it. Welcome home.",
-      speakerName: 'THE MAGICIAN',
+      speakerName: 'DISUS',
     }],
     nextScene: 'LevelCompleteScene',
   };

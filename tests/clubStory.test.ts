@@ -28,28 +28,28 @@ const character = (id: string): CharacterDefinition => ({
 });
 
 describe('Club story cast', () => {
-  it('resolves three distinct actors, excluding the player and Magician when possible', () => {
+  it('resolves three distinct actors, excluding the player and Disus when possible', () => {
     const player = character('player');
-    const magician = character('magician');
+    const disus = character('disus');
     const cast = resolveClubStoryCast(
       player,
-      [player, magician, character('a'), character('b'), character('c'), character('d')],
-      magician,
+      [player, disus, character('a'), character('b'), character('c'), character('d')],
+      disus,
     );
     expect(new Set(Object.values(cast)).size).toBe(3);
     expect(Object.values(cast)).not.toContain(player.id);
-    expect(Object.values(cast)).not.toContain(magician.id);
+    expect(Object.values(cast)).not.toContain(disus.id);
   });
 
-  it('uses the Magician only when the remaining roster cannot fill all slots', () => {
+  it('uses the Disus only when the remaining roster cannot fill all slots', () => {
     const player = character('player');
-    const magician = character('magician');
+    const disus = character('disus');
     const cast = resolveClubStoryCast(
       player,
-      [player, magician, character('a'), character('b')],
-      magician,
+      [player, disus, character('a'), character('b')],
+      disus,
     );
-    expect(Object.values(cast)).toContain(magician.id);
+    expect(Object.values(cast)).toContain(disus.id);
   });
 
   it('fails clearly when fewer than three distinct NPCs exist', () => {
@@ -57,7 +57,7 @@ describe('Club story cast', () => {
     expect(() => resolveClubStoryCast(
       player,
       [player, character('a'), character('b')],
-      character('magician'),
+      character('disus'),
     )).toThrow(/three distinct playable NPCs/);
   });
 });

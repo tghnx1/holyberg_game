@@ -11,7 +11,7 @@ beforeEach(() => {
 });
 
 describe('Level 4 casting', () => {
-  it('uses the shared Magician role cast', () => {
+  it('uses the shared Disus role cast', () => {
     selectCharacter('atmos');
     const npc = chooseLevel4NpcCharacter();
     expect(npc.id).toBe('disus');
@@ -24,17 +24,17 @@ describe('Level 4 casting', () => {
 });
 
 describe('Level 4 dialogue bundle', () => {
-  it('builds the toilet Magician beat on the captured current scene', () => {
+  it('builds the toilet Disus beat on the captured current scene', () => {
     selectCharacter('atmos');
     const bundle = buildLevel4DialogueBundle();
 
-    expect(bundle.script.id).toBe('level4-toilet-magician');
+    expect(bundle.script.id).toBe('level4-toilet-disus');
     expect(bundle.script.sceneId).toBe('currentScene');
     expect(bundle.script.nextScene).toBe('Level4Scene');
     expect(bundle.script.lines.map((line) => line.text)).toEqual([
       'Never doubted you for a second. Almost home.',
     ]);
-    expect(bundle.script.lines[0].speaker).toEqual(roleRef('magician'));
+    expect(bundle.script.lines[0].speaker).toEqual(roleRef('disus'));
   });
 
   it('creates an empty rhythm result for direct dev routes', () => {

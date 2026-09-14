@@ -12,7 +12,7 @@ import {
 import {
   DIALOGUE_SCRIPTS,
   getDialogueScript,
-  METRO_MAGICIAN_DIALOGUE,
+  METRO_DISUS_DIALOGUE,
 } from '../src/game/dialogue/dialogueScripts';
 
 describe('dialogue timing', () => {
@@ -81,7 +81,7 @@ describe('isShortSpacePress', () => {
 
 describe('dialogue scripts', () => {
   it('holds the metro dialogue in order', () => {
-    expect(METRO_MAGICIAN_DIALOGUE.lines.map((line) => line.text)).toEqual([
+    expect(METRO_DISUS_DIALOGUE.lines.map((line) => line.text)).toEqual([
       'NOW, YOU THERE!',
 "YOU'RE A STRANGER\nIN THIS WORLD.",
 'A PORTAL HOME WILL BE\nWAITING FOR YOU\nAT MADAME CLAUDE.\n\n9 OCTOBER\n22:00',
@@ -90,13 +90,13 @@ describe('dialogue scripts', () => {
   });
 
   it('continues into Level 1 when it ends', () => {
-    expect(METRO_MAGICIAN_DIALOGUE.nextScene).toBe('BerlinScene');
-    expect(METRO_MAGICIAN_DIALOGUE.sceneId).toBe('metroStation');
-    expect(METRO_MAGICIAN_DIALOGUE.defaultSpeaker).toEqual({ type: 'role', role: 'magician' });
+    expect(METRO_DISUS_DIALOGUE.nextScene).toBe('BerlinScene');
+    expect(METRO_DISUS_DIALOGUE.sceneId).toBe('metroStation');
+    expect(METRO_DISUS_DIALOGUE.defaultSpeaker).toEqual({ type: 'role', role: 'disus' });
   });
 
   it('is registered and looked up by id', () => {
-    expect(getDialogueScript('metro-magician')).toBe(METRO_MAGICIAN_DIALOGUE);
+    expect(getDialogueScript('metro-disus')).toBe(METRO_DISUS_DIALOGUE);
     expect(getDialogueScript('does-not-exist')).toBeUndefined();
     for (const [id, script] of Object.entries(DIALOGUE_SCRIPTS)) {
       expect(script.id).toBe(id);
@@ -105,7 +105,7 @@ describe('dialogue scripts', () => {
   });
 
   it('every line has a finite, positive on-screen duration', () => {
-    for (const line of METRO_MAGICIAN_DIALOGUE.lines) {
+    for (const line of METRO_DISUS_DIALOGUE.lines) {
       const duration = getLineDurationMs(line.text, line.holdMsOverride);
       expect(duration).toBeGreaterThan(0);
       expect(Number.isFinite(duration)).toBe(true);

@@ -356,7 +356,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     selectCharacter(character.id);
     // Straight into the campaign's opening dialogue, which resolves the
     // selection through the character system from here on.
-    this.scene.start('DialogueScene', { scriptId: 'metro-magician' });
+    this.scene.start('DialogueScene', { scriptId: 'metro-disus' });
   }
 
   // ------------------------------------------------------------ responsive

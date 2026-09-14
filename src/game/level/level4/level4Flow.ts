@@ -24,21 +24,21 @@ export interface Level4DialogueBundle {
 
 export function chooseLevel4NpcCharacter(selected?: CharacterDefinition): CharacterDefinition {
   void selected;
-  return resolveCharacterRole('magician');
+  return resolveCharacterRole('disus');
 }
 
 export function buildLevel4DialogueBundle(): Level4DialogueBundle {
   return {
     script: {
-      id: 'level4-toilet-magician',
+      id: 'level4-toilet-disus',
       sceneId: 'currentScene',
       title: 'THE PORTAL',
-      defaultSpeaker: roleRef('magician'),
+      defaultSpeaker: roleRef('disus'),
       lines: [
         {
           text: 'Never doubted you for a second. Almost home.',
-          speaker: roleRef('magician'),
-          speakerName: 'THE MAGICIAN',
+          speaker: roleRef('disus'),
+          speakerName: 'DISUS',
         },
       ],
       nextScene: 'Level4Scene',
