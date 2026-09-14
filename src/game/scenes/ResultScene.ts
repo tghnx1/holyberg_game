@@ -68,7 +68,6 @@ export class ResultScene extends Phaser.Scene {
   private releaseInstagramInputCapture?: () => void;
   private releaseClaimViewportListeners?: () => void;
   private claimed?: ClaimedLeaderboardSnapshot;
-  private playerRank?: number;
   private storedInstagram = '';
   private submitting = false;
   private skipped = false;
@@ -85,7 +84,6 @@ export class ResultScene extends Phaser.Scene {
   init(data: RhythmResult): void {
     this.result = data;
     this.claimed = undefined;
-    this.playerRank = undefined;
     this.storedInstagram = '';
     this.submitting = false;
     this.skipped = false;
@@ -148,7 +146,6 @@ export class ResultScene extends Phaser.Scene {
     this.layoutUi();
     if (previewSnapshot) {
       this.claimed = previewSnapshot;
-      this.playerRank = previewSnapshot.rank;
       this.renderTop10(previewSnapshot.top10);
       this.renderClaimedPlayerRow(
         previewSnapshot.instagram,
@@ -234,7 +231,7 @@ export class ResultScene extends Phaser.Scene {
       625,
       425,
       showClaimUi
-        ? `—   CLAIM YOUR SPOT       ${this.totalScore}`
+        ? `—   LEAVE YOUR INSTAGRAM       ${this.totalScore}`
         : this.formatPlayerRow(undefined, this.storedInstagram, this.totalScore),
       {
         fontFamily: UI_FONTS.body,
@@ -274,7 +271,7 @@ export class ResultScene extends Phaser.Scene {
       void this.claimScore();
     });
 
-    this.claimButton = this.createButton(902, 573, 'CLAIM YOUR SPOT', () => {
+    this.claimButton = this.createButton(902, 573, 'LEAVE YOUR INSTAGRAM', () => {
       void this.claimScore();
     }).setVisible(showClaimUi);
     this.skipAction = this.createTextAction(902, 619, 'Skip', () => this.skipClaim()).setVisible(
@@ -378,15 +375,14 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private renderVirtualPlayerRow(rank?: number): void {
-    this.playerRank = rank;
     this.playerRowText.setText(
-      `${rank === undefined ? '—' : String(rank).padStart(2)}  CLAIM YOUR SPOT       ${this.totalScore}`,
+      `${rank === undefined ? '—' : String(rank).padStart(2)}  LEAVE YOUR INSTAGRAM       ${this.totalScore}`,
     );
     if (this.skipped) return;
     this.leaderboardStatus.setText(
       rank === undefined ? 'YOUR SCORE IS READY TO CLAIM' : `YOUR SCORE IS #${rank}`,
     );
-    this.claimButton.setText(rank === undefined ? 'CLAIM YOUR SPOT' : `CLAIM YOUR #${rank} SPOT`);
+    this.claimButton.setText('LEAVE YOUR INSTAGRAM');
   }
 
   private renderClaimedPlayerRow(instagram: string, bestScore: number, rank: number): void {
@@ -490,16 +486,15 @@ export class ResultScene extends Phaser.Scene {
       this.modalResolver = resolve;
       const modal = document.createElement('div');
       modal.className = 'leaderboard-claim-overlay';
-      const rankLabel = this.playerRank === undefined ? '' : ` #${this.playerRank}`;
       modal.innerHTML = `
         <form class="leaderboard-claim-dialog">
-          <div class="leaderboard-claim-title">CLAIM YOUR${rankLabel} SPOT</div>
+          <div class="leaderboard-claim-title">LEAVE YOUR INSTAGRAM</div>
           <label for="holyberg-instagram">INSTAGRAM USERNAME</label>
           <input id="holyberg-instagram" name="instagram" maxlength="100" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="@holyberg_">
           <div class="leaderboard-claim-error" aria-live="polite"></div>
           <div class="leaderboard-claim-actions">
             <button type="button" data-action="cancel">CANCEL</button>
-            <button type="submit">CLAIM SPOT</button>
+            <button type="submit">LEAVE INSTAGRAM</button>
           </div>
         </form>`;
       document.getElementById('game')?.appendChild(modal);
@@ -624,7 +619,7 @@ export class ResultScene extends Phaser.Scene {
       this.leaderboardStatus.setText(message.toUpperCase());
       this.claimButton
         .setText(
-          this.playerRank === undefined ? 'CLAIM YOUR SPOT' : `CLAIM YOUR #${this.playerRank} SPOT`,
+          'LEAVE YOUR INSTAGRAM',
         )
         .setAlpha(1);
     } finally {
