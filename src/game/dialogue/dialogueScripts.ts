@@ -15,26 +15,30 @@ export const METRO_MAGICIAN_DIALOGUE: DialogueScript = {
   // so it picks up whichever character was selected — including their name,
   // since it carries no speakerName override.
   defaultSpeaker: roleRef('magician'),
-  lines: [
-    { text: 'I KNOW YOU!', speaker: roleRef('magician'), speakerName: 'THE MAGICIAN' },
-    {
-      text: "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.",
-      speaker: roleRef('magician'),
-      speakerName: 'THE MAGICIAN',
-    },
-    {
-      text: "I CAN OPEN YOU A PORTAL HOME,\nBUT YOU NEED TO PROVE YOU'RE\nCOOL ENOUGH FOR IT.",
-      speaker: roleRef('magician'),
-      speakerName: 'THE MAGICIAN',
-    },
-    // The closing beat lands harder with a longer hold than its length earns.
-    {
-      text: 'LOCK IT IN:\nMADAME CLAUDE\n9 OCTOBER\n22:00',
-      holdMsOverride: 1400,
-      speaker: roleRef('magician'),
-      speakerName: 'THE MAGICIAN',
-    },
-  ],
+ lines: [
+  {
+    text: 'NOW, YOU THERE!',
+    speaker: roleRef('magician'),
+    speakerName: 'THE MAGICIAN',
+  },
+  {
+    text: "YOU'RE A STRANGER\nIN THIS WORLD.",
+    speaker: roleRef('magician'),
+    speakerName: 'THE MAGICIAN',
+  },
+  {
+    text: 'A PORTAL HOME WILL BE\nWAITING FOR YOU\nAT MADAME CLAUDE.\n\n9 OCTOBER\n22:00',
+    speaker: roleRef('magician'),
+    speakerName: 'THE MAGICIAN',
+  },
+  // The closing beat lands harder with a longer hold than its length earns.
+  {
+    text: 'BUT FIRST, PROVE TO ME\nTHAT YOU DESERVE IT.',
+    holdMsOverride: 1400,
+    speaker: roleRef('magician'),
+    speakerName: 'THE MAGICIAN',
+  },
+],
   nextScene: 'BerlinScene',
 };
 

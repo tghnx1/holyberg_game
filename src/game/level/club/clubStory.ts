@@ -114,7 +114,7 @@ export function buildClubRoomDialogue(
         ...common,
         id: 'club-lounge-dj',
         lines: [{
-          text: 'Portal? No idea. Maybe they pour that at the bar too.',
+          text: 'Portal? No idea. Maybe they give that at the bar too.',
           speakerName: '',
         }],
       };

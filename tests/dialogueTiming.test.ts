@@ -82,10 +82,10 @@ describe('isShortSpacePress', () => {
 describe('dialogue scripts', () => {
   it('holds the metro dialogue in order', () => {
     expect(METRO_MAGICIAN_DIALOGUE.lines.map((line) => line.text)).toEqual([
-      'I KNOW YOU!',
-      "YOU'RE NOT FROM THIS WORLD.\nLITERALLY.",
-      "I CAN OPEN YOU A PORTAL HOME,\nBUT YOU NEED TO PROVE YOU'RE\nCOOL ENOUGH FOR IT.",
-      'LOCK IT IN:\nMADAME CLAUDE\n9 OCTOBER\n22:00',
+      'NOW, YOU THERE!',
+"YOU'RE A STRANGER\nIN THIS WORLD.",
+'A PORTAL HOME WILL BE\nWAITING FOR YOU\nAT MADAME CLAUDE.\n\n9 OCTOBER\n22:00',
+'BUT FIRST, PROVE TO ME\nTHAT YOU DESERVE IT.'
     ]);
   });
 
