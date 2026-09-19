@@ -1,5 +1,6 @@
 import type { LeaderboardEntry } from '../../src/game/leaderboard/domain';
 import {
+  getFullLeaderboard,
   getLeaderboard,
   submitLeaderboardScore,
   type LeaderboardStore,
@@ -143,6 +144,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       return json(request, { error: 'Invalid score' }, 400);
     }
     return json(request, await getLeaderboard(store, score));
+  }
+
+  if (request.method === 'GET' && url.pathname === '/leaderboard/all') {
+    return json(request, { entries: await getFullLeaderboard(store) });
   }
 
   if (request.method === 'POST' && url.pathname === '/score') {

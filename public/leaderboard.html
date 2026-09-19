@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#060806">
+  <title>HOLYWORLD — Leaderboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Mono:wght@400;700&display=swap');
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: radial-gradient(circle at top, #142111, #060806 55%); color: #eef5ea; font-family: 'Space Mono', monospace; }
+    main { width: min(860px, 100%); margin: 0 auto; }
+    h1 { margin: 8px 0 8px; color: #39ff14; font-family: 'Archivo Black', sans-serif; font-size: clamp(32px, 8vw, 60px); text-align: center; letter-spacing: .04em; }
+    p { color: #93a191; text-align: center; }
+    a { color: #39ff14; }
+    .board { margin-top: 28px; border: 2px solid #39ff14; background: rgb(18 20 15 / 94%); }
+    .row { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgb(57 255 20 / 18%); font-size: clamp(14px, 3.5vw, 18px); }
+    .row:last-child { border-bottom: 0; }
+    .rank, .score { color: #39ff14; font-weight: 700; }
+    .handle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .state { padding: 36px 18px; text-align: center; color: #93a191; }
+    footer { margin: 28px 0 8px; text-align: center; }
+    @media (max-width: 460px) { .row { grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px; padding: 12px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>LEADERBOARD</h1>
+    <p id="summary">Loading all scores…</p>
+    <section class="board" aria-live="polite"><div id="rows" class="state">LOADING…</div></section>
+    <footer><a href="/">PLAY HOLYWORLD</a></footer>
+  </main>
+  <script>
+    const endpoint = 'https://holyberg-leaderboard.holyberg-game.workers.dev/leaderboard/all';
+    const rows = document.getElementById('rows');
+    const summary = document.getElementById('summary');
+    fetch(endpoint, { headers: { Accept: 'application/json' } })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Request failed')))
+      .then(({ entries }) => {
+        summary.textContent = `${entries.length} PLAYERS RANKED`;
+        rows.replaceChildren(...entries.map((entry, index) => {
+          const row = document.createElement('div');
+          row.className = 'row';
+          const rank = document.createElement('span'); rank.className = 'rank'; rank.textContent = String(index + 1);
+          const handle = document.createElement('span'); handle.className = 'handle'; handle.textContent = `@${entry.instagram}`;
+          const score = document.createElement('span'); score.className = 'score'; score.textContent = String(entry.bestScore);
+          row.append(rank, handle, score);
+          return row;
+        }));
+      })
+      .catch(() => { summary.textContent = 'RANKING UNAVAILABLE'; rows.textContent = 'PLEASE TRY AGAIN LATER.'; });
+  </script>
+</body>
+</html>

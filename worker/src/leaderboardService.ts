@@ -36,6 +36,16 @@ export async function getLeaderboard(
   };
 }
 
+/** Public full ranking for the standalone leaderboard page. */
+export async function getFullLeaderboard(store: LeaderboardStore): Promise<LeaderboardEntry[]> {
+  return (await store.getAll())
+    .map(({ instagram, bestScore }) => ({ instagram, bestScore }))
+    .sort(
+      (left, right) =>
+        right.bestScore - left.bestScore || left.instagram.localeCompare(right.instagram),
+    );
+}
+
 export async function submitLeaderboardScore(
   store: LeaderboardStore,
   input: { instagram: unknown; score: unknown },

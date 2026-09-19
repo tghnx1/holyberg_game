@@ -6,6 +6,7 @@ import {
   normalizeInstagram,
 } from '../src/game/leaderboard/domain';
 import {
+  getFullLeaderboard,
   MemoryLeaderboardStore,
   submitLeaderboardScore,
 } from '../worker/src/leaderboardService';
@@ -27,6 +28,17 @@ describe('leaderboard ranking', () => {
 
   it('calculates a player position outside the Top 10', () => {
     expect(calculateRank(entries, 9_250)).toBe(13);
+  });
+
+  it('returns every ranked player for the public leaderboard page', async () => {
+    const hundredPlayers = Array.from({ length: 100 }, (_, index) => ({
+      instagram: `player_${index + 1}`,
+      bestScore: 100_000 - index,
+    }));
+    const ranking = await getFullLeaderboard(new MemoryLeaderboardStore([...hundredPlayers].reverse()));
+    expect(ranking).toHaveLength(100);
+    expect(ranking[0]).toEqual({ instagram: 'player_1', bestScore: 100_000 });
+    expect(ranking[99]).toEqual({ instagram: 'player_100', bestScore: 99_901 });
   });
 });
 
