@@ -1,7 +1,7 @@
 import type { LeaderboardEntry } from './domain';
 
-export const HOLYWORLD_GAME_URL = 'https://tghnx1.github.io/holyberg_game/';
-export const STORY_CARD_GAME_URL = 'tghnx1.github.io/holyberg_game/';
+export const HOLYWORLD_GAME_URL = 'https://game.holyberg.net/';
+export const STORY_CARD_GAME_URL = 'game.holyberg.net/';
 export const STORY_CARD_WIDTH = 1080;
 export const STORY_CARD_HEIGHT = 1920;
 const STORY_CARD_LOGICAL_WIDTH = 720;
@@ -21,7 +21,13 @@ export interface StoryLeaderboardRow {
   isPlayer: boolean;
 }
 
-export type ScoreShareResult = 'file-shared' | 'text-shared' | 'copied' | 'prompted' | 'cancelled';
+export type ScoreShareResult =
+  | 'file-shared'
+  | 'file-share-failed'
+  | 'text-shared'
+  | 'copied'
+  | 'prompted'
+  | 'cancelled';
 
 interface ShareNavigator {
   share?: (data: ShareData) => Promise<void>;
@@ -104,18 +110,23 @@ export async function shareScoreResult(
   const payload = { title: 'HOLYWORLD score', text, url: HOLYWORLD_GAME_URL };
   const share = dependencies.navigator.share?.bind(dependencies.navigator);
 
-  if (share && dependencies.navigator.canShare && dependencies.createCardFile) {
+  if (share && dependencies.createCardFile) {
     try {
       const file = await dependencies.createCardFile(data);
-      const filePayload: ShareData = { ...payload, files: [file] };
-      if (dependencies.navigator.canShare(filePayload)) {
-        await share(filePayload);
-        return 'file-shared';
+      const filePayload: ShareData = { files: [file] };
+      if (dependencies.navigator.canShare?.(filePayload)) {
+        try {
+          await share(filePayload);
+          return 'file-shared';
+        } catch (error) {
+          if (isShareCancellation(error)) return 'cancelled';
+          return 'file-share-failed';
+        }
       }
     } catch (error) {
       if (isShareCancellation(error)) return 'cancelled';
-      // Image creation or file sharing can fail independently. The ordinary
-      // Web Share payload below remains useful and must still be attempted.
+      // PNG generation failed before a supported file-share attempt began.
+      // Text+URL Web Share below remains the best available fallback.
     }
   }
 

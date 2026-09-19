@@ -647,6 +647,8 @@ export class ResultScene extends Phaser.Scene {
         this.leaderboardStatus.setText('SHARE TEXT COPIED.');
       } else if (result === 'prompted') {
         this.leaderboardStatus.setText('COPY THE SCORE TEXT TO SHARE.');
+      } else if (result === 'file-share-failed') {
+        this.leaderboardStatus.setText('IMAGE SHARE FAILED — PLEASE TRY AGAIN.');
       }
     } catch {
       this.leaderboardStatus.setText('SHARING IS UNAVAILABLE — COPY THE GAME URL.');

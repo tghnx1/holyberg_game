@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   HOLYWORLD_GAME_URL,
+  STORY_CARD_GAME_URL,
   STORY_CARD_HEIGHT,
   STORY_CARD_WIDTH,
   selectStoryLeaderboardRows,
@@ -28,7 +29,8 @@ describe('score sharing', () => {
   it('uses a full-resolution 9:16 Story canvas and the public game URL', () => {
     expect(STORY_CARD_WIDTH).toBe(1080);
     expect(STORY_CARD_HEIGHT).toBe(1920);
-    expect(HOLYWORLD_GAME_URL).toBe('https://tghnx1.github.io/holyberg_game/');
+    expect(HOLYWORLD_GAME_URL).toBe('https://game.holyberg.net/');
+    expect(STORY_CARD_GAME_URL).toBe('game.holyberg.net/');
   });
 
   it('provides representative claimed data for the hidden read-only preview routes', () => {
@@ -101,7 +103,7 @@ describe('score sharing', () => {
     expect(new Set(rows.map((row) => row.instagram)).size).toBe(rows.length);
   });
 
-  it('shares the generated image File together with text and the game URL when supported', async () => {
+  it('shares the generated PNG without a URL when file sharing is supported', async () => {
     const share = vi.fn(async () => undefined);
     const canShare = vi.fn(() => true);
     const result = await shareScoreResult(score, {
@@ -111,12 +113,7 @@ describe('score sharing', () => {
 
     expect(result).toBe('file-shared');
     expect(canShare).toHaveBeenCalledWith(expect.objectContaining({ files: [file] }));
-    expect(share).toHaveBeenCalledWith({
-      title: 'HOLYWORLD score',
-      text: scoreShareText(score),
-      url: HOLYWORLD_GAME_URL,
-      files: [file],
-    });
+    expect(share).toHaveBeenCalledWith({ files: [file] });
   });
 
   it('falls back to text and URL Web Share when file sharing is unsupported', async () => {
@@ -133,6 +130,18 @@ describe('score sharing', () => {
       text: scoreShareText(score),
       url: HOLYWORLD_GAME_URL,
     });
+  });
+
+  it('does not replace a failed supported file share with a text-only share', async () => {
+    const share = vi.fn(async () => { throw new Error('temporary share failure'); });
+    const result = await shareScoreResult(score, {
+      navigator: { share, canShare: () => true },
+      createCardFile: async () => file,
+    });
+
+    expect(result).toBe('file-share-failed');
+    expect(share).toHaveBeenCalledOnce();
+    expect(share).toHaveBeenCalledWith({ files: [file] });
   });
 
   it('copies share-friendly text and URL when Web Share is unavailable', async () => {
