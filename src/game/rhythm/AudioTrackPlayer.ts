@@ -7,6 +7,8 @@ const AUDIO_RESUME_TIMEOUT_MS = 750;
 
 export class AudioTrackPlayer implements TrackTimeSource {
   private context?: AudioContext;
+  private paused = false;
+  private playbackAttempt = 0;
   private buffer?: AudioBuffer;
   private source?: AudioBufferSourceNode;
   private gain?: GainNode;
@@ -33,7 +35,10 @@ export class AudioTrackPlayer implements TrackTimeSource {
    */
   async prepare(encodedAudio: ArrayBuffer): Promise<void> {
     this.context ??= new AudioContext();
-    this.buffer = await this.context.decodeAudioData(encodedAudio);
+    const context = this.context;
+    const buffer = await context.decodeAudioData(encodedAudio);
+    if (this.context !== context) return;
+    this.buffer = buffer;
     if (!this.masterGain) {
       this.masterGain = this.context.createGain();
       this.masterGain.connect(this.context.destination);
@@ -57,12 +62,33 @@ export class AudioTrackPlayer implements TrackTimeSource {
   }
 
   async unlock(): Promise<boolean> {
+    const context = this.context;
+    if (!context || context.state === 'closed') return false;
+    this.paused = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (!this.context) return false;
-      await this.context.resume();
-      return this.context.state === 'running';
+      await Promise.race([
+        this.resumeContext(context),
+        new Promise<void>((resolve) => {
+          timeout = globalThis.setTimeout(resolve, AUDIO_RESUME_TIMEOUT_MS);
+        }),
+      ]);
+      const resumed = this.context === context && !this.paused && context.state === 'running';
+      if (!resumed && this.context === context) this.paused = true;
+      return resumed;
     } catch {
+      if (this.context === context) this.paused = true;
       return false;
+    } finally {
+      if (timeout !== undefined) globalThis.clearTimeout(timeout);
+    }
+  }
+
+  private async resumeContext(context: AudioContext): Promise<void> {
+    await context.resume();
+    // A timed-out resume may settle after another pause or after its retry UI appears.
+    if (this.context === context && this.paused && context.state === 'running') {
+      await context.suspend();
     }
   }
 
@@ -75,16 +101,19 @@ export class AudioTrackPlayer implements TrackTimeSource {
     startSeconds = 0,
     endSeconds = this.durationSeconds,
     fadeOutSeconds = DEFAULT_FADE_OUT_SECONDS,
+    startDelaySeconds = 0,
   ): Promise<boolean> {
     if (!this.context || !this.buffer || this.context.state === 'closed') return false;
 
     const context = this.context;
+    const attempt = ++this.playbackAttempt;
+    this.paused = false;
     let resumeAttempt: Promise<void>;
     try {
       // Scheduling in the gesture handler keeps iOS from dropping the audio
       // permission while resume() settles asynchronously.
-      resumeAttempt = context.resume();
-      if (!this.schedulePlayback(startSeconds, endSeconds, fadeOutSeconds)) {
+      resumeAttempt = this.resumeContext(context);
+      if (!this.schedulePlayback(startSeconds, endSeconds, fadeOutSeconds, startDelaySeconds)) {
         void resumeAttempt.catch(() => undefined);
         return false;
       }
@@ -103,17 +132,30 @@ export class AudioTrackPlayer implements TrackTimeSource {
     } finally {
       if (resumeTimeout !== undefined) globalThis.clearTimeout(resumeTimeout);
     }
-    if (context.state === 'running') return true;
+    if (this.context !== context || attempt !== this.playbackAttempt) return false;
+    if (context.state === 'running' || this.paused) return true;
 
     // A pending or rejected iOS resume must release the UI for another tap.
+    this.paused = true;
     this.running = false;
     this.stopSource();
     return false;
   }
 
-  private schedulePlayback(startSeconds: number, endSeconds: number, fadeOutSeconds: number): boolean {
+  private schedulePlayback(
+    startSeconds: number,
+    endSeconds: number,
+    fadeOutSeconds: number,
+    startDelaySeconds = 0,
+  ): boolean {
     if (!this.context || !this.buffer) return false;
-    if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds) || endSeconds <= startSeconds) return false;
+    if (
+      !Number.isFinite(startSeconds) ||
+      !Number.isFinite(endSeconds) ||
+      !Number.isFinite(startDelaySeconds) ||
+      startDelaySeconds < 0 ||
+      endSeconds <= startSeconds
+    ) return false;
     this.stopSource();
     const startOffsetSeconds = Math.min(Math.max(0, startSeconds), this.buffer.duration);
     const stopOffsetSeconds = Math.min(Math.max(startOffsetSeconds, endSeconds), this.buffer.duration);
@@ -126,11 +168,11 @@ export class AudioTrackPlayer implements TrackTimeSource {
     this.source.connect(this.gain);
     this.playbackStartSeconds = startOffsetSeconds;
     this.playbackEndSeconds = stopOffsetSeconds;
-    this.originSeconds = this.context.currentTime + START_LEAD_SECONDS - startOffsetSeconds;
+    const startTime = this.context.currentTime + START_LEAD_SECONDS + startDelaySeconds;
+    this.originSeconds = startTime - startOffsetSeconds;
     this.running = true;
     this.ended = false;
     this.stoppedIntentionally = false;
-    const startTime = this.context.currentTime + START_LEAD_SECONDS;
     const stopTime = startTime + playbackDurationSeconds;
     this.gain.gain.setValueAtTime(1, startTime);
     if (actualFadeOutSeconds > 0) {
@@ -165,6 +207,7 @@ export class AudioTrackPlayer implements TrackTimeSource {
   }
 
   async pause(): Promise<void> {
+    this.paused = true;
     if (this.context?.state === 'running') await this.context.suspend();
   }
 
@@ -173,6 +216,7 @@ export class AudioTrackPlayer implements TrackTimeSource {
   }
 
   stop(): void {
+    this.playbackAttempt += 1;
     this.stoppedIntentionally = true;
     this.running = false;
     this.stopSource();
@@ -184,6 +228,8 @@ export class AudioTrackPlayer implements TrackTimeSource {
     this.gain?.disconnect();
     this.gain = undefined;
     this.buffer = undefined;
+    this.masterGain?.disconnect();
+    this.masterGain = undefined;
     if (this.context && this.context.state !== 'closed') void this.context.close();
     this.context = undefined;
   }

@@ -102,6 +102,10 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   private inputOffsetMs = 0;
   private lastTimingDifferenceMs: number | null = null;
   private audioEnded = false;
+  private runId = 0;
+  private pauseId = 0;
+  private audioRecovery = false;
+  private resumeOverlay?: Phaser.GameObjects.Container;
   private completionGate!: CompletionGate;
   private readonly inputGuard = new LaneInputGuard();
   private readonly antiMash = new AntiMashSystem();
@@ -132,6 +136,10 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   private resetForNewRun(): void {
+    this.runId += 1;
+    this.audioRecovery = false;
+    this.resumeOverlay = undefined;
+    this.activeOverlay = undefined;
     // Cleared here as well as in build(): Phaser reuses one scene instance
     // across restarts, so a run whose build never completed (a failed track
     // load, a fatal error overlay) would otherwise leave the previous run's
@@ -203,6 +211,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   private async prepareTrack(loading: Phaser.GameObjects.Text): Promise<void> {
+    const runId = this.runId;
     try {
       const metadata = parseTrackMetadata(
         this.cache.json.get('rhythm-track-metadata'),
@@ -216,16 +225,12 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
         import.meta.env.DEV ? (message) => console.warn(message) : () => undefined,
       );
       this.audio = new AudioTrackPlayer();
+      // Remove the detached cache entry before a restart can load a new one.
+      this.cache.binary.remove('rhythm-track-audio');
       await this.audio.prepare(audioBuffer);
+      if (runId !== this.runId) return;
       this.unsubscribeSoundManager = SoundManager.onChange((muted) => this.audio.setMuted(muted));
       this.unsubscribeMusicVolume = SoundManager.onVolumeChange((volume) => this.audio.setVolume(volume));
-      // prepare() detaches the buffer, so the cached copy is now an empty
-      // shell that nothing can decode. Dropping it frees the encoded track
-      // (several MB held for the whole level) and makes a retry re-request
-      // the file — served from the HTTP cache — instead of finding a
-      // detached entry it cannot use.
-      this.cache.binary.remove('rhythm-track-audio');
-      if (!this.scene.isActive()) return;
       this.playbackWindow = resolveRhythmPlaybackWindow(metadata, this.audio.durationSeconds);
       this.chart = { ...this.chart, notes: selectRhythmNotesInWindow(this.chart.notes, this.playbackWindow.startSeconds, this.playbackWindow.endSeconds) };
       this.audio.onEnded = () => {
@@ -240,6 +245,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       if (import.meta.env.DEV) console.debug(formatChartStatistics(this.chart));
       this.build();
     } catch (error) {
+      if (runId !== this.runId) return;
       loading.destroy();
       this.showFatalError(error);
     }
@@ -291,11 +297,8 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       profile: getRuntimeAssetQualityProfile(this.game, this.scale),
     });
     new OrientationController(this, {
-      onPause: () => { this.clock.pause(); this.boothAnimation.pause(); void this.audio.pause(); },
-      onResume: () => {
-        if (this.playing) this.boothAnimation.resume();
-        void this.audio.resume().then((resumed) => { if (resumed) this.clock.resume(); });
-      },
+      onPause: () => this.onGamePause(),
+      onResume: () => this.onGameResume(),
       onLayout: (viewport) => this.applyResponsiveLayout(viewport),
     });
   }
@@ -394,6 +397,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     const text = this.rememberInstructionText(this.add.text(0, this.cameras.main.height / 2, 'GET ON THE DECKS\n\nPRESS SPACE\nOR TAP TO START THE SET', { fontFamily: 'Archivo Black', fontSize: '34px', color: '#ffdd57', align: 'center', lineSpacing: 8 }).setOrigin(0.5), 34, 'heading');
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
     this.activeOverlay = overlay;
+    const runId = this.runId;
     let start = (): void => undefined;
     start = createRhythmStartHandler({
       unlockAudio: async () => {
@@ -404,6 +408,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
         this.input.keyboard?.off('keydown-SPACE', start);
       },
       startTutorial: () => {
+        if (runId !== this.runId) return;
         this.starting = true;
         background.disableInteractive();
         overlay.destroy(true);
@@ -418,29 +423,38 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.input.keyboard?.on('keydown-SPACE', start);
   }
 
-  private runCountdown(overlay: Phaser.GameObjects.Container, background: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text): void {
+  private runCountdown(
+    overlay: Phaser.GameObjects.Container,
+    background: Phaser.GameObjects.Rectangle,
+    text: Phaser.GameObjects.Text,
+    startAttempt: Promise<boolean>,
+  ): void {
+    const runId = this.runId;
     background.setAlpha(0.84);
-    ["YOU'RE ON.", '3', '2', '1', 'GO'].forEach((step, index) => this.time.delayedCall(index * 600, () => text.setText(step)));
+    ["YOU'RE ON.", '3', '2', '1', 'GO'].forEach((step, index) => this.time.delayedCall(index * 600, () => { if (runId === this.runId) text.setText(step); }));
     this.time.delayedCall(3000, () => {
+      if (runId !== this.runId) return;
       overlay.destroy(true);
       if (this.activeOverlay === overlay) this.activeOverlay = undefined;
-      if (!this.beginGameplay()) this.showAudioStartFallback();
+      void startAttempt.then((started) => {
+        if (runId !== this.runId) return;
+        if (!started) {
+          this.showAudioStartFallback();
+          return;
+        }
+        this.activateGameplay();
+      });
     });
   }
 
-  private beginGameplay(): boolean {
-    if (!this.audio.start(this.playbackWindow.audioStartSeconds, this.playbackWindow.endSeconds, this.playbackWindow.fadeOutSeconds)) return false;
-    this.activateGameplay();
-    return true;
-  }
-
   private async beginGameplayFromGesture(): Promise<boolean> {
+    const runId = this.runId;
     const started = await this.audio.startFromGesture(
       this.playbackWindow.audioStartSeconds,
       this.playbackWindow.endSeconds,
       this.playbackWindow.fadeOutSeconds,
     );
-    if (!started || !this.scene.isActive()) return false;
+    if (!started || runId !== this.runId) return false;
     this.activateGameplay();
     return true;
   }
@@ -449,13 +463,20 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.clock.start();
     this.boothAnimation.startGameplay();
     this.playing = true;
+    if (this.audioRecovery) {
+      this.clock.pause();
+      this.boothAnimation.pause();
+    }
   }
 
-  private showAudioStartFallback(): void {
+  private showAudioStartFallback(resumePlayback = false): void {
+    if (resumePlayback && this.resumeOverlay) return;
+    const runId = this.runId;
     const background = this.add.rectangle(0, this.cameras.main.height / 2, 700, 240, 0x090611, 0.96).setStrokeStyle(5, 0xff477e).setInteractive();
     const text = this.rememberInstructionText(this.add.text(0, this.cameras.main.height / 2, 'AUDIO IS PAUSED\n\nTAP TO START SET', { fontFamily: 'Archivo Black', fontSize: '38px', color: '#ffdd57', align: 'center' }).setOrigin(0.5), 38, 'heading');
     const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
-    this.activeOverlay = overlay;
+    if (resumePlayback) this.resumeOverlay = overlay;
+    else this.activeOverlay = overlay;
     let retrying = false;
     const cleanup = (): void => {
       background.off('pointerdown', retry);
@@ -466,21 +487,26 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       if (retrying) return;
       retrying = true;
       text.setText('STARTING AUDIO...');
-      void this.beginGameplayFromGesture().then((started) => {
+      const attempt = resumePlayback ? this.resumeAudio() : this.beginGameplayFromGesture();
+      void attempt.then((started) => {
+        if (runId !== this.runId) return;
         retrying = false;
         if (!started) {
           text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
           return;
         }
         cleanup();
+        if (this.resumeOverlay === overlay) this.resumeOverlay = undefined;
         overlay.destroy(true);
         if (this.activeOverlay === overlay) this.activeOverlay = undefined;
       }).catch((error: unknown) => {
+        if (runId !== this.runId) return;
         retrying = false;
         text.setText('AUDIO COULD NOT START\n\nTAP TO RETRY');
         if (import.meta.env.DEV) console.warn('[RhythmScene] audio retry failed', error);
       });
     };
+    overlay.once(Phaser.GameObjects.Events.DESTROY, cleanup);
     background.on('pointerdown', retry);
     this.input.on('pointerdown', retry);
     this.input.keyboard?.on('keydown-SPACE', retry);
@@ -503,7 +529,13 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
       const text = this.rememberInstructionText(this.add.text(0, this.cameras.main.height / 2, 'READY', { fontFamily: 'Archivo Black', fontSize: '58px', color: '#ffdd57' }).setOrigin(0.5), 58, 'heading');
       const overlay = this.add.container(this.centerX, 0, [background, text]).setDepth(RhythmDepth.UI);
       this.activeOverlay = overlay;
-      this.runCountdown(overlay, background, text);
+      const startAttempt = this.audio.startFromGesture(
+        this.playbackWindow.audioStartSeconds,
+        this.playbackWindow.endSeconds,
+        this.playbackWindow.fadeOutSeconds,
+        3,
+      );
+      this.runCountdown(overlay, background, text, startAttempt);
       return;
     }
     const colorNames = ['ORANGE', 'PINK', 'PURPLE', 'YELLOW'];
@@ -571,6 +603,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
   }
 
   private pressLane(lane: Lane, inputGuarded = false): void {
+    if (this.audioRecovery) return;
     if (!inputGuarded && !this.inputGuard.allowLane(lane, this.time.now)) return;
     this.showPressFeedback(lane);
     if (this.tutorial && !this.tutorial.complete) {
@@ -665,6 +698,7 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
     this.progressTrack.setX(centerX);
     this.progressBar.setX(centerX - 250);
     this.activeOverlay?.setX(centerX);
+    this.resumeOverlay?.setX(centerX);
     this.tutorialPrompt?.setX(centerX);
     this.scoreText.setScale(viewport.hudScale);
     this.comboText.setPosition(centerX, this.comboText.y).setScale(viewport.hudScale);
@@ -793,14 +827,44 @@ export class RhythmScene extends Phaser.Scene implements PausableScene {
 
   /** Raw Web Audio playback sits outside Phaser's update loop, so `scene.scene.pause()` alone can't stop it. */
   onGamePause(): void {
+    this.pauseId += 1;
+    this.audioRecovery = true;
+    this.inputGuard.reset();
+    this.clock?.pause();
+    this.boothAnimation?.pause();
+    this.time.paused = true;
     void this.audio?.pause();
   }
 
   onGameResume(): void {
-    void this.audio?.resume();
+    const runId = this.runId;
+    const pauseId = this.pauseId;
+    void this.resumeAudio().then((resumed) => {
+      if (runId !== this.runId || pauseId !== this.pauseId) return;
+      if (!resumed) this.showAudioStartFallback(true);
+    });
+  }
+
+  private async resumeAudio(): Promise<boolean> {
+    const runId = this.runId;
+    const pauseId = this.pauseId;
+    const resumed = this.audio ? await this.audio.resume() : true;
+    if (runId !== this.runId || pauseId !== this.pauseId) return false;
+    if (resumed) {
+      this.resumeOverlay?.destroy(true);
+      this.resumeOverlay = undefined;
+      this.audioRecovery = false;
+      this.time.paused = false;
+      this.clock?.resume();
+      if (this.playing) this.boothAnimation?.resume();
+    }
+    return resumed;
   }
 
   private cleanup(): void {
+    this.runId += 1;
+    this.pauseId += 1;
+    this.time.paused = false;
     this.playing = false;
     this.clock?.stop();
     this.unsubscribeSoundManager?.();
