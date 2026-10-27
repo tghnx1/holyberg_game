@@ -163,6 +163,16 @@ export class BossPlayer {
     });
   }
 
+  resizeArena(previous: ArenaBounds, next: ArenaBounds): void {
+    const scale = (next.maxX - next.minX) / (previous.maxX - previous.minX);
+    const centerX = next.minX + (this.sprite.x - previous.minX) * scale;
+    const reachable = this.reachableCenterBounds(next);
+    const clampedX = Math.max(reachable.minX, Math.min(reachable.maxX, centerX));
+    this.motion = { ...this.motion, x: clampedX - this.presentation.offsetX };
+    this.sprite.x = clampedX;
+    if (this.ashSprite) this.ashSprite.x = clampedX;
+  }
+
   update(deltaMs: number, direction: MoveDirection, nowMs: number, arena: ArenaBounds): void {
     if (this.defeated) {
       this.renderDefeated(nowMs);

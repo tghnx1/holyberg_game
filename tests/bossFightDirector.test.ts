@@ -174,3 +174,55 @@ describe('boss fight director', () => {
     expect(phases).toEqual([1]);
   });
 });
+
+
+describe('boss fight resize', () => {
+  it.each([890, 1490])('preserves an active aimed attack and score when the right wall becomes %i', (maxX) => {
+    // Given a live laser which has already hit once.
+    const director = new BossFightDirector(bounds, 1);
+    while (!director.snapshot.activeAttacks.some((attack) => attack.phase === 'active')) {
+      director.update(16, 900);
+    }
+    const before = structuredClone(director.snapshot);
+    // When the arena changes during its damage window.
+    director.resizeArena({ minX: 70, maxX });
+    // Then the same attack keeps its clock, score and hit state at the new location.
+    const after = director.snapshot;
+    expect(after.elapsedMs).toBe(before.elapsedMs);
+    expect(after.score).toEqual(before.score);
+    const attack = after.activeAttacks[0];
+    expect(attack).toMatchObject({
+      id: before.activeAttacks[0].id,
+      phase: 'active',
+      hitPlayer: true,
+      startMs: before.activeAttacks[0].startMs,
+      timing: before.activeAttacks[0].timing,
+    });
+    const expectedX = 70 + (900 - 70) * (maxX - 70) / 1140;
+    expect(getAttackBeams(attack)[0].centerX).toBeCloseTo(expectedX);
+    expect(director.update(0, expectedX).filter((event) => event.kind === 'playerHit')).toEqual([]);
+  });
+
+  it('preserves wall telegraph geometry through shrinking then growing', () => {
+    // Given the first wall telegraph.
+    const director = new BossFightDirector(bounds, 1);
+    while (!director.snapshot.activeAttacks.some((attack) => attack.type === 'laserWall')) {
+      director.update(16, 640);
+    }
+    const before = structuredClone(director.snapshot);
+    // When a viewport round trip occurs without advancing the fight.
+    director.resizeArena({ minX: 70, maxX: 890 });
+    director.resizeArena(bounds);
+    // Then timing, beam targets, and score return intact.
+    expect(director.snapshot.elapsedMs).toBe(before.elapsedMs);
+    expect(director.snapshot.score).toEqual(before.score);
+    const attack = director.snapshot.activeAttacks[0];
+    expect(attack.phase).toBe('telegraph');
+    expect(attack.timing).toEqual(before.activeAttacks[0].timing);
+    getAttackBeams(attack).forEach((beam, index) => {
+      const original = getAttackBeams(before.activeAttacks[0])[index];
+      expect(beam.centerX).toBeCloseTo(original.centerX);
+      expect(beam.halfWidth).toBeCloseTo(original.halfWidth);
+    });
+  });
+});

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DESIGN_WIDTH, WORLD_WIDTH } from '../constants';
+import { WORLD_WIDTH } from '../constants';
 import { backgroundLayout, getDisplaySize, getSkyDisplayWidth } from './berlin/backgroundLayout';
 import {
   attachBackgroundDebug,
@@ -40,6 +40,12 @@ export interface BuiltBerlinWorld {
   resizeViewport: (logicalCameraWidth: number) => void;
 }
 
+export function getCityScrollFactor(displayWidth: number, cameraWidth: number): number {
+  return Math.min(1, Math.max(0,
+    (displayWidth - cameraWidth) / Math.max(1, WORLD_WIDTH - cameraWidth),
+  ));
+}
+
 export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): BuiltBerlinWorld {
   const debugTargets: DebugTarget[] = [];
 
@@ -60,12 +66,10 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
   // height-scaled) texture can travel relative to how far the camera
   // travels across the whole level.
   const city = createBackgroundImage(scene, backgroundLayout.city);
-  const cityScrollFactor = Phaser.Math.Clamp(
-    (city.displayWidth - DESIGN_WIDTH) / (WORLD_WIDTH - DESIGN_WIDTH),
-    0,
-    1,
-  );
-  city.setScrollFactor(cityScrollFactor, 0);
+  const resizeCity = (cameraWidth: number): void => {
+    city.setScrollFactor(getCityScrollFactor(city.displayWidth, cameraWidth), 0);
+  };
+  resizeCity(scene.scale.gameSize.width);
   debugTargets.push({ name: 'city', object: city });
 
   // The railway is centred on the level: its own width leaves an equal
@@ -243,6 +247,7 @@ export function buildBerlinWorld(scene: Phaser.Scene, layers: SceneLayers): Buil
       }
     },
     resizeViewport: (logicalCameraWidth) => {
+      resizeCity(logicalCameraWidth);
       sky.setDisplaySize(
         getSkyDisplayWidth(logicalCameraWidth),
         backgroundLayout.sky.targetHeight,

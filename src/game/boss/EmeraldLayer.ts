@@ -89,6 +89,19 @@ export class EmeraldLayer {
     this.bounds = bounds;
   }
 
+  resizeArena(bounds: ArenaBounds, reachableBounds: ArenaBounds): void {
+    const scale = (bounds.maxX - bounds.minX) / (this.bounds.maxX - this.bounds.minX);
+    const anchor = bounds.minX + (this.translateDeltaX - this.bounds.minX) * scale;
+    const nextAnchor = this.computeTranslateDeltaX(
+      anchor, this.emeralds.map((emerald) => emerald.spot), reachableBounds,
+    );
+    const shift = nextAnchor - this.translateDeltaX;
+    this.translateDeltaX = nextAnchor;
+    this.bounds = bounds;
+    for (const emerald of this.emeralds) emerald.sprite.x += shift;
+    this.offered = this.offered.map((spot) => ({ ...spot, x: spot.x + shift }));
+  }
+
   /**
    * Rebuilds exactly the layout authored for this one telegraph occurrence,
    * translated as one composition so it lands near `playerX` — the player's

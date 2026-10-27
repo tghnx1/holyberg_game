@@ -123,6 +123,27 @@ function authorSpots(windowId: string, spots: { id: string; x: number; y: number
 describe('EmeraldLayer', () => {
   afterEach(() => resetSceneLayout());
 
+  it('keeps remaining pickups reachable without restoring collected ones on resize', () => {
+    // Given one collected emerald and one still offered near the right wall.
+    authorSpots('attack-00', [
+      { id: 'emerald-01', x: -50, y: 560 },
+      { id: 'emerald-02', x: 50, y: 560 },
+    ]);
+    const { scene, sprites } = createScene();
+    const layer = new EmeraldLayer(scene as never, SCENE_KEY);
+    layer.setBounds(arena);
+    layer.showWindow('attack-00', 1100);
+    layer.collect({ centerX: 1050, centerY: 560, halfWidth: 1, halfHeight: 1 });
+    layer.scheduleHide();
+    // When the viewport shrinks during the existing hide delay.
+    layer.resizeArena({ minX: 70, maxX: 890 }, { minX: 100, maxX: 860 });
+    // Then collision tracks the visible remainder without reviving the pickup.
+    expect(layer.offeredCount).toBe(1);
+    expect(sprites[1].x).toBeLessThanOrEqual(860);
+    expect(layer.collect({ centerX: sprites[1].x, centerY: 560, halfWidth: 1, halfHeight: 1 })
+      .map((spot) => spot.id)).toEqual(['emerald-02']);
+  });
+
   it('translates the authored group so it lands near the player anchor, preserving spacing', () => {
     authorSpots('attack-00', [
       { id: 'emerald-01', x: -100, y: 560 },

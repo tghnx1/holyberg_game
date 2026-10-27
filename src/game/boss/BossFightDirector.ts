@@ -50,11 +50,35 @@ export class BossFightDirector {
   private finished = false;
 
   constructor(
-    private readonly bounds: ArenaBounds,
+    private bounds: ArenaBounds,
     seed = 1,
   ) {
     this.plan = buildFightPlan(bounds, seed);
     this.currentPhase = getPhaseAt(0);
+  }
+
+  resizeArena(bounds: ArenaBounds): void {
+    const previous = this.bounds;
+    const scale = (bounds.maxX - bounds.minX) / (previous.maxX - previous.minX);
+    const mapX = (x: number): number => bounds.minX + (x - previous.minX) * scale;
+    for (const attack of [...this.plan.attacks, ...this.live]) {
+      const params = attack.params;
+      switch (params.type) {
+        case 'aimedLaser':
+          attack.params = { ...params, targetX: mapX(params.targetX), halfWidth: params.halfWidth * scale };
+          break;
+        case 'laserWall':
+          attack.params = {
+            ...params,
+            columnCenters: params.columnCenters.map(mapX),
+            halfWidth: params.halfWidth * scale,
+            safeGapCenterX: mapX(params.safeGapCenterX),
+            safeGapHalfWidth: params.safeGapHalfWidth * scale,
+          };
+          break;
+      }
+    }
+    this.bounds = bounds;
   }
 
   get snapshot(): BossFightSnapshot {

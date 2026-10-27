@@ -13,6 +13,7 @@ export class BossInput {
   private readonly cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
   private readonly keyA?: Phaser.Input.Keyboard.Key;
   private readonly keyD?: Phaser.Input.Keyboard.Key;
+  private touchZone?: Phaser.GameObjects.Zone;
   private touchDirection: MoveDirection = 0;
   private readonly movePointers = new Map<number, MoveDirection>();
 
@@ -37,6 +38,7 @@ export class BossInput {
       .setOrigin(0, 0)
       .setDepth(BossDepth.UI - 1)
       .setInteractive();
+    this.touchZone = zone;
     const updateFromPointer = (pointer: Phaser.Input.Pointer): void => {
       this.movePointers.set(pointer.id, pointer.x < this.scene.cameras.main.width / 2 ? -1 : 1);
       this.resolveTouchDirection();
@@ -53,6 +55,13 @@ export class BossInput {
     zone.on('pointerout', clearPointer);
   }
 
+  resize(): void {
+    const { width, height } = this.scene.cameras.main;
+    this.touchZone?.setSize(width, height);
+    this.movePointers.clear();
+    this.touchDirection = 0;
+  }
+
   /** Latest press wins, so sliding a thumb across the middle turns the player around. */
   private resolveTouchDirection(): void {
     const directions = [...this.movePointers.values()];
@@ -67,6 +76,9 @@ export class BossInput {
   }
 
   destroy(): void {
+    this.touchZone?.destroy();
+    this.touchZone = undefined;
+    this.touchDirection = 0;
     this.movePointers.clear();
   }
 

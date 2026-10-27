@@ -558,14 +558,22 @@ export class BossScene extends Phaser.Scene implements EditableScene, CurrentSce
     });
   }
 
-  /**
-   * Arena bounds are deliberately *not* recomputed here: the fight plan was
-   * built from them, so resizing mid-fight must not move the lasers or the
-   * walls the player is dodging between. Only the presentation reflows.
-   */
   private handleResize(): void {
+    const { width, height } = this.cameras.main;
+    const bounds = BossArena.getBounds(width);
+    this.player.resizeArena(this.bounds, bounds);
+    this.director.resizeArena(bounds);
+    this.emeralds.resizeArena(bounds, this.player.reachableCenterBounds(bounds));
+    this.bounds = bounds;
+    this.bossX = width / 2;
+    this.controls.resize();
     this.arena.redraw();
-    this.hud.reposition(this.cameras.main.width);
+    this.hud.reposition(width);
+    this.introText?.setPosition(width / 2, height / 2 - 40);
+    const snapshot = this.director.snapshot;
+    this.boss.update(this.time.now, this.bossX, this.player.damageHitbox.centerX,
+      snapshot.activeAttacks.some((attack) => attack.phase === 'telegraph'));
+    this.attacks.redraw(snapshot.activeAttacks, snapshot.elapsedMs, this.boss.energySphereWorldCenter);
   }
 
   update(_time: number, delta: number): void {
