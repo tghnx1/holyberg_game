@@ -14,6 +14,7 @@ async function pngFilesBelow(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
+    if (entry.name.startsWith('._')) continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await pngFilesBelow(path)));
     else if (entry.isFile() && entry.name.endsWith('.png')) files.push(path);

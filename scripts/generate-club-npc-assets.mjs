@@ -17,7 +17,7 @@ const groups = (await readdir(sourceRoot, { withFileTypes: true }))
 
 for (const group of groups) {
   const sourceDirectory = resolve(sourceRoot, group);
-  const files = (await readdir(sourceDirectory)).filter((name) => name.endsWith('.png')).sort();
+  const files = (await readdir(sourceDirectory)).filter((name) => !name.startsWith('._') && name.endsWith('.png')).sort();
   for (const name of files) {
     const source = resolve(sourceDirectory, name);
     const target = resolve(outputRoot, group, name.replace(/\.png$/, '.webp'));

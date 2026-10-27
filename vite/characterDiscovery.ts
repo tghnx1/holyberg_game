@@ -21,6 +21,7 @@ async function listFilesRecursively(root: string, current = root): Promise<strin
   const entries = await readdir(current, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
+    if (entry.name.startsWith('._')) continue;
     const full = join(current, entry.name);
     if (entry.isDirectory()) files.push(...(await listFilesRecursively(root, full)));
     // Split on the platform separator, rejoin with '/', so the manifest is

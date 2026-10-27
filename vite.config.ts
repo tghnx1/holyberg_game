@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { characterManifestPlugin } from './vite/characterManifestPlugin';
 import { defineEditorSaveTarget, editorSavePlugin } from './vite/editorSavePlugin';
 import { validateBerlinEntities } from './src/game/level/berlin/berlinLevelSchema';
@@ -69,6 +69,7 @@ export default defineConfig(({ command }) => ({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    exclude: [...configDefaults.exclude, '**/._*'],
     // The virtual module only exists once the plugin runs; tests get a
     // fixture built through the same manifest builder.
     alias: { 'virtual:holyberg-characters': '/tests/fixtures/characterManifest.ts' },
