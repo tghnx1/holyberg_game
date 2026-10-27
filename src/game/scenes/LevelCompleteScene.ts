@@ -290,18 +290,26 @@ export class LevelCompleteScene extends Phaser.Scene {
     // pointerdown leaves its pointerup to land on whatever the next scene put
     // under that finger — which is how a single tap here could also fire the
     // incoming level's touch controls.
-    let pressed = false;
+    let pressedPointerId: number | undefined;
+    const containsPointer = (pointer: Phaser.Input.Pointer): boolean => {
+      const hitArea = Phaser.Geom.Rectangle.Inflate(background.getBounds(), TOUCH_PADDING, TOUCH_PADDING);
+      return hitArea.contains(pointer.x, pointer.y);
+    };
+    const release = (pointer: Phaser.Input.Pointer): void => {
+      if (pressedPointerId !== pointer.id) return;
+      pressedPointerId = undefined;
+      this.swallow(pointer);
+      if (containsPointer(pointer)) this.activate(action);
+    };
     background.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      pressed = true;
+      pressedPointerId = pointer.id;
       this.swallow(pointer);
     });
-    background.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      const wasPressed = pressed;
-      pressed = false;
-      this.swallow(pointer);
-      if (!wasPressed) return;
-      this.activate(action);
-    });
+    background.on('pointerup', release);
+    // Also finish a press released outside the object's event path, checking
+    // its current bounds after any intervening viewport layout change.
+    this.input.on('pointerup', release);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.input.off('pointerup', release));
 
     // Hover feedback is a mouse affordance. A touch has no hover state — it
     // would fire `pointerover` on contact and resize the button under the
@@ -311,11 +319,9 @@ export class LevelCompleteScene extends Phaser.Scene {
       this.setButtonScale(button, 1.04);
     });
     background.on('pointerout', (pointer: Phaser.Input.Pointer) => {
-      // Disarm only on a genuine drag-off — a finger still held down that has
-      // moved away. Lifting a touch also emits `pointerout`, and Phaser may
-      // emit it before the matching `pointerup`; clearing unconditionally
-      // here would swallow the very tap this button exists to receive.
-      if (pointer.isDown) pressed = false;
+      // A held pointer leaving the button cancels the press. Touch releases
+      // also emit pointerout, after pointerup; those need no further action.
+      if (pointer.isDown && pressedPointerId === pointer.id) pressedPointerId = undefined;
       if (pointer.wasTouch) return;
       this.setButtonScale(button, 1);
     });

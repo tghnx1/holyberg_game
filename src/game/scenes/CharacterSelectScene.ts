@@ -151,12 +151,13 @@ export class CharacterSelectScene extends Phaser.Scene {
       root
         .setSize(CARD_WIDTH, CARD_HEIGHT)
         .setInteractive({
-          hitArea: new Phaser.Geom.Rectangle(-CARD_WIDTH / 2, -CARD_HEIGHT / 2, CARD_WIDTH, CARD_HEIGHT),
+          hitArea: new Phaser.Geom.Rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT),
           hitAreaCallback: Phaser.Geom.Rectangle.Contains,
           useHandCursor: true,
         })
         // Focus on release, never on hover, so touch and mouse behave alike.
         .on('pointerup', (pointer: Phaser.Input.Pointer) => {
+          this.onCarouselPointerUp(pointer);
           this.swallow(pointer);
           if (this.isCarouselDrag(pointer)) return;
           this.focus(index);
@@ -297,6 +298,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   private onCarouselPointerUp(pointer: Phaser.Input.Pointer): void {
     const gesture = this.carouselPointer;
     if (!gesture || gesture.id !== pointer.id) return;
+    this.onCarouselPointerMove(pointer);
     const nextIndex = resolveCarouselDragRelease({
       index: this.index,
       count: this.characters.length,
