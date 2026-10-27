@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { createSceneContinuation } from '../systems/sceneContinuation';
 import type { DialogueScript } from './types';
 import {
   isCurrentSceneDialogueSource,
@@ -18,6 +19,8 @@ export interface CurrentSceneSnapshot {
 }
 
 let snapshotSerial = 0;
+const SNAPSHOT_TIMEOUT_MS = 5000;
+class SnapshotCancelledError extends Error {}
 
 /**
  * Captures the renderer after the current frame has been presented.
@@ -34,26 +37,50 @@ export function captureCurrentSceneSnapshot(
   const textureKey = `dialogue-current-scene-${scene.scene.key}-${snapshotSerial += 1}`;
   const restoreLiveSources = liveStage ? hideLiveStageSources(liveStage) : undefined;
   return new Promise((resolve, reject) => {
-    scene.game.renderer.snapshot((result) => {
+    let settled = false;
+    const finish = (): boolean => {
+      if (settled) return false;
+      settled = true;
+      globalThis.clearTimeout(timeout);
+      scene.events.off('shutdown', onShutdown);
       restoreLiveSources?.();
-      if (!(result instanceof HTMLImageElement)) {
-        reject(new Error(`Could not capture ${scene.scene.key}: renderer returned a pixel sample.`));
-        return;
-      }
-      scene.textures.remove(textureKey);
-      const texture = scene.textures.addImage(textureKey, result);
-      if (!texture) {
-        reject(new Error(`Could not register dialogue snapshot texture "${textureKey}".`));
-        return;
-      }
-      resolve({
-        textureKey,
-        width: scene.cameras.main.width,
-        height: scene.cameras.main.height,
-        layoutId,
-        liveStage,
-      });
-    }, 'image/png');
+      return true;
+    };
+    const onShutdown = (): void => {
+      if (finish()) reject(new SnapshotCancelledError('Snapshot source stopped.'));
+    };
+    const timeout = globalThis.setTimeout(() => {
+      if (finish()) reject(new Error(`Timed out capturing ${scene.scene.key}.`));
+    }, SNAPSHOT_TIMEOUT_MS);
+    scene.events.once('shutdown', onShutdown);
+    try {
+      scene.game.renderer.snapshot((result) => {
+        if (!finish()) return;
+        try {
+          if (!(result instanceof HTMLImageElement)) {
+            reject(new Error(`Could not capture ${scene.scene.key}: renderer returned a pixel sample.`));
+            return;
+          }
+          scene.textures.remove(textureKey);
+          const texture = scene.textures.addImage(textureKey, result);
+          if (!texture) {
+            reject(new Error(`Could not register dialogue snapshot texture "${textureKey}".`));
+            return;
+          }
+          resolve({
+            textureKey,
+            width: scene.cameras.main.width,
+            height: scene.cameras.main.height,
+            layoutId,
+            liveStage,
+          });
+        } catch (error) {
+          reject(error);
+        }
+      }, 'image/png');
+    } catch (error) {
+      if (finish()) reject(error);
+    }
   });
 }
 
@@ -76,30 +103,43 @@ export async function launchCurrentSceneDialogue(
   scene: Phaser.Scene,
   request: CurrentSceneDialogueRequest,
 ): Promise<void> {
-  const liveStage = isCurrentSceneDialogueSource(scene)
-    ? scene.buildCurrentSceneDialogueStage()
-    : undefined;
-  const snapshot = await captureCurrentSceneSnapshot(
-    scene,
-    `current-scene-${request.script.id}`,
-    liveStage,
-  );
-  const sourceSceneKey = scene.scene.key;
-  const dialogueScene = scene.scene.get('DialogueScene');
-  // `launch` itself is queued. Register before queuing it, then reorder from
-  // CREATE when the target really exists in the active render list. Calling
-  // bringToTop immediately after launch can run too early outside a Scene
-  // Manager update and become a no-op.
-  dialogueScene.events.once('create', () => scene.scene.bringToTop('DialogueScene'));
-  scene.scene.pause(sourceSceneKey);
-  scene.scene.launch('DialogueScene', {
-    script: request.script,
-    payload: request.payload,
-    stageSnapshot: snapshot,
-    resume: {
-      sceneKey: sourceSceneKey,
-      event: request.resumeEvent,
-      payload: request.resumePayload,
-    },
-  });
+  const continuation = createSceneContinuation(scene);
+  let snapshot: CurrentSceneSnapshot | undefined;
+  try {
+    const liveStage = isCurrentSceneDialogueSource(scene)
+      ? scene.buildCurrentSceneDialogueStage()
+      : undefined;
+    snapshot = await captureCurrentSceneSnapshot(
+      scene,
+      `current-scene-${request.script.id}`,
+      liveStage,
+    );
+    if (!await continuation.ready()) {
+      releaseCurrentSceneSnapshot(scene.textures, snapshot);
+      return;
+    }
+    const sourceSceneKey = scene.scene.key;
+    const dialogueScene = scene.scene.get('DialogueScene');
+    // `launch` itself is queued. Register before queuing it, then reorder from
+    // CREATE when the target really exists in the active render list. Calling
+    // bringToTop immediately after launch can run too early outside a Scene
+    // Manager update and become a no-op.
+    dialogueScene.events.once('create', () => scene.scene.bringToTop('DialogueScene'));
+    scene.scene.pause(sourceSceneKey);
+    scene.scene.launch('DialogueScene', {
+      script: request.script,
+      payload: request.payload,
+      stageSnapshot: snapshot,
+      resume: {
+        sceneKey: sourceSceneKey,
+        event: request.resumeEvent,
+        payload: request.resumePayload,
+      },
+    });
+  } catch (error) {
+    releaseCurrentSceneSnapshot(scene.textures, snapshot);
+    if (!(error instanceof SnapshotCancelledError)) throw error;
+  } finally {
+    continuation.dispose();
+  }
 }

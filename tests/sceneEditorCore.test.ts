@@ -195,6 +195,16 @@ describe('shared editor core', () => {
     expect(core.getSelectedId()).toBeUndefined();
   });
 
+  it('releases the editor clock pause when a scene is shut down while editing', () => {
+    const core = build();
+    core.toggle();
+    expect(harness.scene.time.paused).toBe(true);
+
+    core.destroy();
+
+    expect(harness.scene.time.paused).toBe(false);
+  });
+
   it('selects the item under the pointer', () => {
     const core = build();
     core.register(makeItem('a', { left: 0, top: 0, right: 50, bottom: 50 }));

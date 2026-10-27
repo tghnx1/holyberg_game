@@ -1485,6 +1485,7 @@ export class Level4Scene extends Phaser.Scene implements EditableScene, CurrentS
     }).catch((error: unknown) => {
       console.error('[Level4Scene] could not open Disus dialogue', error);
       this.controlsLocked = false;
+      this.dialogueTriggered = false;
     });
   }
 

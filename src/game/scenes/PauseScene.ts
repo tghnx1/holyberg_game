@@ -33,6 +33,8 @@ export class PauseScene extends Phaser.Scene {
   private heading!: Phaser.GameObjects.Text;
   private buttonTexts: Phaser.GameObjects.Text[] = [];
   private volumeTexts: Phaser.GameObjects.Text[] = [];
+  private panel!: Phaser.GameObjects.Container;
+  private backdrop!: Phaser.GameObjects.Rectangle;
 
   constructor() {
     super(PAUSE_SCENE_KEY);
@@ -42,10 +44,10 @@ export class PauseScene extends Phaser.Scene {
     this.buttonTexts = [];
     this.volumeTexts = [];
     const { width, height } = this.scale;
-    const centerX = width / 2;
-    const centerY = height / 2;
+    const centerX = 0;
+    const centerY = 0;
 
-    this.add
+    this.backdrop = this.add
       .rectangle(0, 0, width, height, 0x000000, 0.72)
       .setOrigin(0, 0)
       .setDepth(Depth.UI + 90)
@@ -92,7 +94,15 @@ export class PauseScene extends Phaser.Scene {
       this.sfxVolumeLabel.setText(`SFX VOLUME: ${Math.round(volume * 100)}%`);
     });
 
-    const applyTypography = (): void => this.applyTypography(getViewportInfo(this.scale));
+    this.panel = this.add.container(0, 0, this.children.list.filter((child) => child !== this.backdrop))
+      .setDepth(Depth.UI + 91);
+    const applyTypography = (): void => {
+      this.applyTypography(getViewportInfo(this.scale));
+      const { width, height } = this.cameras.main;
+      this.backdrop.setSize(width, height);
+      this.panel.setPosition(width / 2, height / 2)
+        .setScale(Math.min(1, (width - 32) / PANEL_WIDTH, (height - 32) / PANEL_HEIGHT));
+    };
     this.scale.on(Phaser.Scale.Events.RESIZE, applyTypography);
     applyTypography();
 

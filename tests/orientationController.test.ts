@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 
 // The real package needs a DOM/canvas, and these tests run in the node
 // environment; only the constants read at construction/destroy matter here.
 vi.mock('phaser', () => ({
   default: {
     Scale: { Events: { RESIZE: 'resize' } },
-    Scenes: { Events: { SHUTDOWN: 'shutdown' } },
+    Scenes: { Events: { SHUTDOWN: 'shutdown', RESUME: 'resume' } },
   },
 }));
 
@@ -19,8 +20,10 @@ import { OrientationController } from '../src/game/responsive/OrientationControl
  * a browser (`window.setTimeout`, `document.createElement`) and is out of
  * scope for this fix.
  */
-function fakeScene(width: number, height: number, touch = false) {
+function fakeScene(width: number, height: number, touch = false, initiallyPaused = false) {
   let resizeHandler: (() => void) | undefined;
+  let paused = initiallyPaused;
+  const events = new EventEmitter();
   const scene = {
     scale: {
       parentSize: { width, height },
@@ -32,11 +35,16 @@ function fakeScene(width: number, height: number, touch = false) {
         resizeHandler = undefined;
       },
     },
-    events: { once: () => undefined },
-    scene: { pause: vi.fn(), resume: vi.fn() },
+    events,
+    scene: {
+      isPaused: () => paused,
+      pause: vi.fn(() => { paused = true; }),
+      resume: vi.fn(() => { paused = false; events.emit('resume'); }),
+    },
   };
   return {
     scene: scene as never,
+    sceneControl: scene.scene,
     scaleState: scene.scale,
     triggerResize: () => resizeHandler?.(),
   };
@@ -45,6 +53,30 @@ function fakeScene(width: number, height: number, touch = false) {
 describe('OrientationController and a focused text field', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it.each([false, true])('preserves an existing pause (%s) through rotation', (paused) => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', { setTimeout, clearTimeout });
+    vi.stubGlobal('navigator', { userAgent: 'test' });
+    vi.stubGlobal('document', {
+      activeElement: null,
+      getElementById: () => ({ append: vi.fn() }),
+      createElement: () => ({ append: vi.fn(), remove: vi.fn(), setAttribute: vi.fn() }),
+    });
+    const { scene, sceneControl, scaleState, triggerResize } = fakeScene(844, 390, true, paused);
+    const onResume = vi.fn();
+    const controller = new OrientationController(scene, { onResume });
+
+    scaleState.parentSize = { width: 390, height: 844 };
+    triggerResize();
+    scaleState.parentSize = { width: 844, height: 390 };
+    triggerResize();
+
+    expect(sceneControl.isPaused()).toBe(paused);
+    expect(onResume).toHaveBeenCalledTimes(paused ? 0 : 1);
+    controller.destroy();
   });
 
   it('reports every resize through onLayout when nothing is focused', () => {

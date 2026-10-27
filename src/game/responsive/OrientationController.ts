@@ -34,13 +34,18 @@ function isTextInputFocused(): boolean {
 export class OrientationController {
   private overlay?: HTMLDivElement;
   private portrait = false;
+  private pausedByOrientation = false;
   private portraitSinceMs = 0;
   private rotationHintTimer?: number;
   private overlayMode: 'game' | 'instagram' | 'rotate' | 'rotate-with-hint' = 'game';
   private readonly resizeHandler = () => this.refresh();
+  private readonly resumeHandler = (): void => {
+    if (this.portrait) this.pauseForOrientation();
+  };
 
   constructor(private readonly scene: Phaser.Scene, private readonly callbacks: OrientationCallbacks = {}) {
     scene.scale.on(Phaser.Scale.Events.RESIZE, this.resizeHandler);
+    scene.events.on(Phaser.Scenes.Events.RESUME, this.resumeHandler);
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
     this.refresh();
   }
@@ -72,11 +77,17 @@ export class OrientationController {
   }
 
   private enterPortrait(): void {
-    this.callbacks.onPause?.();
-    this.scene.scene.pause();
+    this.pauseForOrientation();
     this.portraitSinceMs = performance.now();
     this.updateOverlay();
     this.scheduleHintRefresh();
+  }
+
+  private pauseForOrientation(): void {
+    if (this.scene.scene.isPaused()) return;
+    this.pausedByOrientation = true;
+    this.callbacks.onPause?.();
+    this.scene.scene.pause();
   }
 
   private updateOverlay(): void {
@@ -136,11 +147,15 @@ export class OrientationController {
     this.overlay?.remove();
     this.overlay = undefined;
     this.overlayMode = 'game';
-    this.callbacks.onResume?.();
-    this.scene.scene.resume();
+    if (this.pausedByOrientation) {
+      this.pausedByOrientation = false;
+      this.callbacks.onResume?.();
+      this.scene.scene.resume();
+    }
   }
 
   destroy(): void {
+    this.scene.events.off(Phaser.Scenes.Events.RESUME, this.resumeHandler);
     this.scene.scale.off(Phaser.Scale.Events.RESIZE, this.resizeHandler);
     this.clearHintTimer();
     this.overlay?.remove();

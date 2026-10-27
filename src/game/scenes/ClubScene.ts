@@ -84,6 +84,7 @@ import type { LevelCompleteSceneData } from './LevelCompleteScene';
 import { transformOf } from '../systems/editor/transformItem';
 import { UI_COLORS, uiSecondaryStyle } from '../ui/theme';
 import { responsiveFontSize } from '../ui/mobileTypography';
+import { createSceneContinuation } from '../systems/sceneContinuation';
 
 export interface ClubSceneData {
   /** Running total carried in from Berlin; Level 2 does not change it. */
@@ -901,6 +902,7 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
 
   /** Retains the real final DJ room before ClubScene is torn down. */
   private async openLevelComplete(): Promise<void> {
+    const continuation = createSceneContinuation(this);
     let clubStageSnapshot: CurrentSceneSnapshot | undefined;
     try {
       clubStageSnapshot = await captureCurrentSceneSnapshot(
@@ -910,7 +912,9 @@ export class ClubScene extends Phaser.Scene implements EditableScene, CurrentSce
     } catch (error) {
       console.warn('[ClubScene] could not retain final DJ room for post-set dialogue', error);
     }
-    if (!this.scene.isActive()) {
+    const ready = await continuation.ready();
+    continuation.dispose();
+    if (!ready) {
       releaseCurrentSceneSnapshot(this.textures, clubStageSnapshot);
       return;
     }

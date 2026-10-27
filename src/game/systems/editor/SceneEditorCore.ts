@@ -329,6 +329,8 @@ export class SceneEditorCore {
   }
 
   destroy(): void {
+    // Phaser reuses the scene Clock after restart; release the editor's pause.
+    if (this.enabled) this.scene.time.paused = false;
     setSceneEditorActive(this.scene, false);
     this.scene.input.off(Phaser.Input.Events.POINTER_DOWN, this.onPointerDown, this);
     this.scene.input.off(Phaser.Input.Events.POINTER_MOVE, this.onPointerMove, this);
