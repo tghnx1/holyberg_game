@@ -70,6 +70,7 @@ export class ResultScene extends Phaser.Scene {
   private claimed?: ClaimedLeaderboardSnapshot;
   private storedInstagram = '';
   private submitting = false;
+  private runGeneration = 0;
   private skipped = false;
   private responsiveTexts: Array<{
     text: Phaser.GameObjects.Text;
@@ -82,6 +83,8 @@ export class ResultScene extends Phaser.Scene {
   }
 
   init(data: RhythmResult): void {
+    this.runGeneration += 1;
+    this.removeClaimModal();
     this.result = data;
     this.claimed = undefined;
     this.storedInstagram = '';
@@ -137,7 +140,10 @@ export class ResultScene extends Phaser.Scene {
     this.root.add(breakdown);
 
     this.createLeaderboardPanel();
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.removeClaimModal());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.runGeneration += 1;
+      this.removeClaimModal();
+    });
 
     // Built after every child exists, mirroring LevelCompleteScene: the
     // controller runs one onLayout from its own constructor, so there has to
@@ -338,6 +344,7 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private async loadLeaderboard(): Promise<void> {
+    const generation = this.runGeneration;
     if (this.storedInstagram) {
       await this.updateStoredScore();
       return;
@@ -345,12 +352,18 @@ export class ResultScene extends Phaser.Scene {
 
     try {
       const snapshot = await fetchLeaderboard(this.totalScore);
-      if (!this.scene.isActive()) return;
+      if (
+        generation !== this.runGeneration || !this.scene.isActive() ||
+        this.isRunSettled() || this.submitting
+      ) return;
       this.renderTop10(snapshot.top10);
       this.renderVirtualPlayerRow(snapshot.rank);
       void this.promptForClaimAndSubmit();
     } catch (error) {
-      if (!this.scene.isActive()) return;
+      if (
+        generation !== this.runGeneration || !this.scene.isActive() ||
+        this.isRunSettled() || this.submitting
+      ) return;
       console.warn('[Leaderboard] could not load', error);
       this.leaderboardText.setText('TOP 10 TEMPORARILY UNAVAILABLE');
       this.renderVirtualPlayerRow();
@@ -396,10 +409,12 @@ export class ResultScene extends Phaser.Scene {
   private skipClaim(): void {
     if (this.submitting || this.claimed) return;
     this.skipped = true;
+    this.removeClaimModal();
     clearPendingFinalResult(window.localStorage);
     this.claimButton.setVisible(false);
     this.instagramInput.setVisible(false);
     this.skipAction.setVisible(false);
+    this.retryAction.setVisible(false);
     this.leaderboardStatus.setText('SCORE NOT CLAIMED');
     this.showReplayOptions(false);
   }
@@ -415,7 +430,7 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private async updateStoredScore(): Promise<void> {
-    if (!this.storedInstagram || this.submitting) return;
+    if (!this.storedInstagram || this.submitting || this.isRunSettled()) return;
 
     if (import.meta.env.DEV) {
       console.debug('[Leaderboard][debug] auto-update start', {
@@ -424,6 +439,7 @@ export class ResultScene extends Phaser.Scene {
         source: 'stored-instagram',
       });
     }
+    const generation = this.runGeneration;
     this.submitting = true;
     this.retryAction.setVisible(false);
     this.leaderboardStatus.setText('UPDATING YOUR BEST SCORE…');
@@ -432,8 +448,8 @@ export class ResultScene extends Phaser.Scene {
       this.totalScore,
       claimLeaderboardScore,
     );
+    if (generation !== this.runGeneration || !this.scene.isActive()) return;
     this.submitting = false;
-    if (!this.scene.isActive()) return;
 
     if (update.status === 'success') {
       const response = update.snapshot;
@@ -528,10 +544,7 @@ export class ResultScene extends Phaser.Scene {
       const input = modal.querySelector('input');
       const error = modal.querySelector<HTMLElement>('.leaderboard-claim-error');
       const finish = (value: string | null): void => {
-        this.removeClaimModal();
-        this.modalResolver?.(value);
-        this.modalResolver = undefined;
-        this.modalPromise = undefined;
+        if (this.modal === modal) this.removeClaimModal(value);
       };
       modal.querySelector('[data-action="cancel"]')?.addEventListener('click', () => finish(null));
       form?.addEventListener('submit', (event) => {
@@ -562,18 +575,27 @@ export class ResultScene extends Phaser.Scene {
     return this.modalPromise;
   }
 
-  private removeClaimModal(): void {
+  private removeClaimModal(value: string | null = null): void {
     releaseKeyboardResizeGuard();
     this.releaseClaimViewportListeners?.();
     this.releaseInstagramInputCapture?.();
     this.releaseInstagramInputCapture = undefined;
     this.modal?.remove();
     this.modal = undefined;
+    const resolve = this.modalResolver;
+    this.modalResolver = undefined;
+    this.modalPromise = undefined;
+    resolve?.(value);
   }
 
   private async promptForClaimAndSubmit(): Promise<void> {
+    if (this.modalPromise || this.submitting || this.isRunSettled()) return;
+    const generation = this.runGeneration;
     const instagram = await this.openClaimModal();
-    if (!instagram || !this.scene.isActive()) return;
+    if (
+      !instagram || generation !== this.runGeneration ||
+      !this.scene.isActive() || this.isRunSettled()
+    ) return;
 
     if (import.meta.env.DEV) {
       console.debug('[Leaderboard][debug] manual claim submit', {
@@ -586,7 +608,7 @@ export class ResultScene extends Phaser.Scene {
     this.leaderboardStatus.setText('CHECKING PROFILE AND SAVING BEST SCORE…');
     try {
       const response = await claimLeaderboardScore(instagram, this.totalScore);
-      if (!this.scene.isActive()) return;
+      if (generation !== this.runGeneration || !this.scene.isActive()) return;
       if (import.meta.env.DEV) {
         console.debug('[Leaderboard][debug] manual claim success', {
           instagram: response.instagram,
@@ -608,7 +630,7 @@ export class ResultScene extends Phaser.Scene {
       this.leaderboardStatus.setText(`YOU'RE #${response.rank}`);
       this.showReplayOptions(true);
     } catch (error) {
-      if (!this.scene.isActive()) return;
+      if (generation !== this.runGeneration || !this.scene.isActive()) return;
       if (import.meta.env.DEV) {
         console.debug('[Leaderboard][debug] manual claim failed', {
           instagram,
@@ -623,12 +645,13 @@ export class ResultScene extends Phaser.Scene {
         )
         .setAlpha(1);
     } finally {
-      this.submitting = false;
+      if (generation === this.runGeneration) this.submitting = false;
     }
   }
 
   private async shareScore(): Promise<void> {
     if (!this.claimed) return;
+    const generation = this.runGeneration;
     try {
       const result = await shareScoreResult(
         {
@@ -643,6 +666,7 @@ export class ResultScene extends Phaser.Scene {
           prompt: (message, value) => window.prompt(message, value),
         },
       );
+      if (generation !== this.runGeneration || !this.scene.isActive()) return;
       if (result === 'copied') {
         this.leaderboardStatus.setText('SHARE TEXT COPIED.');
       } else if (result === 'prompted') {
@@ -651,6 +675,7 @@ export class ResultScene extends Phaser.Scene {
         this.leaderboardStatus.setText('IMAGE SHARE FAILED — PLEASE TRY AGAIN.');
       }
     } catch {
+      if (generation !== this.runGeneration || !this.scene.isActive()) return;
       this.leaderboardStatus.setText('SHARING IS UNAVAILABLE — COPY THE GAME URL.');
     }
   }
