@@ -15,6 +15,7 @@ import { getPlayableCharacters } from '../characters/characterRegistry';
 import { selectCharacter } from '../characters/characterSelection';
 import { attachFullscreenExitControl } from '../responsive/FullscreenController';
 import { OrientationController } from '../responsive/OrientationController';
+import { getViewportInfo } from '../responsive/ResponsiveLayout';
 import type { ViewportInfo } from '../responsive/ViewportInfo';
 import { UI_COLORS, UI_FONTS, uiHeadingStyle, uiSecondaryStyle } from '../ui/theme';
 import { responsiveFontSize } from '../ui/mobileTypography';
@@ -370,22 +371,26 @@ export class CharacterSelectScene extends Phaser.Scene {
   // ------------------------------------------------------------ responsive
 
   private applyLayout(viewport?: ViewportInfo, animateTrack = false): void {
+    const layoutViewport = viewport ?? getViewportInfo(this.scale);
+    const compactTouch = layoutViewport.compactLandscape && layoutViewport.touchOriented;
     const camera = this.cameras.main;
     const width = camera.width;
     const height = camera.height;
-    const margin = viewport?.safeMargin ?? 24;
+    const margin = layoutViewport.safeMargin;
 
-    this.title.setFontSize(responsiveFontSize(44, viewport, 'heading'));
+    this.title.setFontSize(responsiveFontSize(44, layoutViewport, 'heading'));
     this.hint
-      .setFontSize(responsiveFontSize(15, viewport, 'body'))
+      .setFontSize(responsiveFontSize(compactTouch ? 23 : 15, layoutViewport, 'body'))
       .setWordWrapWidth(Math.max(1, width - margin * 2), true)
       .setAlign('center');
-    this.confirmLabel.setFontSize(responsiveFontSize(24, viewport, 'button'));
-    this.cards.forEach((card) =>
-      card.name.setFontSize(responsiveFontSize(20, viewport, 'body')),
-    );
-    this.arrowLeft?.setFontSize(responsiveFontSize(34, viewport, 'button'));
-    this.arrowRight?.setFontSize(responsiveFontSize(34, viewport, 'button'));
+    this.confirmLabel.setFontSize(responsiveFontSize(24, layoutViewport, 'button'));
+    this.cards.forEach((card) => {
+      card.name.setFontSize(responsiveFontSize(compactTouch ? 23 : 20, layoutViewport, 'body'));
+      const scaleX = Math.min(1, (CARD_WIDTH - 20) / Math.max(1, card.name.width));
+      card.name.setScale(scaleX, 1);
+    });
+    this.arrowLeft?.setFontSize(responsiveFontSize(34, layoutViewport, 'button'));
+    this.arrowRight?.setFontSize(responsiveFontSize(34, layoutViewport, 'button'));
 
     this.title.setPosition(width / 2, Math.max(margin + 26, height * 0.13));
 
@@ -412,7 +417,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     this.hint
       .setPosition(width / 2, confirmY - CONFIRM_HEIGHT / 2 - 22)
-      .setText(this.hintText());
+      .setText(compactTouch ? 'SWIPE TO CHOOSE · TAP SELECT' : this.hintText());
 
     // Just outside the focused card, so they never sit under it.
     const arrowX = CARD_WIDTH / 2 + 46;
