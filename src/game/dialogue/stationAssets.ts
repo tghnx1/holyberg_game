@@ -22,7 +22,7 @@ export interface StationImageAsset {
 
 export function getDialogueStationAssetUrls(): StationImageAsset[] {
   return [
-    { key: DIALOGUE_STATION_TEXTURE_KEYS.background, url: 'assets/dialogue_1/background_metro.png' },
+    { key: DIALOGUE_STATION_TEXTURE_KEYS.background, url: 'assets/dialogue_1/background_metro.webp' },
     { key: DIALOGUE_STATION_TEXTURE_KEYS.train, url: 'assets/dialogue_1/train.png' },
     { key: DIALOGUE_STATION_TEXTURE_KEYS.foreground, url: 'assets/dialogue_1/first_plan_metro.png' },
   ];

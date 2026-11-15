@@ -105,6 +105,12 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     new OrientationController(this, { onLayout: (viewport) => this.applyLayout(viewport) });
     this.applyLayout();
+    if (window.parent !== window && document.referrer) {
+      const parentOrigin = new URL(document.referrer).origin;
+      this.events.once(Phaser.Scenes.Events.RENDER, () => {
+        window.parent.postMessage('holyworld:ready', parentOrigin);
+      });
+    }
   }
 
   // ------------------------------------------------------------------ build
